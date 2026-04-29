@@ -1,0 +1,11 @@
+
+node_modules
+dist
+dist-electron
+.env
+*.log
+drivers/unitycapture.zip
+drivers/temp
+build/dist
+out
+.DS_Store
