@@ -66,6 +66,13 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "resources/bridge",
+        "to": "bridge",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "nsis": {

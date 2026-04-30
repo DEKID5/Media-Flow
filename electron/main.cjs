@@ -17,7 +17,7 @@ app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
 
 let psbId = -1;
 
-const isDev = process.env.NODE_ENV !== 'production';
+const isDev = !app.isPackaged;
 
 let operatorWindow;
 let audienceWindow;
@@ -66,11 +66,11 @@ function createOperatorWindow() {
     title: 'MediaFlow - Operator'
   });
 
-  const url = isDev 
-    ? 'http://localhost:3000' 
-    : `file://${path.join(__dirname, '../dist/index.html')}`;
-
-  operatorWindow.loadURL(url);
+  if (isDev) {
+    operatorWindow.loadURL('http://localhost:3000');
+  } else {
+    operatorWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+  }
 }
 
 function createAudienceWindow(viewType = 'audience') {
@@ -111,7 +111,11 @@ function createAudienceWindow(viewType = 'audience') {
     }
 
     // Spawn the Python Virtual Camera Bridge
-    const scriptPath = path.join(__dirname, '../scratch/virtual_camera_bridge.py');
+    // Resolve bridge script path (must be outside ASAR for python to execute)
+    const scriptPath = isDev 
+      ? path.join(__dirname, '../resources/bridge/virtual_camera_bridge.py')
+      : path.join(process.resourcesPath, 'bridge/virtual_camera_bridge.py');
+    
     virtualCameraBridgeProcess = spawn('python', ['-u', scriptPath]);
     
     virtualCameraBridgeProcess.stdout.on('data', (data) => console.log(`[VirtualCam] ${data.toString().trim()}`));
@@ -125,11 +129,13 @@ function createAudienceWindow(viewType = 'audience') {
     });
   }
 
-  const url = isDev 
-    ? `http://localhost:3000?view=${viewType}` 
-    : `file://${path.join(__dirname, '../dist/index.html')}?view=${viewType}`;
-
-  audienceWindow.loadURL(url);
+  if (isDev) {
+    audienceWindow.loadURL(`http://localhost:3000?view=${viewType}`);
+  } else {
+    audienceWindow.loadFile(path.join(__dirname, '../dist/index.html'), {
+      query: { view: viewType }
+    });
+  }
 }
 
 app.whenReady().then(() => {
@@ -251,12 +257,12 @@ app.whenReady().then(() => {
       audienceWindow.setTitle(isZoom ? 'Mediaflow cam' : 'MediaFlow - Audience');
       
       // Update URL if type changed
-      const url = isDev 
-        ? `http://localhost:3000?view=${viewType || 'audience'}` 
-        : `file://${path.join(__dirname, '../dist/index.html')}?view=${viewType || 'audience'}`;
-      
-      if (audienceWindow.getURL() !== url) {
-        audienceWindow.loadURL(url);
+      if (isDev) {
+        audienceWindow.loadURL(`http://localhost:3000?view=${viewType || 'audience'}`);
+      } else {
+        audienceWindow.loadFile(path.join(__dirname, '../dist/index.html'), {
+          query: { view: viewType || 'audience' }
+        });
       }
 
       if (!isZoom) {
