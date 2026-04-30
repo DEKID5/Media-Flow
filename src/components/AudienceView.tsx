@@ -166,9 +166,14 @@ export function AudienceView() {
     return t;
   };
 
+  const isZoom = view === 'zoom';
   const mediaType = getMediaType(programAsset);
   const isMediaShowing = !!programAsset && mediaType !== 'audio';
-  const showCamera = state.isMeetingLive && !isMediaShowing;
+  
+  // Per user request: 
+  // Zoom view: Show webcam when idle, media when playing.
+  // Audience view: Show only media (remains black/standby when idle).
+  const showCamera = isZoom && !isMediaShowing;
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {

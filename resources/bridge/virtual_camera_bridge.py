@@ -109,8 +109,11 @@ def main():
                     cam.send(frame)
                     cam.sleep_until_next_frame()
                 else:
-                    # If capture fails (e.g. window resizing), just sleep
-                    time.sleep(1/FPS)
+                    # Send a black frame if capture fails to avoid gray screen in Zoom
+                    black_frame = np.zeros((TARGET_HEIGHT, TARGET_WIDTH, 4), dtype=np.uint8)
+                    cam.send(black_frame)
+                    cam.sleep_until_next_frame()
+                    time.sleep(0.1)
                     
     except Exception as e:
         print(f"Error initializing virtual camera: {e}")

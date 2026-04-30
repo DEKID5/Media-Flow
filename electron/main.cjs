@@ -84,16 +84,16 @@ function createAudienceWindow(viewType = 'audience') {
   audienceWindow = new BrowserWindow({
     width: 1280, // Target broadcast resolution
     height: 720,
-    x: isZoom ? -20000 : (externalDisplay ? externalDisplay.bounds.x : 100), // Hide broadcast window off-screen
-    y: isZoom ? -20000 : (externalDisplay ? externalDisplay.bounds.y : 100),
-    show: true, // MUST be true for OBS Window Capture to see it
+    x: isZoom ? -5000 : (externalDisplay ? externalDisplay.bounds.x : 100), 
+    y: isZoom ? -5000 : (externalDisplay ? externalDisplay.bounds.y : 100),
+    show: true, 
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       webSecurity: false,
       backgroundThrottling: false,
-      offscreen: false // We need it on-screen (but hidden) to use standard CSS/rendering
+      offscreen: false 
     },
     title: isZoom ? 'MEDIAFLOW_NATIVE_BRIDGE_TARGET' : 'MediaFlow - Audience',
     frame: !isZoom && !externalDisplay,
@@ -101,6 +101,10 @@ function createAudienceWindow(viewType = 'audience') {
     autoHideMenuBar: true,
     skipTaskbar: isZoom
   });
+
+  if (isZoom) {
+    audienceWindow.setTitle('MEDIAFLOW_NATIVE_BRIDGE_TARGET');
+  }
 
   // Prevent window from being throttled when hidden
   if (isZoom) {
