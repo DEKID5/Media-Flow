@@ -1,8 +1,12 @@
 {
   "name": "media-flow-broadcast",
   "private": true,
-    "version": "1.0.3",
-    "description": "Professional Broadcast Suite with Zoom Virtual Camera Integration",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DEKID5/Media-Flow.git"
+  },
+  "version": "1.0.3",
+  "description": "Professional Broadcast Suite with Zoom Virtual Camera Integration",
     "author": "Media Flow Team",
     "type": "module",
     "main": "electron/main.cjs",
@@ -44,6 +48,9 @@
     "build": {
       "appId": "com.mediaflow.broadcast",
       "productName": "Media Flow Broadcast",
+      "publish": {
+        "provider": "github"
+      },
       "directories": {
         "output": "dist-electron"
       },
