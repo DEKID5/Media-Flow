@@ -1520,11 +1520,29 @@ export function OperatorDashboard() {
                     window.open('/?view=zoom', 'ZoomFeed', 'width=1280,height=720');
                   }
                 }}
-               className="flex items-center gap-2 px-3 py-1.5 bg-blue-500 hover:bg-blue-400 text-white text-[10px] font-black rounded-lg uppercase tracking-widest transition-all shadow-lg shadow-blue-500/20"
-             >
-               <Monitor size={12} />
-               Share to Zoom
-             </button>
+                className={`
+                  relative flex items-center gap-3 px-6 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all shadow-2xl overflow-hidden
+                  ${isAudienceLive ? 'bg-zinc-900 text-white border-2 border-blue-500 shadow-blue-500/40' : 'bg-zinc-800 hover:bg-zinc-700 text-white/80 border border-white/10'}
+                `}
+              >
+                {isAudienceLive && (
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-white to-blue-500 animate-[shimmer_2s_infinite]" />
+                )}
+                <div className={`w-3 h-3 rounded-full flex items-center justify-center ${isAudienceLive ? 'bg-blue-500 animate-pulse' : 'bg-white/20'}`}>
+                   <div className="w-1 h-1 rounded-full bg-white" />
+                </div>
+                <span className="flex flex-col items-start leading-none">
+                  <span className="text-white">Broadcast to Zoom</span>
+                  <span className="text-[7px] text-blue-400/60 mt-1">Native OBS Bridge</span>
+                </span>
+                
+                <style>{`
+                  @keyframes shimmer {
+                    0% { transform: translateX(-100%); }
+                    100% { transform: translateX(100%); }
+                  }
+                `}</style>
+              </button>
              <button 
                onClick={() => {
                  if ((window as any).mediaflow) {

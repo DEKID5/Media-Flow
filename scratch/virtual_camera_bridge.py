@@ -14,7 +14,7 @@ try:
 except AttributeError:
     pass
 
-WINDOW_TITLE = 'MediaFlow - OBS Broadcast'
+WINDOW_TITLE = 'MEDIAFLOW_NATIVE_BRIDGE_TARGET'
 TARGET_WIDTH = 1280
 TARGET_HEIGHT = 720
 FPS = 30

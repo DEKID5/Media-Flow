@@ -95,7 +95,7 @@ function createAudienceWindow(viewType = 'audience') {
       backgroundThrottling: false,
       offscreen: false // We need it on-screen (but hidden) to use standard CSS/rendering
     },
-    title: isZoom ? 'MediaFlow - OBS Broadcast' : 'MediaFlow - Audience',
+    title: isZoom ? 'MEDIAFLOW_NATIVE_BRIDGE_TARGET' : 'MediaFlow - Audience',
     frame: !isZoom && !externalDisplay,
     fullscreen: !isZoom && !!externalDisplay,
     autoHideMenuBar: true,
