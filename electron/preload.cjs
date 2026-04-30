@@ -19,5 +19,13 @@ contextBridge.exposeInMainWorld('mediaflow', {
   },
   isDesktop: true,
   startBroadcast: () => ipcRenderer.send('startBroadcast'),
-  broadcastFrame: (buffer) => ipcRenderer.send('broadcastFrame', buffer)
+  broadcastFrame: (buffer) => ipcRenderer.send('broadcastFrame', buffer),
+  checkForUpdate: () => ipcRenderer.send('check-for-update'),
+  downloadUpdate: () => ipcRenderer.send('start-download'),
+  installUpdate: () => ipcRenderer.send('update-now'),
+  onUpdateStatus: (callback) => {
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on('update-status', listener);
+    return () => ipcRenderer.removeListener('update-status', listener);
+  }
 });

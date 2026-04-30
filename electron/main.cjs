@@ -1,9 +1,14 @@
-const { app, BrowserWindow, ipcMain, dialog, screen, protocol, powerSaveBlocker, net } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, dialog } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
 const { pathToFileURL } = require('url');
 const { spawn } = require('child_process');
+
+// Auto-updater configuration
+autoUpdater.autoDownload = false;
+autoUpdater.autoInstallOnAppQuit = true;
 
 let virtualCameraBridgeProcess = null;
 
@@ -336,6 +341,47 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createOperatorWindow();
   });
+});
+
+// --- Update Logic ---
+ipcMain.on('check-for-update', () => {
+  if (app.isPackaged) {
+    autoUpdater.checkForUpdates();
+  } else {
+    operatorWindow.webContents.send('update-status', { status: 'error', message: 'Update check only available in production.' });
+  }
+});
+
+ipcMain.on('start-download', () => {
+  autoUpdater.downloadUpdate();
+});
+
+ipcMain.on('update-now', () => {
+  autoUpdater.quitAndInstall();
+});
+
+autoUpdater.on('checking-for-update', () => {
+  operatorWindow.webContents.send('update-status', { status: 'checking' });
+});
+
+autoUpdater.on('update-available', (info) => {
+  operatorWindow.webContents.send('update-status', { status: 'available', info });
+});
+
+autoUpdater.on('update-not-available', () => {
+  operatorWindow.webContents.send('update-status', { status: 'not-available' });
+});
+
+autoUpdater.on('error', (err) => {
+  operatorWindow.webContents.send('update-status', { status: 'error', message: err.message });
+});
+
+autoUpdater.on('download-progress', (progressObj) => {
+  operatorWindow.webContents.send('update-status', { status: 'downloading', progress: progressObj.percent });
+});
+
+autoUpdater.on('update-downloaded', () => {
+  operatorWindow.webContents.send('update-status', { status: 'downloaded' });
 });
 
 app.on('window-all-closed', () => {

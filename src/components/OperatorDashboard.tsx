@@ -341,6 +341,17 @@ export function OperatorDashboard() {
   const [currentBgIndex, setCurrentBgIndex] = useState(0);
   const [isPlayingBg, setIsPlayingBg] = useState(false);
   
+  const [updateStatus, setUpdateStatus] = useState<{ status: string, message?: string, progress?: number, info?: any } | null>(null);
+
+  useEffect(() => {
+    if ((window as any).mediaflow) {
+      const cleanup = (window as any).mediaflow.onUpdateStatus((data: any) => {
+        setUpdateStatus(data);
+      });
+      return cleanup;
+    }
+  }, []);
+
   const lastSyncRef = useRef(0);
 
   const filteredBgPlaylist = useMemo(() => {
@@ -2655,6 +2666,67 @@ export function OperatorDashboard() {
                     <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5">
                       <p className="text-[9px] font-black text-white/20 uppercase tracking-widest mb-1">Local Host</p>
                       <p className="text-xs font-mono text-white/60">MediaFlow-Main</p>
+                    </div>
+                  </div>
+                </section>
+                
+                <section className="mb-4">
+                  <h3 className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                    <Activity size={12} className="text-purple-500" />
+                    Software Updates
+                  </h3>
+                  <div className="bg-white/[0.02] border border-white/5 rounded-xl p-6">
+                    <div className="flex flex-col gap-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[10px] font-black text-white uppercase tracking-widest">Version {state.isDesktop ? '1.0.17' : 'Web Preview'}</span>
+                          <span className="text-[9px] text-white/20 uppercase font-bold tracking-wider">
+                            {updateStatus?.status === 'checking' ? 'Checking for updates...' :
+                             updateStatus?.status === 'available' ? 'Update Available!' :
+                             updateStatus?.status === 'downloading' ? `Downloading: ${Math.round(updateStatus.progress || 0)}%` :
+                             updateStatus?.status === 'downloaded' ? 'Update Ready to Install' :
+                             updateStatus?.status === 'error' ? `Error: ${updateStatus.message}` :
+                             'System is Up to Date'}
+                          </span>
+                        </div>
+                        
+                        {(!updateStatus || updateStatus.status === 'not-available' || updateStatus.status === 'error') && (
+                          <button 
+                            onClick={() => (window as any).mediaflow?.checkForUpdate()}
+                            className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white/60 text-[9px] font-black rounded-lg border border-white/10 uppercase tracking-widest transition-all"
+                          >
+                            Check Now
+                          </button>
+                        )}
+
+                        {updateStatus?.status === 'available' && (
+                          <button 
+                            onClick={() => (window as any).mediaflow?.downloadUpdate()}
+                            className="px-4 py-2 bg-blue-500 hover:bg-blue-400 text-white text-[9px] font-black rounded-lg uppercase tracking-widest transition-all shadow-lg shadow-blue-500/20"
+                          >
+                            Download {updateStatus.info?.version}
+                          </button>
+                        )}
+
+                        {updateStatus?.status === 'downloaded' && (
+                          <button 
+                            onClick={() => (window as any).mediaflow?.installUpdate()}
+                            className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-white text-[9px] font-black rounded-lg uppercase tracking-widest transition-all shadow-lg shadow-emerald-500/20"
+                          >
+                            Restart & Install
+                          </button>
+                        )}
+                      </div>
+
+                      {updateStatus?.status === 'downloading' && (
+                        <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+                          <motion.div 
+                            className="h-full bg-blue-500" 
+                            initial={{ width: 0 }}
+                            animate={{ width: `${updateStatus.progress}%` }}
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
                 </section>
