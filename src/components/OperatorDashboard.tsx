@@ -286,7 +286,7 @@ export function OperatorDashboard() {
     isProgramPaused: false
   });
 
-  const [monitorMuted, setMonitorMuted] = useState(true);
+  const [monitorMuted, setMonitorMuted] = useState(false);
 
   const [mediaFolders, setMediaFolders] = useState<FileSystemDirectoryHandle[]>([]);
 
@@ -1195,22 +1195,7 @@ export function OperatorDashboard() {
     send({ type: 'SYNC_STATE', state: serializableState as AppState });
   }, [state, send]);
 
-  // Audience Activity Watchdog
-  useEffect(() => {
-    const check = setInterval(() => {
-      if (isAudienceLive && Date.now() - lastAudienceSignal > 10000) {
-        setIsAudienceLive(false);
-      }
-    }, 5000);
-    return () => clearInterval(check);
-  }, [isAudienceLive, lastAudienceSignal]);
-
-  // Auto-mute monitor when audience is live
-  useEffect(() => {
-    if (isAudienceLive) {
-      setMonitorMuted(true);
-    }
-  }, [isAudienceLive]);
+  
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -1379,7 +1364,7 @@ export function OperatorDashboard() {
               volume={state.mixer.masterVolume}
               seekTo={state.bgmSeekTo}
               channelOneOutput={true}
-              monitorMuted={monitorMuted || isAudienceLive}
+              monitorMuted={monitorMuted}
               onEnd={nextBg}
             />
           </div>
@@ -1809,7 +1794,7 @@ export function OperatorDashboard() {
                           muted={state.mixer.isMuted}
                           volume={state.mixer.masterVolume}
                           channelOneOutput={true}
-                          monitorMuted={monitorMuted || isAudienceLive}
+                          monitorMuted={monitorMuted}
                           controls={false}
                           deviceId={state.selectedCameraId}
                           onEnd={handleCut}

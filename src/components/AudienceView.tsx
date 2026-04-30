@@ -190,7 +190,7 @@ export function AudienceView() {
     <div className="h-screen w-screen bg-black overflow-hidden flex flex-col font-sans select-none">
       <div className={`flex-1 relative flex items-center justify-center overflow-hidden ${zoomMirrorCompensationClass}`}>
         
-        {/* Background Music Player (Hidden) */}
+        {/* Background Music Player (Hidden & Muted in Audience) */}
         {state.bgmAsset && (
           <audio 
             id="bgm-audience-player"
@@ -199,6 +199,7 @@ export function AudienceView() {
             }}
             autoPlay={state.isPlayingBgm}
             src={state.bgmAsset.path}
+            muted={true}
             onEnded={() => send({ type: 'BGM_ACTION', action: 'next' })}
           />
         )}
@@ -241,11 +242,11 @@ export function AudienceView() {
                 asset={programAsset}
                 className="w-full h-full object-contain relative z-10"
                 autoPlay={!state.isProgramPaused}
-                muted={state.mixer.isMuted}
-                volume={state.mixer.masterVolume}
+                muted={true}
+                volume={0}
                 deviceId={state.selectedCameraId}
                 isZoomView={isZoom}
-                channelOneOutput={true}
+                channelOneOutput={false}
                 onEnd={() => {
                   setEndedProgramId(programAsset.id);
                   send({ type: 'PROGRAM_ENDED', assetId: programAsset.id });
