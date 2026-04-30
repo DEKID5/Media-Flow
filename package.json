@@ -5,7 +5,7 @@
     "type": "git",
     "url": "git+https://github.com/DEKID5/Media-Flow.git"
   },
-  "version": "1.0.14",
+  "version": "1.0.15",
   "description": "Professional Broadcast Suite with Zoom Virtual Camera Integration",
     "author": "Media Flow Team",
     "type": "module",

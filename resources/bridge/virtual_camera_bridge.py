@@ -78,7 +78,18 @@ def main():
 
     try:
         # The user requested to use ONLY OBS Virtual Camera.
-        with pyvirtualcam.Camera(width=TARGET_WIDTH, height=TARGET_HEIGHT, fps=FPS, fmt=pyvirtualcam.PixelFormat.RGBA, device='OBS Virtual Camera') as cam:
+        # Try different possible names for the OBS Virtual Camera device.
+        try:
+            cam = pyvirtualcam.Camera(width=TARGET_WIDTH, height=TARGET_HEIGHT, fps=FPS, fmt=pyvirtualcam.PixelFormat.RGBA, device='OBS Virtual Camera')
+        except Exception:
+            try:
+                cam = pyvirtualcam.Camera(width=TARGET_WIDTH, height=TARGET_HEIGHT, fps=FPS, fmt=pyvirtualcam.PixelFormat.RGBA, device='OBS-Camera')
+            except Exception:
+                # Fallback to any device that contains 'OBS' in its name if possible
+                # But pyvirtualcam doesn't support globbing. We'll just throw the last error.
+                raise Exception("Could not find 'OBS Virtual Camera' or 'OBS-Camera'. Please ensure OBS Virtual Camera is installed and started.")
+        
+        with cam:
             print(f"DEVICE_ACTIVE: {cam.device}")
             print(f"--- VIRTUAL CAMERA ACTIVE ---")
             print(f"DEVICE: {cam.device}")

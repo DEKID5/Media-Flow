@@ -302,7 +302,7 @@ export function OperatorDashboard() {
   const [lastAudienceSignal, setLastAudienceSignal] = useState(0);
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
   const isObsDetected = useMemo(() => {
-    return availableCameras.some(cam => cam.label.toLowerCase().includes('obs virtual camera'));
+    return availableCameras.some(cam => cam.label.toLowerCase().includes('obs'));
   }, [availableCameras]);
 
   useEffect(() => {
