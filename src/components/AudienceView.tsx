@@ -69,11 +69,44 @@ export function AudienceView() {
 
   useEffect(() => {
     const el = bgmRef.current;
-    if (!el || !state?.bgmAsset) return;
+    if (!el || !state?.bgmAsset || !hasInteracted) return;
 
-    el.volume = state.mixer.isMuted ? 0 : (state.mixer.masterVolume ?? 100) / 100;
-    el.muted = false;
-  }, [state?.bgmAsset?.id, state?.isPlayingBgm, state?.mixer.isMuted, state?.mixer.masterVolume]);
+    const ensureBgmRouting = async () => {
+      try {
+        if (!bgmAudioGraphRef.current) {
+          const context = new (window.AudioContext || (window as any).webkitAudioContext)({
+            latencyHint: 'playback',
+            sampleRate: 48000
+          });
+          const source = context.createMediaElementSource(el);
+          const splitter = context.createChannelSplitter(2);
+          const merger = context.createChannelMerger(2);
+          const gain = context.createGain();
+
+          source.connect(splitter);
+          splitter.connect(merger, 0, 0); // Channel One only
+          merger.connect(gain);
+          gain.connect(context.destination);
+
+          bgmAudioGraphRef.current = { context, source, splitter, merger, gain };
+          el.volume = 1;
+          el.muted = false;
+        }
+
+        const graph = bgmAudioGraphRef.current;
+        const targetVolume = state.mixer.isMuted ? 0 : (state.mixer.masterVolume ?? 100) / 100;
+        graph.gain.gain.setTargetAtTime(targetVolume, graph.context.currentTime, 0.015);
+        
+        if (graph.context.state === 'suspended' && state.isPlayingBgm) {
+          await graph.context.resume();
+        }
+      } catch (err) {
+        console.warn('AudienceView: BGM routing failed', err);
+      }
+    };
+
+    void ensureBgmRouting();
+  }, [state?.bgmAsset?.id, state?.isPlayingBgm, state?.mixer.isMuted, state?.mixer.masterVolume, hasInteracted]);
 
   useEffect(() => {
     return () => {
@@ -171,11 +204,13 @@ export function AudienceView() {
         )}
 
         {/* Live Camera Feed (Zoom View Only) */}
-        {showCamera && (
+        <AnimatePresence>
+          {showCamera && (
           <motion.div
             key="camera-feed"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             transition={{ duration: 0.35, ease: "easeOut" }}
             className="absolute inset-0 z-0"
           >
@@ -189,6 +224,7 @@ export function AudienceView() {
             />
           </motion.div>
         )}
+        </AnimatePresence>
 
         {/* Media Layer (Videos/Images) */}
         <AnimatePresence>
@@ -206,8 +242,10 @@ export function AudienceView() {
                 className="w-full h-full object-contain relative z-10"
                 autoPlay={!state.isProgramPaused}
                 muted={state.mixer.isMuted}
+                volume={state.mixer.masterVolume}
                 deviceId={state.selectedCameraId}
                 isZoomView={isZoom}
+                channelOneOutput={true}
                 onEnd={() => {
                   setEndedProgramId(programAsset.id);
                   send({ type: 'PROGRAM_ENDED', assetId: programAsset.id });

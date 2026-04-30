@@ -286,6 +286,8 @@ export function OperatorDashboard() {
     isProgramPaused: false
   });
 
+  const [monitorMuted, setMonitorMuted] = useState(true);
+
   const [mediaFolders, setMediaFolders] = useState<FileSystemDirectoryHandle[]>([]);
 
   const [schedules, setSchedules] = useState<{ midweek: MeetingItem[], weekend: MeetingItem[] }>({
@@ -1124,6 +1126,8 @@ export function OperatorDashboard() {
       setIsAudienceLive(true);
       setLastAudienceSignal(Date.now());
       send({ type: 'SYNC_STATE', state });
+
+  
     } else if (msg.type === 'BGM_ACTION' && msg.action === 'seek') {
       const player = document.getElementById('bgm-monitor') as HTMLMediaElement;
       if (player) {
@@ -1190,6 +1194,23 @@ export function OperatorDashboard() {
 
     send({ type: 'SYNC_STATE', state: serializableState as AppState });
   }, [state, send]);
+
+  // Audience Activity Watchdog
+  useEffect(() => {
+    const check = setInterval(() => {
+      if (isAudienceLive && Date.now() - lastAudienceSignal > 10000) {
+        setIsAudienceLive(false);
+      }
+    }, 5000);
+    return () => clearInterval(check);
+  }, [isAudienceLive, lastAudienceSignal]);
+
+  // Auto-mute monitor when audience is live
+  useEffect(() => {
+    if (isAudienceLive) {
+      setMonitorMuted(true);
+    }
+  }, [isAudienceLive]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -1327,7 +1348,7 @@ export function OperatorDashboard() {
         }));
       }
     } catch (err) {
-      console.error('File selection failed:', err);
+      console.error("File selection failed:", err);
     }
   };
 
@@ -1337,12 +1358,12 @@ export function OperatorDashboard() {
       {/* Background Audio Engine for Operator */}
       {state.bgmAsset && (
         <div style={{ 
-          position: 'absolute', 
+          position: "absolute", 
           top: 0, right: 0, 
           zIndex: 100,
-          background: 'rgba(0,0,0,0.8)',
-          display: 'flex',
-          pointerEvents: 'auto'
+          background: "rgba(0,0,0,0.8)",
+          display: "flex",
+          pointerEvents: "auto"
         }}
         className={(!state.isPlayingBgm || state.bgmAsset?.id) ? "" : "pointer-events-none opacity-0 w-0 h-0"}
         >
@@ -1358,6 +1379,7 @@ export function OperatorDashboard() {
               volume={state.mixer.masterVolume}
               seekTo={state.bgmSeekTo}
               channelOneOutput={true}
+              monitorMuted={monitorMuted || isAudienceLive}
               onEnd={nextBg}
             />
           </div>
@@ -1476,7 +1498,7 @@ export function OperatorDashboard() {
         </div>
 
         {/* Audio Controls Dropdown */}
-        <div className="relative ml-auto mr-4">
+        <div className="relative ml-auto mr-4 flex items-center gap-2">
           <button 
             onClick={() => setShowAudioPanel(!showAudioPanel)}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all text-[10px] font-black uppercase tracking-widest ${
@@ -1488,10 +1510,24 @@ export function OperatorDashboard() {
             {state.mixer.isMuted
               ? <VolumeX size={14} className="text-red-400" /> 
               : <Volume2 size={14} className="text-blue-400" />
-            }
+            } 
             <span className="hidden md:inline">Audio</span>
             <span className="text-[9px] font-mono text-blue-400/70">{state.mixer.masterVolume}%</span>
             {showAudioPanel ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+          </button>
+
+          <button 
+            onClick={() => setMonitorMuted(!monitorMuted)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all text-[10px] font-black uppercase tracking-widest ${
+              !monitorMuted 
+                ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)]" 
+                : "bg-white/5 hover:bg-white/10 border-white/10 text-white/30 hover:text-white/50"
+            }`}
+            title={monitorMuted ? "Turn on local monitor" : "Turn off local monitor"}
+          >
+            <Activity size={14} className={!monitorMuted ? "animate-pulse" : ""} />
+            <span>Monitor</span>
+            <div className={`w-1.5 h-1.5 rounded-full ${!monitorMuted ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-white/10"}`} />
           </button>
 
           <AnimatePresence>
@@ -1773,6 +1809,7 @@ export function OperatorDashboard() {
                           muted={state.mixer.isMuted}
                           volume={state.mixer.masterVolume}
                           channelOneOutput={true}
+                          monitorMuted={monitorMuted || isAudienceLive}
                           controls={false}
                           deviceId={state.selectedCameraId}
                           onEnd={handleCut}

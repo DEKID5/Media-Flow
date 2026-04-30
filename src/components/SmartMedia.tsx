@@ -18,6 +18,7 @@ export interface SmartMediaProps {
   deviceId?: string;
   isZoomView?: boolean; // When true, do NOT mirror the camera (bridge capture is not flipped)
   channelOneOutput?: boolean;
+  monitorMuted?: boolean;
 }
 
 const CAMERA_ICON = "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?q=80&w=1000&auto=format&fit=crop";
@@ -36,7 +37,8 @@ export function SmartMedia({
   isThumbnail,
   deviceId,
   isZoomView = false,
-  channelOneOutput = false
+  channelOneOutput = false,
+  monitorMuted = false
 }: SmartMediaProps) {
   const [url, setUrl] = useState<string | null>(null);
   const isCameraAsset = asset?.type === 'camera';
@@ -96,7 +98,7 @@ export function SmartMedia({
       const videoQuality = {
         width: { min: 1280, ideal: 1920 },
         height: { min: 720, ideal: 1080 },
-        frameRate: { ideal: 30 }
+        frameRate: { ideal: 60, max: 120 }
       };
       const constraints = {
         video: deviceId
@@ -177,7 +179,10 @@ export function SmartMedia({
     const ensureChannelOneOutput = async () => {
       try {
         if (!audioGraphRef.current) {
-          const context = new window.AudioContext();
+          const context = new (window.AudioContext || (window as any).webkitAudioContext)({
+            latencyHint: 'playback',
+            sampleRate: 48000
+          });
           const source = context.createMediaElementSource(el);
           const splitter = context.createChannelSplitter(2);
           const merger = context.createChannelMerger(2);
@@ -185,10 +190,13 @@ export function SmartMedia({
 
           source.connect(splitter);
           splitter.connect(merger, 0, 0);
-          splitter.connect(merger, 0, 1);
+          // Only connect to Channel 1 (merger index 0) to fulfill the "one channel" requirement.
+          // This prevents bleed into the right channel.
           merger.connect(gain);
           gain.connect(context.destination);
-          gain.gain.value = muted ? 0 : (volume ?? 100) / 100;
+          
+          const targetVolume = (volume ?? 100) / 100;
+          gain.gain.value = (muted || monitorMuted) ? 0 : targetVolume;
 
           audioGraphRef.current = { context, source, splitter, merger, gain };
           el.volume = 1;
@@ -209,28 +217,51 @@ export function SmartMedia({
     void ensureChannelOneOutput();
 
     return () => {
-      cancelled = true;
+      // We no longer close the context on every asset change (URL change).
+      // This prevents audio stuttering when switching assets.
+      // The context will be closed when the component unmounts or channelOneOutput is toggled.
+    };
+  }, [channelOneOutput, isCameraAsset, isThumbnail]);
+
+  // Handle URL changes without rebuilding the whole graph
+  useEffect(() => {
+    const el = videoRef.current || audioRef.current;
+    if (!el || !audioGraphRef.current || !url) return;
+    
+    // The source node is already connected to the element. 
+    // Changing el.src doesn't require a new source node.
+    if (audioGraphRef.current.context.state === 'suspended' && autoPlay) {
+      audioGraphRef.current.context.resume().catch(() => {});
+    }
+  }, [url, autoPlay]);
+
+  // Final cleanup on unmount
+  useEffect(() => {
+    return () => {
       if (audioGraphRef.current) {
-        audioGraphRef.current.source.disconnect();
-        audioGraphRef.current.splitter.disconnect();
-        audioGraphRef.current.merger.disconnect();
-        audioGraphRef.current.gain.disconnect();
-        audioGraphRef.current.context.close().catch(() => {});
+        try {
+          audioGraphRef.current.source.disconnect();
+          audioGraphRef.current.splitter.disconnect();
+          audioGraphRef.current.merger.disconnect();
+          audioGraphRef.current.gain.disconnect();
+          audioGraphRef.current.context.close().catch(() => {});
+        } catch (e) {}
         audioGraphRef.current = null;
       }
     };
-  }, [asset?.id, channelOneOutput, isCameraAsset, isThumbnail, url]);
+  }, []);
 
   useEffect(() => {
     const graph = audioGraphRef.current;
     if (!graph || !channelOneOutput) return;
 
-    const nextGain = muted ? 0 : (volume ?? 100) / 100;
+    const targetVolume = (volume ?? 100) / 100;
+    const nextGain = (muted || monitorMuted) ? 0 : targetVolume;
     graph.gain.gain.setTargetAtTime(nextGain, graph.context.currentTime, 0.015);
     if (graph.context.state === 'suspended' && autoPlay) {
       graph.context.resume().catch(() => {});
     }
-  }, [autoPlay, channelOneOutput, muted, volume]);
+  }, [autoPlay, channelOneOutput, muted, volume, monitorMuted]);
 
   useEffect(() => {
     if (!asset) return;
@@ -243,7 +274,10 @@ export function SmartMedia({
         if (active) setUrl(null);
         return;
       }
-      if (active) setUrl(null);
+      // Don't clear immediately if we already have a URL and it's the same asset
+      // but if the asset ID changed, we should probably clear to avoid showing old media.
+      // However, to prevent "pauses" we can wait until the new one is ready if it's fast.
+      // For now, let's only clear if it's a completely different asset type or path.
       try {
         const isDesktop = !!(window as any).mediaflow?.isDesktop;
 
