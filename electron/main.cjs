@@ -9,6 +9,8 @@ const { spawn } = require('child_process');
 // Auto-updater configuration
 autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = true;
+// Set User-Agent to avoid 406 errors on some systems/proxies
+autoUpdater.requestHeaders = { 'User-Agent': 'Media-Flow-Broadcast-Suite' };
 
 let virtualCameraBridgeProcess = null;
 
@@ -89,8 +91,8 @@ function createAudienceWindow(viewType = 'audience') {
   audienceWindow = new BrowserWindow({
     width: 1280, // Target broadcast resolution
     height: 720,
-    x: isZoom ? -5000 : (externalDisplay ? externalDisplay.bounds.x : 100), 
-    y: isZoom ? -5000 : (externalDisplay ? externalDisplay.bounds.y : 100),
+    x: isZoom ? -2000 : (externalDisplay ? externalDisplay.bounds.x : 100), 
+    y: isZoom ? -2000 : (externalDisplay ? externalDisplay.bounds.y : 100),
     show: true, 
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -144,6 +146,20 @@ function createAudienceWindow(viewType = 'audience') {
       console.error(`[VirtualCam Error] ${error}`);
       if (operatorWindow && !operatorWindow.isDestroyed()) {
         operatorWindow.webContents.send('bridge-status', { status: 'error', message: error });
+      }
+    });
+
+    virtualCameraBridgeProcess.on('error', (err) => {
+      console.error(`[VirtualCam Process Error] ${err.message}`);
+      if (operatorWindow && !operatorWindow.isDestroyed()) {
+        operatorWindow.webContents.send('bridge-status', { status: 'error', message: `Process failed to start: ${err.message}` });
+      }
+    });
+
+    virtualCameraBridgeProcess.on('exit', (code) => {
+      console.log(`[VirtualCam Process Exit] Code: ${code}`);
+      if (operatorWindow && !operatorWindow.isDestroyed()) {
+        operatorWindow.webContents.send('bridge-status', { status: 'inactive' });
       }
     });
 

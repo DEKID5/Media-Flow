@@ -27,6 +27,17 @@ def capture_window(hwnd, width, height):
     # PW_RENDERFULLCONTENT = 2 (captures DirectComposition / hardware accelerated windows)
     PW_RENDERFULLCONTENT = 2
     
+    # Get window dimensions to verify
+    try:
+        left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+        w = right - left
+        h = bottom - top
+        if w < 10 or h < 10:
+            return None
+    except Exception as e:
+        print(f"DEBUG: GetWindowRect failed: {e}")
+        return None
+
     # Create DC and bitmaps
     hwndDC = win32gui.GetWindowDC(hwnd)
     mfcDC  = win32ui.CreateDCFromHandle(hwndDC)
@@ -53,6 +64,13 @@ def capture_window(hwnd, width, height):
         # Convert raw BGRA bytes to a numpy array, then to RGBA format for pyvirtualcam
         img = np.frombuffer(bmpstr, dtype=np.uint8)
         img = img.reshape((height, width, 4))
+        
+        # Check if the frame is all zeros (black)
+        # We only check a few pixels for performance
+        if not np.any(img[::100, ::100, :3]):
+             # Frame is likely black. This happens if PrintWindow fails to capture content.
+             pass 
+
         # Convert BGRA to RGBA
         rgba = np.empty_like(img)
         rgba[:, :, 0] = img[:, :, 2] # R
@@ -72,6 +90,9 @@ def main():
             time.sleep(1)
 
     print(f"Found window! HWND: {hwnd}. Starting Virtual Camera...")
+    
+    # Ensure window is "shown" even if off-screen
+    win32gui.ShowWindow(hwnd, win32con.SW_SHOWNA)
 
     # Wait a moment for window to fully render
     time.sleep(2)
@@ -79,15 +100,19 @@ def main():
     try:
         # The user requested to use ONLY OBS Virtual Camera.
         # Try different possible names for the OBS Virtual Camera device.
-        try:
-            cam = pyvirtualcam.Camera(width=TARGET_WIDTH, height=TARGET_HEIGHT, fps=FPS, fmt=pyvirtualcam.PixelFormat.RGBA, device='OBS Virtual Camera')
-        except Exception:
+        devices = ['OBS Virtual Camera', 'OBS-Camera']
+        cam = None
+        
+        for device_name in devices:
             try:
-                cam = pyvirtualcam.Camera(width=TARGET_WIDTH, height=TARGET_HEIGHT, fps=FPS, fmt=pyvirtualcam.PixelFormat.RGBA, device='OBS-Camera')
-            except Exception:
-                # Fallback to any device that contains 'OBS' in its name if possible
-                # But pyvirtualcam doesn't support globbing. We'll just throw the last error.
-                raise Exception("Could not find 'OBS Virtual Camera' or 'OBS-Camera'. Please ensure OBS Virtual Camera is installed and started.")
+                print(f"Attempting to open {device_name}...")
+                cam = pyvirtualcam.Camera(width=TARGET_WIDTH, height=TARGET_HEIGHT, fps=FPS, fmt=pyvirtualcam.PixelFormat.RGBA, device=device_name)
+                break
+            except Exception as e:
+                print(f"Could not open {device_name}: {e}")
+        
+        if cam is None:
+             raise Exception("Could not find 'OBS Virtual Camera' or 'OBS-Camera'. Please ensure OBS Virtual Camera is installed and started.")
         
         with cam:
             print(f"DEVICE_ACTIVE: {cam.device}")
@@ -96,9 +121,8 @@ def main():
             print(f"Please select '{cam.device}' in Zoom.")
             print(f"-----------------------------")
             
+            consecutive_failures = 0
             while True:
-                start_time = time.time()
-                
                 # If window closed, exit
                 if not win32gui.IsWindow(hwnd):
                     print("Window closed. Exiting.")
@@ -108,12 +132,22 @@ def main():
                 if frame is not None:
                     cam.send(frame)
                     cam.sleep_until_next_frame()
+                    consecutive_failures = 0
                 else:
+                    consecutive_failures += 1
                     # Send a black frame if capture fails to avoid gray screen in Zoom
                     black_frame = np.zeros((TARGET_HEIGHT, TARGET_WIDTH, 4), dtype=np.uint8)
                     cam.send(black_frame)
                     cam.sleep_until_next_frame()
-                    time.sleep(0.1)
+                    
+                    if consecutive_failures % 30 == 0:
+                        print(f"DEBUG: Capture failing for {consecutive_failures} frames. Check window visibility.")
+                        # Try to refresh window handle just in case
+                        new_hwnd = get_window_hwnd(WINDOW_TITLE)
+                        if new_hwnd != 0:
+                            hwnd = new_hwnd
+                    
+                    time.sleep(0.01)
                     
     except Exception as e:
         print(f"Error initializing virtual camera: {e}")
