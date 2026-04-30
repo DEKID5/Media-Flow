@@ -33,11 +33,9 @@ export function AudienceView() {
 
   // --- Virtual Camera Broadcast Logic ---
   useEffect(() => {
-    // The previous UnityCapture named pipe logic has been removed because it relied on Shared Memory
-    // which Node.js cannot write to. 
-    // Instead, the MediaFlow Audience window is now rendered off-screen (x: -20000).
-    // The user will use OBS Studio's "Window Capture" to grab this off-screen window natively 
-    // and route it to the "OBS Virtual Camera" for Zoom. This is zero-copy and highly optimized!
+    if (view === 'zoom') {
+      document.title = 'MEDIAFLOW_NATIVE_BRIDGE_TARGET';
+    }
   }, [view]);
   // ---------------------------------------
 

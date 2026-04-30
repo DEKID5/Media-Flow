@@ -52,7 +52,7 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      {view === 'audience' || view === 'timer' ? <AudienceView /> : <OperatorDashboard />}
+      {view === 'audience' || view === 'timer' || view === 'zoom' ? <AudienceView /> : <OperatorDashboard />}
     </ErrorBoundary>
   );
 }

@@ -139,8 +139,8 @@ function createAudienceWindow(viewType = 'audience', targetType = 'obs') {
   audienceWindow = new BrowserWindow({
     width: 1920, // High resolution broadcast
     height: 1080,
-    x: isZoom ? -2000 : (externalDisplay ? externalDisplay.bounds.x : 100), 
-    y: isZoom ? -2000 : (externalDisplay ? externalDisplay.bounds.y : 100),
+    x: isZoom ? 9999 : (externalDisplay ? externalDisplay.bounds.x : 100), 
+    y: isZoom ? 9999 : (externalDisplay ? externalDisplay.bounds.y : 100),
     show: true, 
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -305,7 +305,7 @@ app.whenReady().then(() => {
       if (isZoom) {
         startBridge(targetType);
         
-        audienceWindow.setBounds({ x: -2000, y: -2000, width: 1920, height: 1080 });
+        audienceWindow.setBounds({ x: 9999, y: 9999, width: 1920, height: 1080 });
         audienceWindow.setFullScreen(false);
         audienceWindow.setSkipTaskbar(true);
       } else {
