@@ -167,6 +167,8 @@ export function AudienceView() {
   };
 
   const mediaType = getMediaType(programAsset);
+  const isMediaShowing = !!programAsset && mediaType !== 'audio';
+  const showCamera = state.isMeetingLive && !isMediaShowing;
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -207,15 +209,15 @@ export function AudienceView() {
       <div className={`w-full h-full flex ${displayMode === 'multiview' ? 'flex-row' : 'flex-col'}`}>
         {/* Main Feed Section */}
         <div className="relative flex-1 flex items-center justify-center overflow-hidden">
-          {/* Background Layer: Camera Feed (Meeting Mode - ONLY for Zoom Feed) */}
+          {/* Background Layer: Camera Feed (Meeting Mode - Auto-fades when media plays) */}
           <AnimatePresence>
-            {state.isMeetingLive && view === 'zoom' && (
+            {showCamera && (
               <motion.div 
                 key="camera-feed"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 1.5, ease: "easeInOut" }}
+                transition={{ duration: 1.2, ease: "easeInOut" }}
                 className="absolute inset-0 z-0 w-full h-full flex items-center justify-center overflow-hidden bg-black"
               >
                 <SmartMedia 
@@ -238,7 +240,7 @@ export function AudienceView() {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.8, ease: "easeInOut" }}
-                className="absolute inset-0 z-10 w-full h-full flex items-center justify-center overflow-hidden bg-black"
+                className={`absolute inset-0 z-10 w-full h-full flex items-center justify-center overflow-hidden ${mediaType === 'audio' ? '' : 'bg-black'}`}
               >
                 <SmartMedia 
                   asset={programAsset}
