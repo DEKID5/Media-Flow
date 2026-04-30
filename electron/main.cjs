@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, dialog, powerSaveBlocker } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
@@ -26,7 +26,7 @@ const isDev = !app.isPackaged;
 
 let operatorWindow;
 let audienceWindow;
-let broadcastPipe;
+
 
 // Helper to scan for files
 async function scanDir(dir, extensions, depth = 0) {
@@ -173,7 +173,7 @@ app.whenReady().then(() => {
   
   ipcMain.handle('getSystemSnapshot', async () => {
     return {
-      memory: process.getProcessMemoryInfo(),
+      memory: await process.getProcessMemoryInfo(),
       displays: screen.getAllDisplays(),
       platform: process.platform,
       versions: process.versions
