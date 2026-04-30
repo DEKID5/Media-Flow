@@ -301,15 +301,23 @@ export function OperatorDashboard() {
   const [isAudienceLive, setIsAudienceLive] = useState(false);
   const [lastAudienceSignal, setLastAudienceSignal] = useState(0);
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
+  const isObsDetected = useMemo(() => {
+    return availableCameras.some(cam => cam.label.toLowerCase().includes('obs virtual camera'));
+  }, [availableCameras]);
 
   useEffect(() => {
-    navigator.mediaDevices.enumerateDevices().then(devices => {
-      const cams = devices.filter(d => d.kind === 'videoinput');
-      setAvailableCameras(cams);
-      if (cams.length > 0 && !state.selectedCameraId) {
-        setState(s => ({ ...s, selectedCameraId: cams[0].deviceId }));
-      }
-    });
+    const handleDevices = () => {
+      navigator.mediaDevices.enumerateDevices().then(devices => {
+        const cams = devices.filter(d => d.kind === 'videoinput');
+        setAvailableCameras(cams);
+        if (cams.length > 0 && !state.selectedCameraId) {
+          setState(s => ({ ...s, selectedCameraId: cams[0].deviceId }));
+        }
+      });
+    };
+    handleDevices();
+    navigator.mediaDevices.addEventListener('devicechange', handleDevices);
+    return () => navigator.mediaDevices.removeEventListener('devicechange', handleDevices);
   }, []);
   const [isPreviewMuted, setIsPreviewMuted] = useState(true);
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
@@ -1533,7 +1541,9 @@ export function OperatorDashboard() {
                 </div>
                 <span className="flex flex-col items-start leading-none">
                   <span className="text-white">Broadcast to Zoom</span>
-                  <span className="text-[7px] text-blue-400/60 mt-1">Native OBS Bridge</span>
+                  <span className={`text-[7px] mt-1 uppercase tracking-wider font-bold ${isObsDetected ? 'text-blue-400' : 'text-amber-400/80'}`}>
+                    {isObsDetected ? '• OBS Virtual Camera Detected' : '• Native Bridge (UnityCapture)'}
+                  </span>
                 </span>
                 
                 <style>{`

@@ -80,6 +80,7 @@ def main():
         # Request standard RGBA pixel format
         # By not specifying a device, it will pick the first available one (usually Unity Video Capture)
         with pyvirtualcam.Camera(width=TARGET_WIDTH, height=TARGET_HEIGHT, fps=FPS, fmt=pyvirtualcam.PixelFormat.RGBA) as cam:
+            print(f"DEVICE_ACTIVE: {cam.device}")
             print(f"--- VIRTUAL CAMERA ACTIVE ---")
             print(f"DEVICE: {cam.device}")
             print(f"Please select '{cam.device}' in Zoom.")

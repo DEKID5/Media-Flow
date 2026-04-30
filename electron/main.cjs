@@ -118,8 +118,25 @@ function createAudienceWindow(viewType = 'audience') {
     
     virtualCameraBridgeProcess = spawn('python', ['-u', scriptPath]);
     
-    virtualCameraBridgeProcess.stdout.on('data', (data) => console.log(`[VirtualCam] ${data.toString().trim()}`));
-    virtualCameraBridgeProcess.stderr.on('data', (data) => console.error(`[VirtualCam Error] ${data.toString().trim()}`));
+    virtualCameraBridgeProcess.stdout.on('data', (data) => {
+      const output = data.toString().trim();
+      console.log(`[VirtualCam] ${output}`);
+      
+      if (output.includes('DEVICE_ACTIVE:')) {
+        const deviceName = output.split('DEVICE_ACTIVE:')[1].trim();
+        if (operatorWindow && !operatorWindow.isDestroyed()) {
+          operatorWindow.webContents.send('bridge-status', { status: 'active', device: deviceName });
+        }
+      }
+    });
+    
+    virtualCameraBridgeProcess.stderr.on('data', (data) => {
+      const error = data.toString().trim();
+      console.error(`[VirtualCam Error] ${error}`);
+      if (operatorWindow && !operatorWindow.isDestroyed()) {
+        operatorWindow.webContents.send('bridge-status', { status: 'error', message: error });
+      }
+    });
 
     audienceWindow.on('closed', () => {
       if (virtualCameraBridgeProcess) {
