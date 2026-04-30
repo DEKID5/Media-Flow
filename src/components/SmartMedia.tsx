@@ -16,6 +16,7 @@ export interface SmartMediaProps {
   onError?: (e: any) => void;
   isThumbnail?: boolean;
   deviceId?: string;
+  isZoomView?: boolean; // When true, do NOT mirror the camera (bridge capture is not flipped)
 }
 
 const CAMERA_ICON = "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?q=80&w=1000&auto=format&fit=crop";
@@ -32,7 +33,8 @@ export function SmartMedia({
   onEnd, 
   onError, 
   isThumbnail,
-  deviceId
+  deviceId,
+  isZoomView = false
 }: SmartMediaProps) {
   const [url, setUrl] = useState<string | null>(null);
 
@@ -56,7 +58,10 @@ export function SmartMedia({
     if (asset.type === 'camera' && !isThumbnail) {
       let active = true;
       const constraints = {
-        video: deviceId ? { deviceId: { exact: deviceId } } : true,
+        // Request highest quality: 1080p preferred, fall back gracefully
+        video: deviceId
+          ? { deviceId: { exact: deviceId }, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } }
+          : { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
         audio: false
       };
       navigator.mediaDevices.getUserMedia(constraints)
@@ -68,13 +73,9 @@ export function SmartMedia({
         })
         .catch(err => console.error("Camera access failed:", err));
       
-      return () => {
-        active = false;
-        // Don't stop here, we'll stop in the cleanup of the whole effect if needed
-        // but actually better to stop when asset changes
-      };
+      return () => { active = false; };
     }
-  }, [asset.type, asset.id, isThumbnail]);
+  }, [asset.type, asset.id, isThumbnail, deviceId]);
 
   useEffect(() => {
     return () => {
@@ -342,12 +343,15 @@ export function SmartMedia({
 
   if (isVideo) {
     const videoSrc = asset.type === 'camera' ? undefined : (normalizedUrl || '') + (isThumbnail && !url?.includes('#t=') ? '#t=15.0' : '');
+    // Mirror the camera ONLY for operator preview — NOT for the zoom broadcast view
+    // (the bridge captures the window as-is; mirroring here would make text appear backwards in Zoom)
+    const cameraMirrorClass = asset.type === 'camera' && !isZoomView ? 'scale-x-[-1]' : '';
     return (
       <video 
         ref={videoRef}
         id={id}
         src={videoSrc} 
-        className={`${className} ${asset.type === 'camera' ? 'scale-x-[-1]' : ''}`} // Mirror camera
+        className={`${className} ${cameraMirrorClass}`}
         autoPlay={autoPlay} 
         muted={isThumbnail ? true : (asset.type === 'camera' ? true : muted)} 
         controls={asset.type === 'camera' ? false : controls}

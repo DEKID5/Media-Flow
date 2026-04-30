@@ -14,7 +14,8 @@
     "dev": "vite --port=3000 --host=0.0.0.0",
     "dev:desktop": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
     "build": "vite build",
-    "build:desktop": "vite build && electron-builder",
+    "bridge:python": "powershell -ExecutionPolicy Bypass -File scripts/prepare-bridge-python.ps1",
+    "build:desktop": "npm run bridge:python && vite build && electron-builder",
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit"
@@ -64,6 +65,13 @@
       {
         "from": "resources/bridge",
         "to": "bridge",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "resources/python",
+        "to": "python",
         "filter": [
           "**/*"
         ]

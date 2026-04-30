@@ -282,7 +282,7 @@ export function OperatorDashboard() {
     isPermissionGranted: false,
     selectedCameraId: '',
     isMeetingLive: false,
-    vcamTarget: 'obs'
+    vcamMode: 'auto'
   });
 
   const [mediaFolders, setMediaFolders] = useState<FileSystemDirectoryHandle[]>([]);
@@ -301,6 +301,7 @@ export function OperatorDashboard() {
   const [hasSecondaryScreen, setHasSecondaryScreen] = useState(false);
   const [isAudienceLive, setIsAudienceLive] = useState(false);
   const [lastAudienceSignal, setLastAudienceSignal] = useState(0);
+  const [bridgeStatus, setBridgeStatus] = useState<{ status: string, device?: string, message?: string }>({ status: 'inactive' });
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
   const isObsDetected = useMemo(() => {
     return availableCameras.some(cam => cam.label.toLowerCase().includes('obs'));
@@ -346,10 +347,21 @@ export function OperatorDashboard() {
 
   useEffect(() => {
     if ((window as any).mediaflow) {
-      const cleanup = (window as any).mediaflow.onUpdateStatus((data: any) => {
+      const cleanupUpdate = (window as any).mediaflow.onUpdateStatus((data: any) => {
         setUpdateStatus(data);
       });
-      return cleanup;
+      const cleanupBridge = (window as any).mediaflow.onBridgeStatus((data: any) => {
+        setBridgeStatus(data);
+        if (data.status === 'active') {
+          setIsAudienceLive(true);
+        } else if (data.status === 'inactive' || data.status === 'error') {
+          setIsAudienceLive(false);
+        }
+      });
+      return () => {
+        cleanupUpdate();
+        cleanupBridge();
+      };
     }
   }, []);
 
@@ -1495,101 +1507,115 @@ export function OperatorDashboard() {
            </AnimatePresence>
            
            <div className="flex items-center gap-6 text-[10px] font-mono font-medium text-white/30 border-r border-white/10 pr-6 mr-2">
-             <div className="flex items-center gap-2">
-               <div className={`w-1.5 h-1.5 rounded-full ${hasSecondaryScreen ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]'}`} /> 
-               DISPLAY 2: {hasSecondaryScreen ? 'READY' : 'OFFLINE'}
-             </div>
-             <div className="flex items-center gap-2">
-               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" /> 
-               SYNC: OK
-             </div>
-           </div>
+              <div className="flex items-center gap-2">
+                <div className={`w-1.5 h-1.5 rounded-full ${hasSecondaryScreen ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]'}`} /> 
+                DISPLAY 2: {hasSecondaryScreen ? 'READY' : 'OFFLINE'}
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" /> 
+                SYNC: OK
+              </div>
+            </div>
 
-           <div className="flex gap-2">
-             <button 
-               onClick={() => setState(s => ({ ...s, isMeetingLive: !s.isMeetingLive }))}
-               className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${state.isMeetingLive ? 'bg-red-600 text-white shadow-lg shadow-red-600/40' : 'bg-white/5 hover:bg-white/10 text-white/40 border border-white/10'}`}
-             >
-               <Activity size={12} className={state.isMeetingLive ? 'animate-pulse' : ''} />
-               {state.isMeetingLive ? 'Meeting Live' : 'Go Live'}
-             </button>
-             <button 
-               onClick={() => setShowSettings(true)}
-               className="px-2.5 py-1.5 bg-white/5 hover:bg-white/10 text-white/40 hover:text-white rounded-lg border border-white/10 transition-all flex items-center justify-center"
-               title="Settings"
-             >
-               <Settings size={14} />
-             </button>
-             <button 
-               onClick={() => {
-                 if (confirm('Are you sure you want to clear all saved data and reset the application? This cannot be undone.')) {
-                   localStorage.clear();
-                   window.location.reload();
-                 }
-               }}
-               className="px-2.5 py-1.5 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-lg border border-red-500/20 transition-all flex items-center justify-center"
-               title="Factory Reset & Clear Data"
-             >
-               <RotateCw size={14} />
-             </button>
-             <div className="flex flex-col items-center gap-1">
+        <div className="flex items-center gap-4">
+              {/* Session Controls */}
+              <div className="flex items-center gap-1.5 p-1 bg-white/5 rounded-xl border border-white/10">
+                <button 
+                  onClick={() => setState(s => ({ ...s, isMeetingLive: !s.isMeetingLive }))}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${state.isMeetingLive ? 'bg-red-600 text-white shadow-lg shadow-red-600/40' : 'text-white/40 hover:text-white/60'}`}
+                >
+                  <Activity size={12} className={state.isMeetingLive ? 'animate-pulse' : ''} />
+                  {state.isMeetingLive ? 'Meeting Live' : 'Go Live'}
+                </button>
+                <div className="w-px h-4 bg-white/10 mx-1" />
+                <button 
+                  onClick={() => setShowSettings(true)}
+                  className="p-2 bg-transparent hover:bg-white/5 text-white/40 hover:text-white rounded-lg transition-all"
+                  title="Settings"
+                >
+                  <Settings size={14} />
+                </button>
+                <button 
+                  onClick={() => {
+                    if (confirm('Are you sure you want to clear all saved data and reset the application?')) {
+                      localStorage.clear();
+                      window.location.reload();
+                    }
+                  }}
+                  className="p-2 bg-transparent hover:bg-red-500/10 text-white/20 hover:text-red-500 rounded-lg transition-all"
+                  title="Factory Reset"
+                >
+                  <RotateCw size={14} />
+                </button>
+              </div>
+
+              {/* Broadcast Group */}
+              <div className="flex items-center gap-3 pl-4 border-l border-white/10">
+                <div className="flex flex-col gap-1">
+                  <button 
+                    onClick={() => {
+                      if ((window as any).mediaflow) {
+                        (window as any).mediaflow.openExternalDisplay('zoom');
+                      } else {
+                        window.open('/?view=zoom', 'ZoomFeed', 'width=1920,height=1080');
+                      }
+                    }}
+                    className={`
+                      relative flex items-center gap-3 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all overflow-hidden
+                      ${bridgeStatus.status === 'active' ? 'bg-zinc-900 text-white border border-emerald-500/50' : 
+                        bridgeStatus.status === 'error' ? 'bg-zinc-900 text-red-500 border border-red-500/50' :
+                        bridgeStatus.status === 'starting' ? 'bg-zinc-900 text-blue-300 border border-blue-500/50' :
+                        'bg-zinc-800 hover:bg-zinc-700 text-white/60 border border-white/10'}
+                    `}
+                  >
+                    <div className={`w-2 h-2 rounded-full ${
+                      bridgeStatus.status === 'active' ? 'bg-emerald-500 animate-pulse' : 
+                      bridgeStatus.status === 'error' ? 'bg-red-500' :
+                      bridgeStatus.status === 'starting' ? 'bg-blue-500 animate-pulse' : 'bg-white/10'
+                    }`} />
+                    <span>
+                      {bridgeStatus.status === 'active' ? 'Broadcast Live' :
+                       bridgeStatus.status === 'starting' ? 'Starting Zoom Feed' :
+                       bridgeStatus.status === 'error' ? 'Zoom Feed Error' :
+                       'Broadcast to Zoom'}
+                    </span>
+                  </button>
+                  {bridgeStatus.status === 'error' && bridgeStatus.message && (
+                    <p className="max-w-72 text-[8px] font-bold uppercase tracking-wider text-red-400/80 leading-tight" title={bridgeStatus.message}>
+                      {bridgeStatus.message}
+                    </p>
+                  )}
+                  
+                  <div className="flex bg-black/40 p-0.5 rounded-lg border border-white/5">
+                    <button 
+                      onClick={() => setState(s => ({ ...s, vcamMode: 'auto' }))}
+                      className={`flex-1 py-1 px-2 rounded-md text-[7px] font-bold uppercase transition-all ${state.vcamMode === 'auto' ? 'bg-white/10 text-white' : 'text-white/30 hover:text-white/50'}`}
+                    >Auto</button>
+                    <button 
+                      onClick={() => setState(s => ({ ...s, vcamMode: 'camera' }))}
+                      className={`flex-1 py-1 px-2 rounded-md text-[7px] font-bold uppercase transition-all ${state.vcamMode === 'camera' ? 'bg-emerald-500/20 text-emerald-400' : 'text-white/30 hover:text-white/50'}`}
+                    >Cam</button>
+                    <button 
+                      onClick={() => setState(s => ({ ...s, vcamMode: 'media' }))}
+                      className={`flex-1 py-1 px-2 rounded-md text-[7px] font-bold uppercase transition-all ${state.vcamMode === 'media' ? 'bg-blue-500/20 text-blue-400' : 'text-white/30 hover:text-white/50'}`}
+                    >Media</button>
+                  </div>
+                </div>
+
                 <button 
                   onClick={() => {
                     if ((window as any).mediaflow) {
-                      (window as any).mediaflow.openExternalDisplay('zoom', state.vcamTarget);
+                      (window as any).mediaflow.openExternalDisplay();
                     } else {
-                      window.open('/?view=zoom', 'ZoomFeed', 'width=1920,height=1080');
+                      window.open('/?view=audience', 'AudienceView', 'width=1280,height=720');
                     }
                   }}
-                  className={`
-                    relative flex items-center gap-3 px-6 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all shadow-2xl overflow-hidden
-                    ${isAudienceLive ? 'bg-zinc-900 text-white border-2 border-blue-500 shadow-blue-500/40' : 'bg-zinc-800 hover:bg-zinc-700 text-white/80 border border-white/10'}
-                  `}
+                  className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white/60 text-[10px] font-black rounded-xl border border-white/10 uppercase tracking-widest transition-all h-full"
                 >
-                  {isAudienceLive && (
-                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-white to-blue-500 animate-[shimmer_2s_infinite]" />
-                  )}
-                  <div className={`w-3 h-3 rounded-full flex items-center justify-center ${isAudienceLive ? 'bg-blue-500 animate-pulse' : 'bg-white/20'}`}>
-                    <div className="w-1 h-1 rounded-full bg-white" />
-                  </div>
-                  <span className="flex flex-col items-start leading-none">
-                    <span className="text-white">Broadcast to {state.vcamTarget === 'unity' ? 'Unity Cam' : 'Zoom (OBS)'}</span>
-                    <span className={`text-[7px] mt-1 uppercase tracking-wider font-bold ${isObsDetected || state.vcamTarget === 'unity' ? 'text-blue-400' : 'text-red-400/80'}`}>
-                      {state.vcamTarget === 'unity' ? '• Unity Capture Selected' : (isObsDetected ? '• OBS Virtual Camera Detected' : '• OBS Virtual Camera Not Found')}
-                    </span>
-                  </span>
-                  
-                  <style>{`
-                    @keyframes shimmer {
-                      0% { transform: translateX(-100%); }
-                      100% { transform: translateX(100%); }
-                    }
-                  `}</style>
+                  Extend Feed
                 </button>
-                {!isObsDetected && (
-                  <a 
-                    href="https://github.com/miaulightouch/obs-virtual-cam" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-[7px] text-amber-500/60 hover:text-amber-400 underline font-black uppercase tracking-widest transition-colors"
-                  >
-                    Install Driver
-                  </a>
-                )}
               </div>
-             <button 
-               onClick={() => {
-                 if ((window as any).mediaflow) {
-                   (window as any).mediaflow.openExternalDisplay();
-                 } else {
-                   window.open('/?view=audience', 'AudienceView', 'width=1280,height=720');
-                 }
-               }}
-               className="px-4 py-1.5 bg-white/5 hover:bg-white/10 text-white/60 text-[10px] font-black rounded-lg border border-white/10 uppercase tracking-widest transition-all"
-             >
-               Extend to Live Feed
-             </button>
-           </div>
+            </div>
         </div>
       </header>
 
@@ -2638,28 +2664,9 @@ export function OperatorDashboard() {
                       <ChevronDown size={14} className="absolute right-3 top-3 text-white/20 pointer-events-none" />
                     </div>
                     <div className="mt-6 p-4 rounded-xl bg-blue-500/10 border border-blue-500/20">
-                       <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2 flex items-center gap-2">
-                         <Cast size={12} /> Output Target
-                       </h4>
-                       <div className="flex bg-black/40 p-1 rounded-lg border border-white/5 mb-4">
-                          <button 
-                            onClick={() => setState(s => ({ ...s, vcamTarget: 'obs' }))}
-                            className={`flex-1 py-2 rounded-md text-[9px] font-black uppercase tracking-widest transition-all ${state.vcamTarget === 'obs' ? 'bg-blue-500 text-white shadow-lg' : 'text-white/40 hover:text-white/60'}`}
-                          >
-                            OBS Virtual Cam
-                          </button>
-                          <button 
-                            onClick={() => setState(s => ({ ...s, vcamTarget: 'unity' }))}
-                            className={`flex-1 py-2 rounded-md text-[9px] font-black uppercase tracking-widest transition-all ${state.vcamTarget === 'unity' ? 'bg-blue-500 text-white shadow-lg' : 'text-white/40 hover:text-white/60'}`}
-                          >
-                            Unity Capture
-                          </button>
-                       </div>
-                       <p className="text-[9px] text-white/60 leading-relaxed uppercase tracking-tight">
-                         {state.vcamTarget === 'unity' 
-                           ? "Unity Capture is a low-latency driver. Make sure the driver is installed." 
-                           : "To use OBS Virtual Camera, ensure OBS Studio is installed and the Virtual Camera is started."}
-                       </p>
+                        <p className="text-[9px] text-white/60 leading-relaxed uppercase tracking-tight">
+                          To use OBS Virtual Camera, ensure OBS Studio is installed and the Virtual Camera is started in OBS settings.
+                        </p>
                     </div>
                   </div>
                 </section>

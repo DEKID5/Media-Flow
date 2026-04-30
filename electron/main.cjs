@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
 const { pathToFileURL } = require('url');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 
 // Auto-updater configuration
 autoUpdater.autoDownload = false;
@@ -28,6 +28,8 @@ const isDev = !app.isPackaged;
 
 let operatorWindow;
 let audienceWindow;
+let lastSyncStateMessage = null;
+let lastBridgeStatus = { status: 'inactive' };
 
 
 // Helper to scan for files
@@ -78,57 +80,144 @@ function createOperatorWindow() {
   } else {
     operatorWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
+
+  operatorWindow.webContents.on('did-finish-load', () => {
+    operatorWindow.webContents.send('sync-message', { type: 'AUDIENCE_READY' });
+  });
 }
 
-function startBridge(targetType) {
+function sendCachedStateToWindow(win) {
+  if (lastSyncStateMessage && win && !win.isDestroyed()) {
+    win.webContents.send('sync-message', lastSyncStateMessage);
+  }
+}
+
+function sendBridgeStatus(status) {
+  lastBridgeStatus = status;
+  if (operatorWindow && !operatorWindow.isDestroyed()) {
+    operatorWindow.webContents.send('bridge-status', status);
+  }
+}
+
+function getPythonCommand() {
+  const candidates = [
+    process.env.MEDIAFLOW_PYTHON,
+    path.join(__dirname, '../resources/python/python.exe'),
+    path.join(process.resourcesPath || '', 'python/python.exe'),
+    path.join(process.env.LOCALAPPDATA || '', 'Programs/Python/Python312/python.exe'),
+    path.join(process.env.LOCALAPPDATA || '', 'Programs/Python/Python311/python.exe'),
+    path.join(process.env.LOCALAPPDATA || '', 'Programs/Python/Python310/python.exe'),
+    'python',
+    'python3'
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    const lower = candidate.toLowerCase();
+    if (lower.includes('\\windowsapps\\python')) continue;
+
+    try {
+      const result = spawnSync(candidate, ['--version'], {
+        encoding: 'utf8',
+        windowsHide: true,
+        timeout: 5000
+      });
+
+      if (result.status === 0) {
+        return candidate;
+      }
+    } catch (e) {}
+  }
+
+  return null;
+}
+
+function startBridge() {
   if (virtualCameraBridgeProcess) {
-    virtualCameraBridgeProcess.kill();
-    virtualCameraBridgeProcess = null;
+    sendBridgeStatus(lastBridgeStatus.status === 'inactive'
+      ? { status: 'starting', message: 'Virtual camera bridge is already starting...' }
+      : lastBridgeStatus
+    );
+    return;
   }
 
   const scriptPath = isDev 
     ? path.join(__dirname, '../resources/bridge/virtual_camera_bridge.py')
     : path.join(process.resourcesPath, 'bridge/virtual_camera_bridge.py');
   
-  console.log(`Starting VCam Bridge: ${scriptPath} --target ${targetType}`);
-  virtualCameraBridgeProcess = spawn('python', ['-u', scriptPath, '--target', targetType]);
+  console.log(`Starting OBS Bridge: ${scriptPath}`);
   
-  virtualCameraBridgeProcess.stdout.on('data', (data) => {
+  const pythonCmd = getPythonCommand();
+  if (!pythonCmd) {
+    sendBridgeStatus({
+      status: 'error',
+      message: 'Python runtime not found. Install Python 3 and bridge packages: numpy, pyvirtualcam, pywin32.'
+    });
+    return;
+  }
+
+  console.log(`Using Python runtime: ${pythonCmd}`);
+  
+  const bridgeProcess = spawn(pythonCmd, ['-u', scriptPath, '--target', 'obs']);
+  virtualCameraBridgeProcess = bridgeProcess;
+  
+  sendBridgeStatus({ status: 'starting', message: `Initializing virtual camera with ${pythonCmd}` });
+
+  let reportedError = false;
+
+  bridgeProcess.stdout.on('data', (data) => {
+    if (virtualCameraBridgeProcess !== bridgeProcess) return;
+
     const output = data.toString().trim();
     console.log(`[VirtualCam] ${output}`);
     
     if (output.includes('DEVICE_ACTIVE:')) {
       const deviceName = output.split('DEVICE_ACTIVE:')[1].trim();
-      if (operatorWindow && !operatorWindow.isDestroyed()) {
-        operatorWindow.webContents.send('bridge-status', { status: 'active', device: deviceName });
-      }
+      sendBridgeStatus({ status: 'active', device: deviceName });
+    } else if (output.includes('FATAL_ERROR') || output.includes('ERROR')) {
+      reportedError = true;
+      sendBridgeStatus({ status: 'error', message: output });
     }
   });
   
-  virtualCameraBridgeProcess.stderr.on('data', (data) => {
+  bridgeProcess.stderr.on('data', (data) => {
+    if (virtualCameraBridgeProcess !== bridgeProcess) return;
+
     const error = data.toString().trim();
     console.error(`[VirtualCam Error] ${error}`);
-    if (operatorWindow && !operatorWindow.isDestroyed()) {
-      operatorWindow.webContents.send('bridge-status', { status: 'error', message: error });
+    // Only send significant errors to UI
+    if (error.includes('ERROR') || error.includes('Exception') || error.includes('Failed')) {
+      reportedError = true;
+      sendBridgeStatus({ status: 'error', message: error });
     }
   });
 
-  virtualCameraBridgeProcess.on('error', (err) => {
+  bridgeProcess.on('error', (err) => {
+    if (virtualCameraBridgeProcess !== bridgeProcess) return;
+
     console.error(`[VirtualCam Process Error] ${err.message}`);
-    if (operatorWindow && !operatorWindow.isDestroyed()) {
-      operatorWindow.webContents.send('bridge-status', { status: 'error', message: `Process failed to start: ${err.message}` });
-    }
+    reportedError = true;
+    sendBridgeStatus({ status: 'error', message: `Process failed to start: ${err.message}` });
   });
 
-  virtualCameraBridgeProcess.on('exit', (code) => {
+  bridgeProcess.on('exit', (code) => {
+    if (virtualCameraBridgeProcess !== bridgeProcess) return;
+
     console.log(`[VirtualCam Process Exit] Code: ${code}`);
-    if (operatorWindow && !operatorWindow.isDestroyed()) {
-      operatorWindow.webContents.send('bridge-status', { status: 'inactive' });
+    virtualCameraBridgeProcess = null;
+    if (!reportedError && audienceWindow && !audienceWindow.isDestroyed() && audienceWindow.getTitle() === 'MEDIAFLOW_NATIVE_BRIDGE_TARGET') {
+      sendBridgeStatus({ status: 'starting', message: 'Virtual camera bridge stopped. Restarting...' });
+      setTimeout(() => {
+        if (!virtualCameraBridgeProcess && audienceWindow && !audienceWindow.isDestroyed() && audienceWindow.getTitle() === 'MEDIAFLOW_NATIVE_BRIDGE_TARGET') {
+          startBridge();
+        }
+      }, 1000);
+    } else if (!reportedError) {
+      sendBridgeStatus({ status: 'inactive' });
     }
   });
 }
 
-function createAudienceWindow(viewType = 'audience', targetType = 'obs') {
+function createAudienceWindow(viewType = 'audience') {
   const displays = screen.getAllDisplays();
   const externalDisplay = displays.find((display) => {
     return display.bounds.x !== 0 || display.bounds.y !== 0;
@@ -136,12 +225,15 @@ function createAudienceWindow(viewType = 'audience', targetType = 'obs') {
 
   const isZoom = viewType === 'zoom';
 
-  audienceWindow = new BrowserWindow({
+  const createdWindow = new BrowserWindow({
     width: 1920, // High resolution broadcast
     height: 1080,
     x: isZoom ? 9999 : (externalDisplay ? externalDisplay.bounds.x : 100), 
     y: isZoom ? 9999 : (externalDisplay ? externalDisplay.bounds.y : 100),
     show: true, 
+    useContentSize: isZoom,
+    frame: !isZoom && !externalDisplay,
+    fullscreen: !isZoom && !!externalDisplay,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -151,11 +243,10 @@ function createAudienceWindow(viewType = 'audience', targetType = 'obs') {
       offscreen: false 
     },
     title: isZoom ? 'MEDIAFLOW_NATIVE_BRIDGE_TARGET' : 'MediaFlow - Audience',
-    frame: !isZoom && !externalDisplay,
-    fullscreen: !isZoom && !!externalDisplay,
     autoHideMenuBar: true,
     skipTaskbar: isZoom
   });
+  audienceWindow = createdWindow;
 
   if (isZoom) {
     audienceWindow.setTitle('MEDIAFLOW_NATIVE_BRIDGE_TARGET');
@@ -163,32 +254,60 @@ function createAudienceWindow(viewType = 'audience', targetType = 'obs') {
 
   // Prevent window from being throttled when hidden
   if (isZoom) {
-    audienceWindow.webContents.setBackgroundThrottling(false);
-    startBridge(targetType);
+    createdWindow.webContents.setBackgroundThrottling(false);
+    startBridge();
   }
 
-    audienceWindow.on('closed', () => {
-      if (virtualCameraBridgeProcess) {
+    createdWindow.on('closed', () => {
+      if (audienceWindow === createdWindow) {
+        audienceWindow = null;
+      }
+      if (isZoom && virtualCameraBridgeProcess) {
         virtualCameraBridgeProcess.kill();
         virtualCameraBridgeProcess = null;
+        sendBridgeStatus({ status: 'inactive' });
       }
     });
 
     if (isDev) {
-      audienceWindow.loadURL(`http://localhost:3000?view=${viewType}`);
+      createdWindow.loadURL(`http://localhost:3000?view=${viewType}`);
     } else {
-      audienceWindow.loadFile(path.join(__dirname, '../dist/index.html'), {
+      createdWindow.loadFile(path.join(__dirname, '../dist/index.html'), {
         query: { view: viewType }
       });
     }
+
+    createdWindow.webContents.on('did-finish-load', () => {
+      sendCachedStateToWindow(createdWindow);
+      if (operatorWindow && !operatorWindow.isDestroyed()) {
+        operatorWindow.webContents.send('sync-message', { type: 'AUDIENCE_READY' });
+      }
+    });
 }
 
 app.whenReady().then(() => {
   psbId = powerSaveBlocker.start('prevent-app-suspension');
-  
 
+  // Auto-grant camera and microphone permissions for ALL windows in this app.
+  // This is critical for the zoom broadcast window which is positioned off-screen
+  // (x:9999, y:9999) — the permission dialog would never be visible to the user.
+  const { session } = require('electron');
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    const allowedPermissions = ['media', 'camera', 'microphone', 'mediaKeySystem'];
+    if (allowedPermissions.includes(permission)) {
+      callback(true); // Auto-grant
+    } else {
+      callback(false);
+    }
+  });
+  // Also handle the check handler (for already-granted permissions)
+  session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
+    const allowedPermissions = ['media', 'camera', 'microphone'];
+    return allowedPermissions.includes(permission);
+  });
 
   createOperatorWindow();
+
   
   ipcMain.handle('getSystemSnapshot', async () => {
     return {
@@ -294,16 +413,23 @@ app.whenReady().then(() => {
     return uniqueMedia;
   });
 
-  ipcMain.handle('openExternalDisplay', (event, viewType, targetType = 'obs') => {
+  ipcMain.handle('openExternalDisplay', (event, viewType) => {
     if (!audienceWindow || audienceWindow.isDestroyed()) {
-      createAudienceWindow(viewType, targetType);
+      createAudienceWindow(viewType);
     } else {
       const isZoom = viewType === 'zoom';
       const displays = screen.getAllDisplays();
       const externalDisplay = displays.find(d => d.bounds.x !== 0 || d.bounds.y !== 0);
 
+      if (isZoom && audienceWindow.getTitle() !== 'MEDIAFLOW_NATIVE_BRIDGE_TARGET') {
+        audienceWindow.close();
+        audienceWindow = null;
+        createAudienceWindow('zoom');
+        return;
+      }
+
       if (isZoom) {
-        startBridge(targetType);
+        startBridge();
         
         audienceWindow.setBounds({ x: 9999, y: 9999, width: 1920, height: 1080 });
         audienceWindow.setFullScreen(false);
@@ -337,6 +463,22 @@ app.whenReady().then(() => {
         audienceWindow.focus();
       }
     }
+  });
+
+  ipcMain.on('sync-message', (event, message) => {
+    if (message?.type === 'SYNC_STATE') {
+      lastSyncStateMessage = message;
+    }
+
+    if ((message?.type === 'AUDIENCE_READY' || message?.type === 'AUDIENCE_ALIVE') && lastSyncStateMessage) {
+      event.sender.send('sync-message', lastSyncStateMessage);
+    }
+
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed() && win.webContents.id !== event.sender.id) {
+        win.webContents.send('sync-message', message);
+      }
+    });
   });
 
   ipcMain.handle('pickFiles', async (event, options) => {

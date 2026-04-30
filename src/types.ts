@@ -59,6 +59,7 @@ export interface AppState {
   isPermissionGranted: boolean;
   selectedCameraId?: string;
   isMeetingLive: boolean;
+  vcamMode: 'auto' | 'camera' | 'media';
 }
 
 export type SyncMessage = 

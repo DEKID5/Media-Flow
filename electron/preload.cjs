@@ -23,9 +23,25 @@ contextBridge.exposeInMainWorld('mediaflow', {
   checkForUpdate: () => ipcRenderer.send('check-for-update'),
   downloadUpdate: () => ipcRenderer.send('start-download'),
   installUpdate: () => ipcRenderer.send('update-now'),
+  onBridgeStatus: (callback) => {
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on('bridge-status', listener);
+    return () => ipcRenderer.removeListener('bridge-status', listener);
+  },
   onUpdateStatus: (callback) => {
     const listener = (event, data) => callback(data);
     ipcRenderer.on('update-status', listener);
     return () => ipcRenderer.removeListener('update-status', listener);
+  },
+  onSyncView: (callback) => {
+    const listener = (event, viewType) => callback(viewType);
+    ipcRenderer.on('sync-view', listener);
+    return () => ipcRenderer.removeListener('sync-view', listener);
+  },
+  sendSyncMessage: (message) => ipcRenderer.send('sync-message', message),
+  onSyncMessage: (callback) => {
+    const listener = (event, message) => callback(message);
+    ipcRenderer.on('sync-message', listener);
+    return () => ipcRenderer.removeListener('sync-message', listener);
   }
 });

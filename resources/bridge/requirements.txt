@@ -1,0 +1,3 @@
+numpy
+pyvirtualcam
+pywin32

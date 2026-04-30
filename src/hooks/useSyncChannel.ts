@@ -1,5 +1,12 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { SyncMessage, AppState } from '../types';
+import { SyncMessage } from '../types';
+
+const makeSerializable = (message: SyncMessage): SyncMessage => {
+  return JSON.parse(JSON.stringify(message, (key, value) => {
+    if (typeof FileSystemHandle !== 'undefined' && value instanceof FileSystemHandle) return '[FileSystemHandle]';
+    return value;
+  }));
+};
 
 export function useSyncChannel(onMessage?: (msg: SyncMessage) => void) {
   const channelRef = useRef<BroadcastChannel | null>(null);
@@ -23,6 +30,11 @@ export function useSyncChannel(onMessage?: (msg: SyncMessage) => void) {
       };
     }
 
+    const cleanupElectronSync =
+      typeof (window as any).mediaflow?.onSyncMessage === 'function'
+        ? (window as any).mediaflow.onSyncMessage(handleMessage)
+        : undefined;
+
     // Fallback: localStorage for cross-tab sync
     const storageHandler = (e: StorageEvent) => {
       if (e.key === 'mediaflow_sync_msg' && e.newValue) {
@@ -42,6 +54,7 @@ export function useSyncChannel(onMessage?: (msg: SyncMessage) => void) {
         channelRef.current.close();
         channelRef.current = null;
       }
+      if (typeof cleanupElectronSync === 'function') cleanupElectronSync();
       window.removeEventListener('storage', storageHandler);
     };
   }, []);
@@ -53,16 +66,18 @@ export function useSyncChannel(onMessage?: (msg: SyncMessage) => void) {
     } catch (err) {
       console.warn('BroadcastChannel sync failed, falling back to storage:', err);
     }
+
+    try {
+      if (typeof (window as any).mediaflow?.sendSyncMessage === 'function') {
+        (window as any).mediaflow.sendSyncMessage(makeSerializable(message));
+      }
+    } catch (err) {
+      console.warn('Electron sync relay failed:', err);
+    }
     
     // Fallback: localStorage can only store strings, will lose FileHandles
     try {
-      // Check if message contains non-serializable objects (like FileSystemHandle)
-      // If it's a SYNC_STATE message, it's likely to contain file handles
-      const serializableMsg = JSON.parse(JSON.stringify(message, (key, value) => {
-        if (typeof FileSystemHandle !== 'undefined' && value instanceof FileSystemHandle) return '[FileSystemHandle]';
-        return value;
-      }));
-      
+      const serializableMsg = makeSerializable(message);
       localStorage.setItem('mediaflow_sync_msg', JSON.stringify(serializableMsg));
       localStorage.setItem('mediaflow_sync_at', Date.now().toString());
     } catch (e) {

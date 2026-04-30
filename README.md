@@ -16,6 +16,14 @@ To run the application as a desktop app:
 npm run dev:desktop
 ```
 
+### Windows Installer
+To build the Windows installer with the Zoom/OBS bridge runtime bundled:
+```bash
+npm run build:desktop
+```
+
+The desktop build prepares an embedded Python runtime automatically, so installed users do not need to install Python manually. OBS Studio / OBS Virtual Camera must still be available on the machine.
+
 ## Architecture
 
 MediaFlow uses a two-window architecture:

@@ -9,3 +9,6 @@ drivers/temp
 build/dist
 out
 .DS_Store
+.cache
+resources/python/*
+!resources/python/README.md
