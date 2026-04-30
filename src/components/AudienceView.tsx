@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppState, MediaAsset } from '../types';
 import { useSyncChannel } from '../hooks/useSyncChannel';
-import { Video, Music, Image as ImageIcon, Monitor, Clock, FolderOpen, Play, Camera, ChevronRight } from 'lucide-react';
+import { Video, Music, Image as ImageIcon, Monitor, Clock, FolderOpen, Play, Camera, ChevronRight, Pause } from 'lucide-react';
 import { SmartMedia } from './SmartMedia';
 
 export function AudienceView() {
@@ -12,6 +12,15 @@ export function AudienceView() {
   const [permissionError, setPermissionError] = useState<boolean>(false);
   const [retryCount, setRetryCount] = useState(0);
   const [hasInteracted, setHasInteracted] = useState(!!((window as any).mediaflow?.isDesktop));
+  const [endedProgramId, setEndedProgramId] = useState<string | null>(null);
+  const bgmRef = useRef<HTMLAudioElement | null>(null);
+  const bgmAudioGraphRef = useRef<null | {
+    context: AudioContext;
+    source: MediaElementAudioSourceNode;
+    splitter: ChannelSplitterNode;
+    merger: ChannelMergerNode;
+    gain: GainNode;
+  }>(null);
 
   useEffect(() => {
     if ((window as any).mediaflow) {
@@ -54,6 +63,66 @@ export function AudienceView() {
     return () => clearInterval(interval);
   }, [send, state]);
 
+  useEffect(() => {
+    setEndedProgramId(null);
+  }, [state?.programAsset?.id]);
+
+  useEffect(() => {
+    const el = bgmRef.current;
+    if (!el || !state?.bgmAsset || typeof window === 'undefined' || typeof window.AudioContext === 'undefined') return;
+
+    let cancelled = false;
+
+    const ensureChannelOneOutput = async () => {
+      try {
+        if (!bgmAudioGraphRef.current) {
+          const context = new window.AudioContext();
+          const source = context.createMediaElementSource(el);
+          const splitter = context.createChannelSplitter(2);
+          const merger = context.createChannelMerger(2);
+          const gain = context.createGain();
+
+          source.connect(splitter);
+          splitter.connect(merger, 0, 0);
+          splitter.connect(merger, 0, 1);
+          merger.connect(gain);
+          gain.connect(context.destination);
+
+          bgmAudioGraphRef.current = { context, source, splitter, merger, gain };
+        }
+
+        const graph = bgmAudioGraphRef.current;
+        if (!graph || cancelled) return;
+
+        graph.gain.gain.value = state.mixer.isMuted ? 0 : (state.mixer.masterVolume ?? 100) / 100;
+        if (state.isPlayingBgm && graph.context.state === 'suspended') {
+          await graph.context.resume();
+        }
+      } catch (error) {
+        console.warn('AudienceView: channel-one BGM routing failed', error);
+      }
+    };
+
+    void ensureChannelOneOutput();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [state?.bgmAsset?.id, state?.isPlayingBgm, state?.mixer.isMuted, state?.mixer.masterVolume]);
+
+  useEffect(() => {
+    return () => {
+      if (bgmAudioGraphRef.current) {
+        bgmAudioGraphRef.current.source.disconnect();
+        bgmAudioGraphRef.current.splitter.disconnect();
+        bgmAudioGraphRef.current.merger.disconnect();
+        bgmAudioGraphRef.current.gain.disconnect();
+        bgmAudioGraphRef.current.context.close().catch(() => {});
+        bgmAudioGraphRef.current = null;
+      }
+    };
+  }, []);
+
   const handleInteraction = () => setHasInteracted(true);
 
   if (!state) {
@@ -90,14 +159,22 @@ export function AudienceView() {
 
   const programAsset = state.programAsset;
   const isZoom = view === 'zoom';
+  const isProgramVisible = !!programAsset && endedProgramId !== programAsset.id;
   
   // VCam Mode Logic:
   // - auto: camera when no media, media when media is present
   // - camera: always show camera (if in zoom mode)
   // - media: always show media (if present)
-  const isMediaShowing = !!programAsset && (state.vcamMode === 'media' || (state.vcamMode === 'auto' && programAsset.type !== 'camera'));
-  const showCamera = isZoom && (state.vcamMode === 'camera' || (state.vcamMode === 'auto' && !isMediaShowing));
+  const isMediaShowing = !!programAsset && state.vcamMode !== 'camera' && programAsset.type !== 'camera';
+  const showCamera = isZoom;
+  const showProgramLayer = isProgramVisible && (!isZoom || isMediaShowing);
   const effectivelyLive = isZoom || state.isMeetingLive;
+  const zoomMirrorCompensationClass = isZoom ? 'scale-x-[-1]' : '';
+  const programType = programAsset?.type?.toLowerCase();
+  const showSoftBackdrop = !!programAsset && (
+    programType === 'image' ||
+    /\.(jpg|jpeg|png|gif|webp|svg|bmp|ico|tiff)$/i.test(programAsset.path || '')
+  );
 
   if (!hasInteracted) {
     return (
@@ -112,12 +189,15 @@ export function AudienceView() {
 
   return (
     <div className="h-screen w-screen bg-black overflow-hidden flex flex-col font-sans select-none">
-      <div className="flex-1 relative flex items-center justify-center overflow-hidden">
+      <div className={`flex-1 relative flex items-center justify-center overflow-hidden ${zoomMirrorCompensationClass}`}>
         
         {/* Background Music Player (Hidden) */}
         {state.bgmAsset && (
           <audio 
             id="bgm-audience-player"
+            ref={(node) => {
+              bgmRef.current = node;
+            }}
             autoPlay={state.isPlayingBgm}
             src={state.bgmAsset.path}
             onEnded={() => send({ type: 'BGM_ACTION', action: 'next' })}
@@ -149,7 +229,7 @@ export function AudienceView() {
 
         {/* Media Layer (Videos/Images) */}
         <AnimatePresence mode="popLayout">
-          {programAsset && (
+          {programAsset && showProgramLayer && (
             <motion.div 
               key={programAsset.id}
               initial={{ opacity: 0, scale: 1.05 }}
@@ -161,22 +241,35 @@ export function AudienceView() {
               <SmartMedia 
                 asset={programAsset}
                 className="w-full h-full object-contain relative z-10"
-                autoPlay={true}
+                autoPlay={!state.isProgramPaused}
                 muted={state.mixer.isMuted}
                 deviceId={state.selectedCameraId}
                 isZoomView={isZoom}
+                onEnd={() => {
+                  setEndedProgramId(programAsset.id);
+                  send({ type: 'PROGRAM_ENDED', assetId: programAsset.id });
+                }}
               />
               
-              {/* Blurred Background for Portrait Media */}
-              <div className="absolute inset-0 z-0 opacity-50 blur-3xl scale-110 overflow-hidden">
-                <SmartMedia 
-                  asset={programAsset}
-                  className="w-full h-full object-cover"
-                  autoPlay={true}
-                  muted={true}
-                  isThumbnail={true}
-                />
-              </div>
+              {/* Soft backdrop for still images only. Avoid decoding live video twice. */}
+              {showSoftBackdrop && (
+                <div className="absolute inset-0 z-0 opacity-50 blur-3xl scale-110 overflow-hidden">
+                  <SmartMedia 
+                    asset={programAsset}
+                    className="w-full h-full object-cover"
+                    autoPlay={false}
+                    muted={true}
+                    isThumbnail={true}
+                  />
+                </div>
+              )}
+
+              {state.isProgramPaused && (
+                <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 px-4 py-2 rounded-full bg-black/60 backdrop-blur-md border border-amber-400/30 text-amber-200">
+                  <Pause size={14} fill="currentColor" />
+                  <span className="text-[10px] font-black uppercase tracking-[0.3em]">Feed Paused</span>
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>

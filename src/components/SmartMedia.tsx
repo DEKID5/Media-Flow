@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { MediaAsset, SyncMessage } from '../types';
-import { Music, Camera } from 'lucide-react';
+import { Music, Camera, Video } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export interface SmartMediaProps {
@@ -37,10 +37,36 @@ export function SmartMedia({
   isZoomView = false
 }: SmartMediaProps) {
   const [url, setUrl] = useState<string | null>(null);
+  const isCameraAsset = asset?.type === 'camera';
+  const assetType = asset?.type?.toLowerCase() || '';
+  const isVideoAsset = isCameraAsset || ['video', 'mp4', 'mov', 'avi', 'mkv', 'm4v', 'webm', '3gp', 'mpg', 'mpeg', 'wmv'].includes(assetType) || !!asset?.path?.match(/\.(mp4|webm|mov|m4v|3gp|mpg|mpeg|wmv|mkv|avi)$/i);
+  const thumbnailPlaceholderRef = useRef<HTMLDivElement>(null);
+  const [thumbnailVisible, setThumbnailVisible] = useState(!isThumbnail || !isVideoAsset);
 
   useEffect(() => {
-    setUrl(null);
-  }, [asset?.id]);
+    if (!isCameraAsset) setUrl(null);
+    setThumbnailVisible(!isThumbnail || !isVideoAsset);
+  }, [asset?.id, isCameraAsset, isThumbnail, isVideoAsset]);
+
+  useEffect(() => {
+    if (!isThumbnail || !isVideoAsset || thumbnailVisible) return;
+
+    const node = thumbnailPlaceholderRef.current;
+    if (!node || typeof IntersectionObserver === 'undefined') {
+      setThumbnailVisible(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setThumbnailVisible(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: '200px' });
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [isThumbnail, isVideoAsset, thumbnailVisible]);
 
   const normalizedUrl = useMemo(() => {
     if (!url) return null;
@@ -53,37 +79,55 @@ export function SmartMedia({
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const audioGraphRef = useRef<{
+    context: AudioContext;
+    source: MediaElementAudioSourceNode;
+    splitter: ChannelSplitterNode;
+    merger: ChannelMergerNode;
+    gain: GainNode;
+  } | null>(null);
 
   useEffect(() => {
-    if (asset.type === 'camera' && !isThumbnail) {
+    if (isCameraAsset && !isThumbnail) {
       let active = true;
+      let activeStream: MediaStream | null = null;
+      const videoQuality = {
+        width: { min: 1280, ideal: 1920 },
+        height: { min: 720, ideal: 1080 },
+        frameRate: { ideal: 30 }
+      };
       const constraints = {
-        // Request highest quality: 1080p preferred, fall back gracefully
         video: deviceId
-          ? { deviceId: { exact: deviceId }, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } }
-          : { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
+          ? { deviceId: { exact: deviceId }, ...videoQuality }
+          : videoQuality,
         audio: false
       };
       navigator.mediaDevices.getUserMedia(constraints)
         .then(stream => {
           if (active) {
+            activeStream = stream;
             setCameraStream(stream);
-            if (videoRef.current) videoRef.current.srcObject = stream;
+            if (videoRef.current) {
+              videoRef.current.srcObject = stream;
+              if (autoPlay) {
+                videoRef.current.play().catch(e => {
+                  if (e.name !== 'AbortError') console.warn('SmartMedia: Camera play failed', e);
+                });
+              }
+            }
+          } else {
+            stream.getTracks().forEach(track => track.stop());
           }
         })
         .catch(err => console.error("Camera access failed:", err));
       
-      return () => { active = false; };
+      return () => {
+        active = false;
+        activeStream?.getTracks().forEach(track => track.stop());
+        if (videoRef.current) videoRef.current.srcObject = null;
+      };
     }
-  }, [asset.type, asset.id, isThumbnail, deviceId]);
-
-  useEffect(() => {
-    return () => {
-      if (cameraStream) {
-        cameraStream.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, [cameraStream]);
+  }, [isCameraAsset, asset?.id, isThumbnail, deviceId]);
 
   // Sync volume, muted and playback state
   useEffect(() => {
@@ -105,7 +149,7 @@ export function SmartMedia({
         el.pause();
       }
     }
-  }, [autoPlay, url, isThumbnail]);
+  }, [autoPlay, url, isThumbnail, cameraStream]);
 
   // Handle Seeking
   useEffect(() => {
@@ -116,11 +160,69 @@ export function SmartMedia({
   }, [seekTo, url]);
 
   useEffect(() => {
+    const el = videoRef.current || audioRef.current;
+    if (!el || isThumbnail || isCameraAsset) return;
+    if (typeof window === 'undefined' || typeof window.AudioContext === 'undefined') return;
+    if (muted) return;
+
+    let cancelled = false;
+
+    const ensureChannelOneOutput = async () => {
+      try {
+        if (!audioGraphRef.current) {
+          const context = new window.AudioContext();
+          const source = context.createMediaElementSource(el);
+          const splitter = context.createChannelSplitter(2);
+          const merger = context.createChannelMerger(2);
+          const gain = context.createGain();
+
+          source.connect(splitter);
+          splitter.connect(merger, 0, 0);
+          splitter.connect(merger, 0, 1);
+          merger.connect(gain);
+          gain.connect(context.destination);
+
+          audioGraphRef.current = { context, source, splitter, merger, gain };
+        }
+
+        const graph = audioGraphRef.current;
+        if (!graph || cancelled) return;
+
+        graph.gain.gain.value = (volume ?? 100) / 100;
+        if (graph.context.state === 'suspended' && autoPlay) {
+          await graph.context.resume();
+        }
+      } catch (error) {
+        console.warn('SmartMedia: channel-one audio routing failed', error);
+      }
+    };
+
+    void ensureChannelOneOutput();
+
+    return () => {
+      cancelled = true;
+      if (audioGraphRef.current) {
+        audioGraphRef.current.source.disconnect();
+        audioGraphRef.current.splitter.disconnect();
+        audioGraphRef.current.merger.disconnect();
+        audioGraphRef.current.gain.disconnect();
+        audioGraphRef.current.context.close().catch(() => {});
+        audioGraphRef.current = null;
+      }
+    };
+  }, [asset?.id, autoPlay, isCameraAsset, isThumbnail, muted, volume, url]);
+
+  useEffect(() => {
     if (!asset) return;
+    if (isThumbnail && isVideoAsset && !thumbnailVisible) return;
     let active = true;
     let currentUrl: string | null = null;
 
     const resolve = async () => {
+      if (isCameraAsset) {
+        if (active) setUrl(null);
+        return;
+      }
       if (active) setUrl(null);
       try {
         const isDesktop = !!(window as any).mediaflow?.isDesktop;
@@ -244,7 +346,7 @@ export function SmartMedia({
         }, 5000);
       }
     };
-  }, [asset?.id, asset?.fileHandle, asset?.path, asset?.url]);
+  }, [asset?.id, asset?.fileHandle, asset?.path, asset?.url, isCameraAsset, isThumbnail, isVideoAsset, thumbnailVisible]);
 
   // Force thumbnail seek
   useEffect(() => {
@@ -273,7 +375,17 @@ export function SmartMedia({
 
   if (!asset) return null;
 
-  if (!url || url === '__ERROR__' || url === '__PERMISSION__') {
+  if (isThumbnail && isVideoAsset && !thumbnailVisible) {
+    return (
+      <div ref={thumbnailPlaceholderRef} className={`relative overflow-hidden bg-zinc-950 flex items-center justify-center ${className}`}>
+        <div className="w-9 h-9 rounded-full bg-white/10 border border-white/10 flex items-center justify-center">
+          <Video size={14} className="text-white/40" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!isCameraAsset && (!url || url === '__ERROR__' || url === '__PERMISSION__')) {
     return (
       <div className={`flex flex-col items-center justify-center gap-4 ${className} bg-white/5 ${url === null ? 'animate-pulse' : ''}`}>
         {url === null ? (
@@ -316,7 +428,7 @@ export function SmartMedia({
   const isBlob = url?.startsWith('blob:') ?? false;
 
   const t = asset.type?.toLowerCase();
-  const isVideo = asset.type === 'camera' || ['video', 'mp4', 'mov', 'avi', 'mkv', 'm4v', 'webm', '3gp', 'mpg', 'mpeg', 'wmv'].includes(t) || asset.path?.match(/\.(mp4|webm|mov|m4v|3gp|mpg|mpeg|wmv|mkv|avi)$/i);
+  const isVideo = isVideoAsset;
   const isAudio = ['audio', 'mp3', 'm4a', 'wav', 'ogg', 'aac', 'flac', 'm4p', 'opus', 'mp4a'].includes(t) || asset.path?.match(/\.(mp3|wav|m4a|ogg|aac|flac|m4p|opus|mp4a)$/i);
   const isImage = ['image', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico', 'tiff'].includes(t) || asset.path?.match(/\.(jpg|jpeg|png|gif|webp|svg|bmp|ico|tiff)$/i);
 
@@ -345,25 +457,29 @@ export function SmartMedia({
     const videoSrc = asset.type === 'camera' ? undefined : (normalizedUrl || '') + (isThumbnail && !url?.includes('#t=') ? '#t=15.0' : '');
     // Mirror the camera ONLY for operator preview — NOT for the zoom broadcast view
     // (the bridge captures the window as-is; mirroring here would make text appear backwards in Zoom)
-    const cameraMirrorClass = asset.type === 'camera' && !isZoomView ? 'scale-x-[-1]' : '';
+    const cameraMirrorClass = '';
     return (
       <video 
         ref={videoRef}
         id={id}
         src={videoSrc} 
         className={`${className} ${cameraMirrorClass}`}
-        autoPlay={autoPlay} 
+        autoPlay={isThumbnail ? false : autoPlay} 
         muted={isThumbnail ? true : (asset.type === 'camera' ? true : muted)} 
         controls={asset.type === 'camera' ? false : controls}
         onEnded={onEnd}
         onError={onError}
         onLoadedMetadata={(e) => {
-          if (!autoPlay) {
+          if (isThumbnail) {
             e.currentTarget.currentTime = e.currentTarget.duration >= 15 ? 15.0 : 1.0; 
           }
         }}
-        preload="auto"
+        onSeeked={(e) => {
+          if (isThumbnail) e.currentTarget.pause();
+        }}
+        preload={isThumbnail ? 'metadata' : 'auto'}
         playsInline
+        disablePictureInPicture
       />
     );
   }

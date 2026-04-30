@@ -23,6 +23,31 @@ TARGET_WIDTH = 1920
 TARGET_HEIGHT = 1080
 FPS = 30
 
+def fit_frame_to_target(frame, target_width, target_height):
+    src_height, src_width = frame.shape[:2]
+    if src_width == target_width and src_height == target_height:
+        return frame
+
+    src_aspect = src_width / src_height
+    target_aspect = target_width / target_height
+
+    if src_aspect > target_aspect:
+        out_width = target_width
+        out_height = max(1, round(target_width / src_aspect))
+    else:
+        out_height = target_height
+        out_width = max(1, round(target_height * src_aspect))
+
+    x_idx = np.linspace(0, src_width - 1, out_width).astype(np.int32)
+    y_idx = np.linspace(0, src_height - 1, out_height).astype(np.int32)
+    resized = frame[y_idx][:, x_idx]
+
+    output = np.zeros((target_height, target_width, frame.shape[2]), dtype=frame.dtype)
+    x_offset = (target_width - out_width) // 2
+    y_offset = (target_height - out_height) // 2
+    output[y_offset:y_offset + out_height, x_offset:x_offset + out_width] = resized
+    return output
+
 def get_window_hwnd(title_part):
     hwnd_found = [0]
     def enum_handler(hwnd, lparam):
@@ -36,11 +61,13 @@ def get_window_hwnd(title_part):
         pass
     return hwnd_found[0]
 
-def capture_window(hwnd, cap_width, cap_height):
+def capture_window(hwnd, target_width, target_height):
     PW_RENDERFULLCONTENT = 2
     try:
         left, top, right, bottom = win32gui.GetWindowRect(hwnd)
-        if (right - left) < 100: return None
+        cap_width = right - left
+        cap_height = bottom - top
+        if cap_width < 100 or cap_height < 100: return None
     except:
         return None
 
@@ -63,7 +90,39 @@ def capture_window(hwnd, cap_width, cap_height):
     if result == 1:
         img = np.frombuffer(bmpstr, dtype=np.uint8)
         img = img.reshape((cap_height, cap_width, 4))
-        return img
+        return fit_frame_to_target(img, target_width, target_height)
+    return None
+
+def open_virtual_camera():
+    attempts = [
+        ('Auto virtual camera', None),
+        ('OBS Virtual Camera', 'OBS Virtual Camera'),
+    ]
+    fmt_priority = [pyvirtualcam.PixelFormat.BGR, pyvirtualcam.PixelFormat.RGB]
+    errors = []
+
+    for label, device_name in attempts:
+        for fmt in fmt_priority:
+            try:
+                kwargs = {
+                    'width': TARGET_WIDTH,
+                    'height': TARGET_HEIGHT,
+                    'fps': FPS,
+                    'fmt': fmt,
+                }
+                if device_name:
+                    kwargs['device'] = device_name
+
+                cam = pyvirtualcam.Camera(**kwargs)
+                print(f"Connected to {label}")
+                return cam
+            except Exception as e:
+                errors.append(f"{label}: {e}")
+                print(f"DEVICE_SKIPPED:{label}:{e}")
+
+    print("FATAL_ERROR: Virtual camera output could not be started. Stop any running OBS Virtual Camera output, close apps currently using the virtual camera, then start MediaFlow Broadcast to Zoom before selecting the camera in Zoom.")
+    if errors:
+        print("FATAL_DETAILS: " + " | ".join(errors))
     return None
 
 def main():
@@ -77,47 +136,45 @@ def main():
     print(f"Connected to Broadcast Window: {win32gui.GetWindowText(hwnd)}")
     win32gui.ShowWindow(hwnd, win32con.SW_SHOWNA)
 
-    device_candidates = ['OBS Virtual Camera']
-    fmt_priority = [pyvirtualcam.PixelFormat.BGR, pyvirtualcam.PixelFormat.RGB]
-    
-    cam = None
-    for device_name in device_candidates:
-        for fmt in fmt_priority:
-            try:
-                cam = pyvirtualcam.Camera(width=TARGET_WIDTH, height=TARGET_HEIGHT, fps=FPS, fmt=fmt, device=device_name)
-                print(f"Connected to {device_name}")
-                break
-            except Exception as e:
-                print(f"DEVICE_SKIPPED:{device_name}:{e}")
-                continue
-        if cam: break
+    cam = open_virtual_camera()
 
     if not cam:
-        print("FATAL_ERROR: OBS Virtual Camera could not be started. Close Zoom and stop OBS Virtual Camera in OBS, start MediaFlow Broadcast to Zoom first, then select OBS Virtual Camera in Zoom.")
         sys.exit(1)
 
     print(f"DEVICE_ACTIVE:{cam.device}")
 
+    last_good_frame = np.zeros((TARGET_HEIGHT, TARGET_WIDTH, 3), dtype=np.uint8)
+    missed_frames = 0
+
     try:
         while True:
             if not win32gui.IsWindow(hwnd):
-                break
+                hwnd = get_window_hwnd(WINDOW_TITLE_PART)
+                if hwnd == 0:
+                    cam.send(last_good_frame)
+                    cam.sleep_until_next_frame()
+                    continue
 
             frame = capture_window(hwnd, TARGET_WIDTH, TARGET_HEIGHT)
 
             if frame is not None:
+                missed_frames = 0
                 if cam.fmt == pyvirtualcam.PixelFormat.BGR:
                     out = frame[:, :, :3]
                 else:
                     out = frame[:, :, :3][:, :, ::-1]
 
-                # FLIP HORIZONTALLY to match user expectation for virtual cameras
-                out = np.ascontiguousarray(np.flip(out, axis=1))
-
-                cam.send(out)
-                cam.sleep_until_next_frame()
+                # Send the window exactly as rendered. Zoom may mirror the local
+                # self-preview, but the virtual camera frame itself must stay
+                # unflipped so media text and slides remain readable.
+                last_good_frame = np.ascontiguousarray(out)
             else:
-                time.sleep(0.05)
+                missed_frames += 1
+                if missed_frames % (FPS * 2) == 0:
+                    hwnd = get_window_hwnd(WINDOW_TITLE_PART)
+
+            cam.send(last_good_frame)
+            cam.sleep_until_next_frame()
     except KeyboardInterrupt: pass
     except Exception as e: print(f"FATAL_ERROR: {str(e)}")
     finally:

@@ -60,9 +60,14 @@ export function useSyncChannel(onMessage?: (msg: SyncMessage) => void) {
   }, []);
 
   const send = useCallback((message: SyncMessage) => {
+    let usedPrimaryTransport = false;
+
     // BroadcastChannel is preferred and supports FileHandles
     try {
-      channelRef.current?.postMessage(message);
+      if (channelRef.current) {
+        channelRef.current.postMessage(message);
+        usedPrimaryTransport = true;
+      }
     } catch (err) {
       console.warn('BroadcastChannel sync failed, falling back to storage:', err);
     }
@@ -70,12 +75,16 @@ export function useSyncChannel(onMessage?: (msg: SyncMessage) => void) {
     try {
       if (typeof (window as any).mediaflow?.sendSyncMessage === 'function') {
         (window as any).mediaflow.sendSyncMessage(makeSerializable(message));
+        usedPrimaryTransport = true;
       }
     } catch (err) {
       console.warn('Electron sync relay failed:', err);
     }
     
-    // Fallback: localStorage can only store strings, will lose FileHandles
+    // Fallback: localStorage can only store strings. Avoid writing high-frequency
+    // state or asset resolution payloads when a real sync transport is available.
+    if (usedPrimaryTransport && (message.type === 'SYNC_STATE' || message.type === 'ASSET_RESOLVED')) return;
+
     try {
       const serializableMsg = makeSerializable(message);
       localStorage.setItem('mediaflow_sync_msg', JSON.stringify(serializableMsg));

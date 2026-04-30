@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld('mediaflow', {
   extractJwLibraryData: (dbPath) => ipcRenderer.invoke('extractJwLibraryData', dbPath),
   scanJwMedia: (language, customPaths) => ipcRenderer.invoke('scanJwMedia', language, customPaths),
   openExternalDisplay: (windowId, options) => ipcRenderer.invoke('openExternalDisplay', windowId, options),
+  openAudienceDisplay: () => ipcRenderer.invoke('openAudienceDisplay'),
+  openZoomDisplay: () => ipcRenderer.invoke('openZoomDisplay'),
   playMedia: (filePath, options) => ipcRenderer.invoke('playMedia', filePath, options),
   setOutputDevice: (name) => ipcRenderer.invoke('setOutputDevice', name),
   pickFiles: (options) => ipcRenderer.invoke('pickFiles', options),

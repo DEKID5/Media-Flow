@@ -21,6 +21,8 @@ app.commandLine.appendSwitch('disable-background-timer-throttling');
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
+app.commandLine.appendSwitch('high-dpi-support', '1');
+app.commandLine.appendSwitch('force-device-scale-factor', '1');
 
 let psbId = -1;
 
@@ -28,8 +30,12 @@ const isDev = !app.isPackaged;
 
 let operatorWindow;
 let audienceWindow;
+let zoomWindow;
 let lastSyncStateMessage = null;
 let lastBridgeStatus = { status: 'inactive' };
+let isQuitting = false;
+const ZOOM_WINDOW_WIDTH = 1920;
+const ZOOM_WINDOW_HEIGHT = 1080;
 
 
 // Helper to scan for files
@@ -75,6 +81,16 @@ function createOperatorWindow() {
     title: 'MediaFlow - Operator'
   });
 
+  operatorWindow.on('close', () => {
+    if (!isQuitting) {
+      app.quit();
+    }
+  });
+
+  operatorWindow.on('closed', () => {
+    operatorWindow = null;
+  });
+
   if (isDev) {
     operatorWindow.loadURL('http://localhost:3000');
   } else {
@@ -96,6 +112,140 @@ function sendBridgeStatus(status) {
   lastBridgeStatus = status;
   if (operatorWindow && !operatorWindow.isDestroyed()) {
     operatorWindow.webContents.send('bridge-status', status);
+  }
+}
+
+function getExternalDisplay() {
+  const displays = screen.getAllDisplays();
+  if (displays.length < 2) return null;
+
+  if (operatorWindow && !operatorWindow.isDestroyed()) {
+    const operatorDisplay = screen.getDisplayMatching(operatorWindow.getBounds());
+    const otherDisplay = displays.find((display) => display.id !== operatorDisplay.id);
+    if (otherDisplay) {
+      return otherDisplay;
+    }
+  }
+
+  const primaryDisplay = screen.getPrimaryDisplay();
+  return displays.find((display) => display.id !== primaryDisplay.id) || displays[1] || null;
+}
+
+function getAudienceWindowPlacement() {
+  const externalDisplay = getExternalDisplay();
+
+  if (externalDisplay) {
+    return {
+      display: externalDisplay,
+      bounds: externalDisplay.bounds,
+      isExtended: true
+    };
+  }
+
+  return {
+    display: null,
+    bounds: { x: 100, y: 100, width: 1280, height: 720 },
+    isExtended: false
+  };
+}
+
+function applyAudienceWindowPlacement(win, placement) {
+  if (!win || win.isDestroyed()) return;
+
+  win.setMenuBarVisibility(false);
+  win.setAutoHideMenuBar(true);
+  win.setSkipTaskbar(false);
+  win.setTitle('MediaFlow - Audience');
+  win.setBounds(placement.bounds, false);
+
+  if (placement.isExtended) {
+    win.setResizable(false);
+    win.setMovable(false);
+    win.setAlwaysOnTop(true, 'screen-saver');
+    win.setFullScreen(false);
+    win.setKiosk(true);
+  } else {
+    win.setKiosk(false);
+    win.setAlwaysOnTop(false);
+    win.setResizable(true);
+    win.setMovable(true);
+    win.setFullScreen(false);
+  }
+}
+
+function loadViewIntoWindow(win, viewType) {
+  if (isDev) {
+    win.loadURL(`http://localhost:3000?view=${viewType}`);
+  } else {
+    win.loadFile(path.join(__dirname, '../dist/index.html'), {
+      query: { view: viewType }
+    });
+  }
+}
+
+function getZoomWindowBounds() {
+  const displays = screen.getAllDisplays();
+  const virtualBounds = displays.reduce((acc, display) => {
+    const bounds = display.bounds;
+    return {
+      minX: Math.min(acc.minX, bounds.x),
+      minY: Math.min(acc.minY, bounds.y),
+      maxX: Math.max(acc.maxX, bounds.x + bounds.width),
+      maxY: Math.max(acc.maxY, bounds.y + bounds.height)
+    };
+  }, {
+    minX: 0,
+    minY: 0,
+    maxX: 0,
+    maxY: 0
+  });
+
+  return {
+    x: virtualBounds.minX - ZOOM_WINDOW_WIDTH - 100,
+    y: virtualBounds.minY - ZOOM_WINDOW_HEIGHT - 100,
+    width: ZOOM_WINDOW_WIDTH,
+    height: ZOOM_WINDOW_HEIGHT
+  };
+}
+
+function stopBridge() {
+  if (virtualCameraBridgeProcess) {
+    const pid = virtualCameraBridgeProcess.pid;
+    try {
+      if (process.platform === 'win32' && pid) {
+        spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], {
+          windowsHide: true,
+          stdio: 'ignore',
+          timeout: 5000
+        });
+      } else {
+        virtualCameraBridgeProcess.kill('SIGTERM');
+      }
+    } catch (e) {
+      try {
+        virtualCameraBridgeProcess.kill();
+      } catch (killError) {}
+    }
+    virtualCameraBridgeProcess = null;
+  }
+  sendBridgeStatus({ status: 'inactive' });
+}
+
+function shutdownAppResources() {
+  isQuitting = true;
+  stopBridge();
+
+  if (psbId !== -1) {
+    try {
+      powerSaveBlocker.stop(psbId);
+    } catch (e) {}
+    psbId = -1;
+  }
+
+  for (const win of [zoomWindow, audienceWindow]) {
+    if (win && !win.isDestroyed()) {
+      win.close();
+    }
   }
 }
 
@@ -204,10 +354,10 @@ function startBridge() {
 
     console.log(`[VirtualCam Process Exit] Code: ${code}`);
     virtualCameraBridgeProcess = null;
-    if (!reportedError && audienceWindow && !audienceWindow.isDestroyed() && audienceWindow.getTitle() === 'MEDIAFLOW_NATIVE_BRIDGE_TARGET') {
+    if (!isQuitting && !reportedError && zoomWindow && !zoomWindow.isDestroyed()) {
       sendBridgeStatus({ status: 'starting', message: 'Virtual camera bridge stopped. Restarting...' });
       setTimeout(() => {
-        if (!virtualCameraBridgeProcess && audienceWindow && !audienceWindow.isDestroyed() && audienceWindow.getTitle() === 'MEDIAFLOW_NATIVE_BRIDGE_TARGET') {
+        if (!isQuitting && !virtualCameraBridgeProcess && zoomWindow && !zoomWindow.isDestroyed()) {
           startBridge();
         }
       }, 1000);
@@ -218,22 +368,20 @@ function startBridge() {
 }
 
 function createAudienceWindow(viewType = 'audience') {
-  const displays = screen.getAllDisplays();
-  const externalDisplay = displays.find((display) => {
-    return display.bounds.x !== 0 || display.bounds.y !== 0;
-  });
-
-  const isZoom = viewType === 'zoom';
+  const placement = getAudienceWindowPlacement();
 
   const createdWindow = new BrowserWindow({
-    width: 1920, // High resolution broadcast
-    height: 1080,
-    x: isZoom ? 9999 : (externalDisplay ? externalDisplay.bounds.x : 100), 
-    y: isZoom ? 9999 : (externalDisplay ? externalDisplay.bounds.y : 100),
-    show: true, 
-    useContentSize: isZoom,
-    frame: !isZoom && !externalDisplay,
-    fullscreen: !isZoom && !!externalDisplay,
+    width: placement.bounds.width,
+    height: placement.bounds.height,
+    x: placement.bounds.x,
+    y: placement.bounds.y,
+    show: false,
+    useContentSize: false,
+    frame: !placement.isExtended,
+    fullscreen: false,
+    fullscreenable: placement.isExtended,
+    resizable: !placement.isExtended,
+    movable: !placement.isExtended,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -242,47 +390,150 @@ function createAudienceWindow(viewType = 'audience') {
       backgroundThrottling: false,
       offscreen: false 
     },
-    title: isZoom ? 'MEDIAFLOW_NATIVE_BRIDGE_TARGET' : 'MediaFlow - Audience',
+    title: 'MediaFlow - Audience',
     autoHideMenuBar: true,
-    skipTaskbar: isZoom
+    skipTaskbar: false
   });
   audienceWindow = createdWindow;
-
-  if (isZoom) {
-    audienceWindow.setTitle('MEDIAFLOW_NATIVE_BRIDGE_TARGET');
-  }
-
-  // Prevent window from being throttled when hidden
-  if (isZoom) {
-    createdWindow.webContents.setBackgroundThrottling(false);
-    startBridge();
-  }
+  applyAudienceWindowPlacement(createdWindow, placement);
 
     createdWindow.on('closed', () => {
       if (audienceWindow === createdWindow) {
         audienceWindow = null;
       }
-      if (isZoom && virtualCameraBridgeProcess) {
-        virtualCameraBridgeProcess.kill();
-        virtualCameraBridgeProcess = null;
-        sendBridgeStatus({ status: 'inactive' });
+    });
+
+    loadViewIntoWindow(createdWindow, viewType);
+
+    createdWindow.once('ready-to-show', () => {
+      const latestPlacement = getAudienceWindowPlacement();
+      applyAudienceWindowPlacement(createdWindow, latestPlacement);
+      if (latestPlacement.isExtended && typeof createdWindow.showInactive === 'function') {
+        createdWindow.showInactive();
+      } else {
+        createdWindow.show();
       }
     });
 
-    if (isDev) {
-      createdWindow.loadURL(`http://localhost:3000?view=${viewType}`);
-    } else {
-      createdWindow.loadFile(path.join(__dirname, '../dist/index.html'), {
-        query: { view: viewType }
-      });
-    }
-
     createdWindow.webContents.on('did-finish-load', () => {
+      const latestPlacement = getAudienceWindowPlacement();
+      applyAudienceWindowPlacement(createdWindow, latestPlacement);
+      if (!createdWindow.isVisible()) {
+        if (latestPlacement.isExtended && typeof createdWindow.showInactive === 'function') {
+          createdWindow.showInactive();
+        } else {
+          createdWindow.show();
+        }
+      }
       sendCachedStateToWindow(createdWindow);
       if (operatorWindow && !operatorWindow.isDestroyed()) {
         operatorWindow.webContents.send('sync-message', { type: 'AUDIENCE_READY' });
       }
     });
+}
+
+function createZoomWindow() {
+  const zoomBounds = getZoomWindowBounds();
+  const createdWindow = new BrowserWindow({
+    width: zoomBounds.width,
+    height: zoomBounds.height,
+    x: zoomBounds.x,
+    y: zoomBounds.y,
+    show: true,
+    useContentSize: true,
+    frame: false,
+    fullscreen: false,
+    focusable: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      webSecurity: false,
+      backgroundThrottling: false,
+      offscreen: false
+    },
+    title: 'MEDIAFLOW_NATIVE_BRIDGE_TARGET',
+    autoHideMenuBar: true,
+    skipTaskbar: true
+  });
+  zoomWindow = createdWindow;
+
+  createdWindow.webContents.setBackgroundThrottling(false);
+  createdWindow.webContents.setZoomFactor(1);
+  createdWindow.setTitle('MEDIAFLOW_NATIVE_BRIDGE_TARGET');
+  createdWindow.setAlwaysOnTop(false);
+  createdWindow.setSkipTaskbar(true);
+  createdWindow.setFocusable(false);
+  createdWindow.setContentSize(ZOOM_WINDOW_WIDTH, ZOOM_WINDOW_HEIGHT);
+
+  createdWindow.on('closed', () => {
+    if (zoomWindow === createdWindow) {
+      zoomWindow = null;
+    }
+    stopBridge();
+  });
+
+  loadViewIntoWindow(createdWindow, 'zoom');
+
+  createdWindow.webContents.on('did-finish-load', () => {
+    sendCachedStateToWindow(createdWindow);
+    startBridge();
+  });
+}
+
+function openAudienceDisplay() {
+  if (!audienceWindow || audienceWindow.isDestroyed()) {
+    createAudienceWindow('audience');
+  } else {
+    const placement = getAudienceWindowPlacement();
+    applyAudienceWindowPlacement(audienceWindow, placement);
+
+    const currentUrl = audienceWindow.webContents.getURL();
+    if (!currentUrl.includes('view=audience')) {
+      loadViewIntoWindow(audienceWindow, 'audience');
+    } else {
+      sendCachedStateToWindow(audienceWindow);
+    }
+
+    if (placement.isExtended && typeof audienceWindow.showInactive === 'function') {
+      audienceWindow.showInactive();
+    } else {
+      audienceWindow.show();
+      audienceWindow.focus();
+    }
+  }
+
+  return true;
+}
+
+function openZoomDisplay() {
+  if (!zoomWindow || zoomWindow.isDestroyed()) {
+    createZoomWindow();
+  } else {
+    const zoomBounds = getZoomWindowBounds();
+    zoomWindow.setBounds(zoomBounds);
+    zoomWindow.setContentSize(ZOOM_WINDOW_WIDTH, ZOOM_WINDOW_HEIGHT);
+    zoomWindow.webContents.setZoomFactor(1);
+    zoomWindow.setTitle('MEDIAFLOW_NATIVE_BRIDGE_TARGET');
+    zoomWindow.setSkipTaskbar(true);
+    zoomWindow.setFocusable(false);
+
+    const currentUrl = zoomWindow.webContents.getURL();
+    if (!currentUrl.includes('view=zoom')) {
+      loadViewIntoWindow(zoomWindow, 'zoom');
+    } else {
+      sendCachedStateToWindow(zoomWindow);
+      startBridge();
+    }
+
+    if (typeof zoomWindow.showInactive === 'function') {
+      zoomWindow.showInactive();
+    } else {
+      zoomWindow.show();
+    }
+  }
+
+  return true;
 }
 
 app.whenReady().then(() => {
@@ -414,55 +665,15 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('openExternalDisplay', (event, viewType) => {
-    if (!audienceWindow || audienceWindow.isDestroyed()) {
-      createAudienceWindow(viewType);
-    } else {
-      const isZoom = viewType === 'zoom';
-      const displays = screen.getAllDisplays();
-      const externalDisplay = displays.find(d => d.bounds.x !== 0 || d.bounds.y !== 0);
+    return viewType === 'zoom' ? openZoomDisplay() : openAudienceDisplay();
+  });
 
-      if (isZoom && audienceWindow.getTitle() !== 'MEDIAFLOW_NATIVE_BRIDGE_TARGET') {
-        audienceWindow.close();
-        audienceWindow = null;
-        createAudienceWindow('zoom');
-        return;
-      }
+  ipcMain.handle('openAudienceDisplay', () => {
+    return openAudienceDisplay();
+  });
 
-      if (isZoom) {
-        startBridge();
-        
-        audienceWindow.setBounds({ x: 9999, y: 9999, width: 1920, height: 1080 });
-        audienceWindow.setFullScreen(false);
-        audienceWindow.setSkipTaskbar(true);
-      } else {
-        const targetBounds = externalDisplay ? externalDisplay.bounds : { x: 100, y: 100, width: 1920, height: 1080 };
-        audienceWindow.setBounds(targetBounds);
-        if (externalDisplay) audienceWindow.setFullScreen(true);
-        audienceWindow.setSkipTaskbar(false);
-        
-        // Kill bridge if switching away from zoom
-        if (virtualCameraBridgeProcess) {
-          virtualCameraBridgeProcess.kill();
-          virtualCameraBridgeProcess = null;
-        }
-      }
-
-      audienceWindow.setTitle(isZoom ? 'MEDIAFLOW_NATIVE_BRIDGE_TARGET' : 'MediaFlow - Audience');
-      
-      // Update URL if type changed
-      if (isDev) {
-        audienceWindow.loadURL(`http://localhost:3000?view=${viewType || 'audience'}`);
-      } else {
-        audienceWindow.loadFile(path.join(__dirname, '../dist/index.html'), {
-          query: { view: viewType || 'audience' }
-        });
-      }
-
-      audienceWindow.show();
-      if (!isZoom) {
-        audienceWindow.focus();
-      }
-    }
+  ipcMain.handle('openZoomDisplay', () => {
+    return openZoomDisplay();
   });
 
   ipcMain.on('sync-message', (event, message) => {
@@ -567,6 +778,15 @@ autoUpdater.on('update-downloaded', () => {
   operatorWindow.webContents.send('update-status', { status: 'downloaded' });
 });
 
+app.on('before-quit', () => {
+  shutdownAppResources();
+});
+
+app.on('will-quit', () => {
+  shutdownAppResources();
+});
+
 app.on('window-all-closed', () => {
+  shutdownAppResources();
   if (process.platform !== 'darwin') app.quit();
 });

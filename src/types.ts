@@ -60,6 +60,7 @@ export interface AppState {
   selectedCameraId?: string;
   isMeetingLive: boolean;
   vcamMode: 'auto' | 'camera' | 'media';
+  isProgramPaused: boolean;
 }
 
 export type SyncMessage = 
@@ -70,4 +71,5 @@ export type SyncMessage =
   | { type: 'STATE_UPDATE'; delta: Partial<AppState> }
   | { type: 'BGM_ACTION'; action: 'seek'; offset: number }
   | { type: 'RESOLVE_ASSET'; assetId: string }
-  | { type: 'ASSET_RESOLVED'; assetId: string; url?: string | null; file?: File | null };
+  | { type: 'ASSET_RESOLVED'; assetId: string; url?: string | null; file?: File | null }
+  | { type: 'PROGRAM_ENDED'; assetId: string };

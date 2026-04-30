@@ -282,7 +282,8 @@ export function OperatorDashboard() {
     isPermissionGranted: false,
     selectedCameraId: '',
     isMeetingLive: false,
-    vcamMode: 'auto'
+    vcamMode: 'auto',
+    isProgramPaused: false
   });
 
   const [mediaFolders, setMediaFolders] = useState<FileSystemDirectoryHandle[]>([]);
@@ -321,10 +322,6 @@ export function OperatorDashboard() {
     navigator.mediaDevices.addEventListener('devicechange', handleDevices);
     return () => navigator.mediaDevices.removeEventListener('devicechange', handleDevices);
   }, []);
-  const [isPreviewMuted, setIsPreviewMuted] = useState(true);
-  const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
-  
-  
   const requiresRescan = !((window as any).mediaflow?.isDesktop) && mediaLibrary.length > 0 && mediaLibrary.some(a => !a.fileHandle);
   const [showSettings, setShowSettings] = useState(false);
   const [showAudioPanel, setShowAudioPanel] = useState(false);
@@ -631,30 +628,73 @@ export function OperatorDashboard() {
     return item?.mediaIds.includes(assetId);
   };
 
+  const renderMediaThumbnail = (asset: MediaAsset, className = 'w-full h-full object-cover') => {
+    if (asset.type === 'image') {
+      return <SmartMedia asset={asset} className={className} muted={true} isThumbnail={true} />;
+    }
+
+    if (asset.type === 'audio') {
+      return (
+        <div className={`${className} flex items-center justify-center bg-blue-500/10`}>
+          <Music size={18} className="text-blue-400/70" />
+        </div>
+      );
+    }
+
+    return <SmartMedia asset={asset} className={className} muted={true} isThumbnail={true} />;
+  };
+
   const mediaLibraryRef = useRef<MediaAsset[]>(INITIAL_MEDIA_LIBRARY);
+  const objectUrlCacheRef = useRef<Map<string, { signature: string; url: string }>>(new Map());
 
   useEffect(() => {
     mediaLibraryRef.current = mediaLibrary;
+    const liveIds = new Set(mediaLibrary.map(asset => asset.id));
+    objectUrlCacheRef.current.forEach(({ url }, id) => {
+      if (!liveIds.has(id)) {
+        URL.revokeObjectURL(url);
+        objectUrlCacheRef.current.delete(id);
+      }
+    });
   }, [mediaLibrary]);
 
   useEffect(() => {
-    (window as any).__MEDIAFLOW_API__ = {
-      resolveAssetUrlById: async (assetId: string): Promise<{ url: string | null, file?: File | null }> => {
-        const asset = mediaLibraryRef.current.find(a => a.id === assetId);
-        if (asset) {
-          if (asset.fileHandle) {
-            try {
-              const file = await asset.fileHandle.getFile();
-              return { url: URL.createObjectURL(file), file };
-            } catch (e) {
-              console.error('Failed to resolve asset via API', e);
-            }
-          } else if (asset.path || asset.url) {
-            return { url: asset.path || asset.url };
-          }
+    const resolveAssetForPlayback = async (assetId: string): Promise<{ url: string | null; file?: null }> => {
+      const asset = mediaLibraryRef.current.find(a => a.id === assetId);
+      if (!asset) return { url: null };
+
+      if (asset.path || asset.url) {
+        return { url: asset.path || asset.url || null };
+      }
+
+      if (!asset.fileHandle) return { url: null };
+
+      try {
+        const file = await asset.fileHandle.getFile();
+        const signature = `${file.name}:${file.size}:${file.lastModified}`;
+        const cached = objectUrlCacheRef.current.get(asset.id);
+        if (cached?.signature === signature) {
+          return { url: cached.url };
         }
+
+        if (cached?.url) URL.revokeObjectURL(cached.url);
+        const url = URL.createObjectURL(file);
+        objectUrlCacheRef.current.set(asset.id, { signature, url });
+        return { url };
+      } catch (e) {
+        console.error('Failed to resolve asset via API', e);
         return { url: null };
       }
+    };
+
+    (window as any).__MEDIAFLOW_API__ = {
+      resolveAssetUrlById: resolveAssetForPlayback
+    };
+
+    return () => {
+      objectUrlCacheRef.current.forEach(({ url }) => URL.revokeObjectURL(url));
+      objectUrlCacheRef.current.clear();
+      delete (window as any).__MEDIAFLOW_API__;
     };
   }, []);
 
@@ -1002,35 +1042,6 @@ export function OperatorDashboard() {
     }
   };
 
-  useEffect(() => {
-    // Expose API for external windows (AudienceView) to resolve blob URLs
-    (window as any).__MEDIAFLOW_API__ = {
-      resolveAssetUrlById: async (id: string) => {
-        // Use the latest mediaLibrary from state
-        const asset = mediaLibrary.find(a => a.id === id);
-        if (!asset) {
-          console.warn('API: Asset not found in library:', id);
-          return null;
-        }
-        
-        if (asset.fileHandle) {
-          try {
-            const file = await asset.fileHandle.getFile();
-            return URL.createObjectURL(file);
-          } catch (e) {
-            console.error('API: Failed to get file from handle:', e);
-          }
-        }
-        
-        return asset.path || asset.url || null;
-      }
-    };
-    
-    return () => {
-      delete (window as any).__MEDIAFLOW_API__;
-    };
-  }, [mediaLibrary]);
-
   // Auto-link songs when media library changes
   useEffect(() => {
     const autoLinkSongs = () => {
@@ -1115,13 +1126,17 @@ export function OperatorDashboard() {
         player.currentTime = Math.max(0, player.currentTime + msg.offset);
       }
     } else if (msg.type === 'RESOLVE_ASSET') {
-      console.log('Sync: Received RESOLVE_ASSET for', msg.assetId);
       const api = (window as any).__MEDIAFLOW_API__;
       if (api && typeof api.resolveAssetUrlById === 'function') {
-        const { url, file } = await api.resolveAssetUrlById(msg.assetId);
-        console.log('Sync: Sending ASSET_RESOLVED. File attached?', !!file);
-        send({ type: 'ASSET_RESOLVED', assetId: msg.assetId, url, file });
+        const { url } = await api.resolveAssetUrlById(msg.assetId);
+        send({ type: 'ASSET_RESOLVED', assetId: msg.assetId, url, file: null });
       }
+    } else if (msg.type === 'PROGRAM_ENDED') {
+      setState(s => (
+        s.programAsset?.id === msg.assetId
+          ? { ...s, programAsset: null, isProgramPaused: false }
+          : s
+      ));
     }
   });
 
@@ -1180,13 +1195,12 @@ export function OperatorDashboard() {
 
   const handleTake = () => {
     if (state.previewAsset) {
-      setState(s => ({ ...s, programAsset: s.previewAsset }));
-      setIsPreviewPlaying(false);
+      setState(s => ({ ...s, programAsset: s.previewAsset, isProgramPaused: false }));
     }
   };
 
   const handleCut = () => {
-    setState(s => ({ ...s, programAsset: null }));
+    setState(s => ({ ...s, programAsset: null, isProgramPaused: false }));
   };
 
   useEffect(() => {
@@ -1198,10 +1212,16 @@ export function OperatorDashboard() {
     return () => clearInterval(interval);
   }, [isAudienceLive, lastAudienceSignal]);
 
-  const handleExtendToLiveFeed = () => {
+  const openAudienceFeed = async () => {
     try {
-      if ((window as any).mediaflow && typeof (window as any).mediaflow.openExternalDisplay === 'function') {
-        (window as any).mediaflow.openExternalDisplay();
+      if ((window as any).mediaflow) {
+        if (typeof (window as any).mediaflow.openAudienceDisplay === 'function') {
+          await (window as any).mediaflow.openAudienceDisplay();
+        } else if (typeof (window as any).mediaflow.openExternalDisplay === 'function') {
+          await (window as any).mediaflow.openExternalDisplay();
+        } else {
+          window.open('/?view=audience', 'AudienceView', 'width=1280,height=720');
+        }
       } else {
         window.open('/?view=audience', 'AudienceView', 'width=1280,height=720');
       }
@@ -1211,6 +1231,33 @@ export function OperatorDashboard() {
         window.open('/?view=audience', 'AudienceView', 'width=1280,height=720');
       } catch (e2) {
         alert("Broadcast extension window blocked. Please disable popup blockers.");
+      }
+    }
+  };
+
+  const openZoomFeed = async () => {
+    try {
+      if ((window as any).mediaflow) {
+        if (typeof (window as any).mediaflow.openZoomDisplay === 'function') {
+          await (window as any).mediaflow.openZoomDisplay();
+        } else if (typeof (window as any).mediaflow.openExternalDisplay === 'function') {
+          await (window as any).mediaflow.openExternalDisplay('zoom');
+        } else {
+          window.open('/?view=zoom', 'ZoomFeed', 'width=1920,height=1080');
+        }
+      } else {
+        window.open('/?view=zoom', 'ZoomFeed', 'width=1920,height=1080');
+      }
+    } catch (err) {
+      console.error('Failed to open zoom display:', err);
+      try {
+        if ((window as any).mediaflow && typeof (window as any).mediaflow.openExternalDisplay === 'function') {
+          await (window as any).mediaflow.openExternalDisplay('zoom');
+        } else {
+          window.open('/?view=zoom', 'ZoomFeed', 'width=1920,height=1080');
+        }
+      } catch (fallbackErr) {
+        console.error('Zoom fallback failed:', fallbackErr);
       }
     }
   };
@@ -1553,13 +1600,7 @@ export function OperatorDashboard() {
               <div className="flex items-center gap-3 pl-4 border-l border-white/10">
                 <div className="flex flex-col gap-1">
                   <button 
-                    onClick={() => {
-                      if ((window as any).mediaflow) {
-                        (window as any).mediaflow.openExternalDisplay('zoom');
-                      } else {
-                        window.open('/?view=zoom', 'ZoomFeed', 'width=1920,height=1080');
-                      }
-                    }}
+                    onClick={openZoomFeed}
                     className={`
                       relative flex items-center gap-3 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all overflow-hidden
                       ${bridgeStatus.status === 'active' ? 'bg-zinc-900 text-white border border-emerald-500/50' : 
@@ -1603,13 +1644,7 @@ export function OperatorDashboard() {
                 </div>
 
                 <button 
-                  onClick={() => {
-                    if ((window as any).mediaflow) {
-                      (window as any).mediaflow.openExternalDisplay();
-                    } else {
-                      window.open('/?view=audience', 'AudienceView', 'width=1280,height=720');
-                    }
-                  }}
+                  onClick={openAudienceFeed}
                   className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white/60 text-[10px] font-black rounded-xl border border-white/10 uppercase tracking-widest transition-all h-full"
                 >
                   Extend Feed
@@ -1634,14 +1669,10 @@ export function OperatorDashboard() {
                         animate={{ opacity: 1 }}
                         className="absolute inset-0 z-0 flex items-center justify-center bg-black"
                       >
-                        <SmartMedia 
-                          asset={state.previewAsset}
-                          className="w-full h-full object-contain"
-                          autoPlay={isPreviewPlaying}
-                          muted={isPreviewMuted}
-                          controls={false}
-                          deviceId={state.selectedCameraId}
-                        />
+                        {renderMediaThumbnail(state.previewAsset, 'w-full h-full object-contain')}
+                        <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 px-3 py-1.5 rounded-full bg-black/70 border border-blue-400/20 text-[8px] font-black uppercase tracking-widest text-blue-200/70">
+                          Thumbnail Preview
+                        </div>
                       </motion.div>
                     ) : null}
 
@@ -1676,22 +1707,9 @@ export function OperatorDashboard() {
                <div className="flex items-center gap-4">
                 <span className="text-[10px] font-mono text-white/20 uppercase tracking-widest font-medium">Internal Routing: Bus 1</span>
                 {state.previewAsset && (
-                  <div className="flex items-center gap-1 border-l border-white/10 pl-4">
-                    <button 
-                      onClick={() => setIsPreviewPlaying(!isPreviewPlaying)}
-                      className="p-1.5 hover:bg-white/5 rounded-lg text-white/40 hover:text-white transition-all"
-                      title={isPreviewPlaying ? "Pause Preview" : "Play Preview"}
-                    >
-                      {isPreviewPlaying ? <Pause size={12} fill="currentColor" /> : <Play size={12} fill="currentColor" />}
-                    </button>
-                    <button 
-                      onClick={() => setIsPreviewMuted(!isPreviewMuted)}
-                      className="p-1.5 hover:bg-white/5 rounded-lg text-white/40 hover:text-white transition-all"
-                      title={isPreviewMuted ? "Unmute Preview" : "Mute Preview"}
-                    >
-                      {isPreviewMuted ? <VolumeX size={12} className="text-red-500/60" /> : <Volume2 size={12} />}
-                    </button>
-                  </div>
+                  <span className="border-l border-white/10 pl-4 text-[9px] font-black uppercase tracking-widest text-blue-300/50">
+                    Thumbnail staged
+                  </span>
                 )}
                </div>
                <div className="flex gap-2">
@@ -1741,11 +1759,12 @@ export function OperatorDashboard() {
                         <SmartMedia 
                           asset={state.programAsset}
                           className="w-full h-full object-contain"
-                          autoPlay={true}
+                          autoPlay={!state.isProgramPaused}
                           muted={state.mixer.isMonitorMuted}
                           volume={state.mixer.monitorVolume}
                           controls={false}
                           deviceId={state.selectedCameraId}
+                          onEnd={handleCut}
                         />
                       </motion.div>
                   ) : (
@@ -1767,6 +1786,22 @@ export function OperatorDashboard() {
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,1)]" />
                   <span className="text-[10px] font-mono text-red-500 font-black uppercase tracking-widest">Master Feed</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {state.programAsset && (
+                    <button
+                      onClick={() => setState(s => ({ ...s, isProgramPaused: !s.isProgramPaused }))}
+                      className={`h-8 px-3 rounded-full border flex items-center gap-2 text-[9px] font-black uppercase tracking-widest transition-all ${
+                        state.isProgramPaused
+                          ? 'bg-amber-500/20 border-amber-500/40 text-amber-300 hover:bg-amber-500/30'
+                          : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10 hover:text-white'
+                      }`}
+                      title={state.isProgramPaused ? 'Play live feed' : 'Pause live feed'}
+                    >
+                      {state.isProgramPaused ? <Play size={11} fill="currentColor" /> : <Pause size={11} fill="currentColor" />}
+                      <span>{state.isProgramPaused ? 'Play Feed' : 'Pause Feed'}</span>
+                    </button>
+                  )}
                 </div>
                 <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded border ${isAudienceLive ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500' : 'bg-white/5 border-white/10 text-white/20'}`}>
                   <div className={`w-1 h-1 rounded-full ${isAudienceLive ? 'bg-emerald-500 animate-pulse' : 'bg-white/20'}`} />
@@ -1835,7 +1870,6 @@ export function OperatorDashboard() {
                           type: 'camera'
                         };
                         setState(s => ({ ...s, previewAsset: webcamAsset }));
-                        setIsPreviewPlaying(true);
                       }}
                       className={`group relative aspect-video rounded-xl overflow-hidden border transition-all cursor-pointer ${state.previewAsset?.id === 'webcam-primary' ? 'border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.5)] ring-1 ring-emerald-500' : 'border-white/5 bg-emerald-500/5 hover:border-emerald-500/20'}`}
                     >
@@ -1856,12 +1890,11 @@ export function OperatorDashboard() {
                         key={item.id}
                         onClick={() => {
                           setState(s => ({ ...s, previewAsset: item }));
-                          setIsPreviewPlaying(true); // Auto play when previewing
                         }}
-                        className={`group relative aspect-video rounded-xl overflow-hidden border transition-all cursor-pointer ${state.previewAsset?.id === item.id ? 'border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.5)] ring-1 ring-blue-500' : 'border-white/5 bg-black/20 hover:border-white/20'}`}
+                         className={`group relative aspect-video rounded-xl overflow-hidden border transition-all cursor-pointer ${state.previewAsset?.id === item.id ? 'border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.5)] ring-1 ring-blue-500' : 'border-white/5 bg-black/20 hover:border-white/20'}`}
                        >
                          <div className="absolute inset-0 z-0 pointer-events-none">
-                           <SmartMedia asset={item} className="w-full h-full object-cover" muted={true} isThumbnail={true} />
+                           {renderMediaThumbnail(item)}
                          </div>
                          <div className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/90 to-transparent p-2 pointer-events-none">
                            <p className="text-[9px] font-black truncate uppercase tracking-tight text-white/90 text-left leading-none">{item.name}</p>
@@ -1938,7 +1971,9 @@ export function OperatorDashboard() {
                       setShowAllMedia(false);
                       if (item.mediaIds.length > 0) {
                         const firstAsset = mediaLibrary.find(a => a.id === item.mediaIds[0]);
-                        if (firstAsset) setState(s => ({ ...s, previewAsset: firstAsset }));
+                        if (firstAsset) {
+                          setState(s => ({ ...s, previewAsset: firstAsset }));
+                        }
                       }
                     }}
                     className={`w-full text-left p-4 rounded-2xl transition-all relative overflow-hidden border cursor-pointer ${selectedMeetingItemId === item.id ? 'bg-blue-500/20 border-blue-500/40 shadow-2xl' : 'bg-black/20 border-white/5 hover:bg-white/5 text-white/40'}`}
@@ -1966,7 +2001,7 @@ export function OperatorDashboard() {
                                     setState(s => ({ ...s, previewAsset: asset }));
                                   }}
                                 >
-                                   <SmartMedia asset={asset} isThumbnail className="w-full h-full object-cover pointer-events-none" />
+                                   {renderMediaThumbnail(asset, 'w-full h-full object-cover pointer-events-none')}
                                    <div className="absolute inset-0 bg-blue-500/0 group-hover:bg-blue-500/20 transition-all" />
                                    <button
                                      onClick={(e) => {
@@ -2342,18 +2377,13 @@ export function OperatorDashboard() {
                   >
                     <div className="flex items-center gap-4 min-w-0">
                       <div className="w-24 h-16 bg-white/5 rounded-xl overflow-hidden flex items-center justify-center text-white/20 group-hover:text-blue-500 transition-colors relative shrink-0">
-                        <SmartMedia 
-                          asset={{
+                        {renderMediaThumbnail({
                             id: `scan-${i}`,
                             name: file.name,
                             path: file.path,
                             type: file.type,
                             fileHandle: file.fileHandle
-                          }} 
-                          className="w-full h-full object-cover" 
-                          muted={true} 
-                          isThumbnail={true}
-                        />
+                          } as MediaAsset)}
                       </div>
                       <div className="min-w-0">
                         <p className="text-xs font-black text-white/80 truncate mb-1">{file.name}</p>
