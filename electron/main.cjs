@@ -3,6 +3,9 @@ const path = require('path');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
 const { pathToFileURL } = require('url');
+const { spawn } = require('child_process');
+
+let virtualCameraBridgeProcess = null;
 
 
 
@@ -81,9 +84,9 @@ function createAudienceWindow(viewType = 'audience') {
   audienceWindow = new BrowserWindow({
     width: 1280, // Target broadcast resolution
     height: 720,
-    x: isZoom ? -2000 : (externalDisplay ? externalDisplay.bounds.x : 100), // Hide zoom window off-screen if needed
-    y: isZoom ? -2000 : (externalDisplay ? externalDisplay.bounds.y : 100),
-    show: !isZoom, // Do not show the window if it's for Zoom broadcast
+    x: isZoom ? -20000 : (externalDisplay ? externalDisplay.bounds.x : 100), // Hide broadcast window off-screen
+    y: isZoom ? -20000 : (externalDisplay ? externalDisplay.bounds.y : 100),
+    show: true, // MUST be true for OBS Window Capture to see it
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -92,7 +95,7 @@ function createAudienceWindow(viewType = 'audience') {
       backgroundThrottling: false,
       offscreen: false // We need it on-screen (but hidden) to use standard CSS/rendering
     },
-    title: isZoom ? 'Mediaflow cam' : 'MediaFlow - Audience',
+    title: isZoom ? 'MediaFlow - OBS Broadcast' : 'MediaFlow - Audience',
     frame: !isZoom && !externalDisplay,
     fullscreen: !isZoom && !!externalDisplay,
     autoHideMenuBar: true,
@@ -102,6 +105,24 @@ function createAudienceWindow(viewType = 'audience') {
   // Prevent window from being throttled when hidden
   if (isZoom) {
     audienceWindow.webContents.setBackgroundThrottling(false);
+
+    if (virtualCameraBridgeProcess) {
+      virtualCameraBridgeProcess.kill();
+    }
+
+    // Spawn the Python Virtual Camera Bridge
+    const scriptPath = path.join(__dirname, '../scratch/virtual_camera_bridge.py');
+    virtualCameraBridgeProcess = spawn('python', ['-u', scriptPath]);
+    
+    virtualCameraBridgeProcess.stdout.on('data', (data) => console.log(`[VirtualCam] ${data.toString().trim()}`));
+    virtualCameraBridgeProcess.stderr.on('data', (data) => console.error(`[VirtualCam Error] ${data.toString().trim()}`));
+
+    audienceWindow.on('closed', () => {
+      if (virtualCameraBridgeProcess) {
+        virtualCameraBridgeProcess.kill();
+        virtualCameraBridgeProcess = null;
+      }
+    });
   }
 
   const url = isDev 
@@ -283,37 +304,7 @@ app.whenReady().then(() => {
     return result.filePaths[0];
   });
 
-  ipcMain.on('startBroadcast', () => {
-    if (broadcastPipe && !broadcastPipe.destroyed) return;
-    
-    const net = require('net');
-    try {
-      broadcastPipe = net.createConnection('\\\\.\\pipe\\UnityCapture', () => {
-        console.log('Main: Connected to UnityCapture Virtual Camera Pipe');
-      });
 
-      broadcastPipe.on('error', (err) => {
-        console.warn('Main: Virtual Camera Pipe not found. Ensure UnityCapture driver is installed and a consumer (like Zoom) is active.');
-        broadcastPipe = null;
-      });
-
-      broadcastPipe.on('close', () => {
-        broadcastPipe = null;
-      });
-    } catch (e) {
-      console.error('Main: Failed to connect to pipe:', e);
-    }
-  });
-
-  ipcMain.on('broadcastFrame', (event, buffer) => {
-    if (broadcastPipe && !broadcastPipe.destroyed) {
-      try {
-        broadcastPipe.write(buffer);
-      } catch (e) {
-        broadcastPipe = null;
-      }
-    }
-  });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createOperatorWindow();

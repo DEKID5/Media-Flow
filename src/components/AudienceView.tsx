@@ -33,65 +33,12 @@ export function AudienceView() {
 
   // --- Virtual Camera Broadcast Logic ---
   useEffect(() => {
-    if (view !== 'zoom' || !state || !(window as any).mediaflow?.startBroadcast) return;
-
-    // Initialize broadcast connection
-    (window as any).mediaflow.startBroadcast();
-
-    const canvas = document.createElement('canvas');
-    canvas.width = 1280;
-    canvas.height = 720;
-    const ctx = canvas.getContext('2d', { alpha: false });
-    
-    let frameId: number;
-    const broadcast = () => {
-      if (!ctx) return;
-
-      const container = document.querySelector('.relative.flex-1.overflow-hidden');
-      if (!container) {
-        frameId = requestAnimationFrame(broadcast);
-        return;
-      }
-
-      const media = container.querySelector('video, img') as HTMLVideoElement | HTMLImageElement;
-      
-      if (media && (media as any).naturalWidth !== 0 && (media as any).videoWidth !== 0) {
-        ctx.fillStyle = '#000000';
-        ctx.fillRect(0, 0, 1280, 720);
-
-        const mWidth = (media as HTMLVideoElement).videoWidth || (media as HTMLImageElement).naturalWidth || media.clientWidth;
-        const mHeight = (media as HTMLVideoElement).videoHeight || (media as HTMLImageElement).naturalHeight || media.clientHeight;
-
-        if (mWidth > 0 && mHeight > 0) {
-          const scale = Math.min(1280 / mWidth, 720 / mHeight);
-          const x = (1280 - mWidth * scale) / 2;
-          const y = (720 - mHeight * scale) / 2;
-          
-          ctx.drawImage(media, x, y, mWidth * scale, mHeight * scale);
-
-          const imageData = ctx.getImageData(0, 0, 1280, 720);
-          const rgbBuffer = new Uint8Array(1280 * 720 * 3);
-          
-          for (let i = 0; i < 1280 * 720; i++) {
-            const srcIdx = i * 4;
-            const dstIdx = i * 3;
-            rgbBuffer[dstIdx] = imageData.data[srcIdx];
-            rgbBuffer[dstIdx + 1] = imageData.data[srcIdx + 1];
-            rgbBuffer[dstIdx + 2] = imageData.data[srcIdx + 2];
-          }
-          
-          (window as any).mediaflow.broadcastFrame(rgbBuffer);
-        }
-      }
-      
-      frameId = requestAnimationFrame(broadcast);
-    };
-
-    broadcast();
-    return () => {
-      if (frameId) cancelAnimationFrame(frameId);
-    };
-  }, [view, state?.isMeetingLive, state?.programAsset?.id]);
+    // The previous UnityCapture named pipe logic has been removed because it relied on Shared Memory
+    // which Node.js cannot write to. 
+    // Instead, the MediaFlow Audience window is now rendered off-screen (x: -20000).
+    // The user will use OBS Studio's "Window Capture" to grab this off-screen window natively 
+    // and route it to the "OBS Virtual Camera" for Zoom. This is zero-copy and highly optimized!
+  }, [view]);
   // ---------------------------------------
 
   const handleMediaError = (e: any) => {
