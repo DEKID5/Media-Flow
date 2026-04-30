@@ -61,13 +61,6 @@
       ],
       "extraResources": [
       {
-        "from": "drivers",
-        "to": "drivers",
-        "filter": [
-          "**/*"
-        ]
-      },
-      {
         "from": "resources/bridge",
         "to": "bridge",
         "filter": [

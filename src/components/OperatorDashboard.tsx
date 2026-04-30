@@ -1541,8 +1541,8 @@ export function OperatorDashboard() {
                 </div>
                 <span className="flex flex-col items-start leading-none">
                   <span className="text-white">Broadcast to Zoom</span>
-                  <span className={`text-[7px] mt-1 uppercase tracking-wider font-bold ${isObsDetected ? 'text-blue-400' : 'text-amber-400/80'}`}>
-                    {isObsDetected ? '• OBS Virtual Camera Detected' : '• Native Bridge (UnityCapture)'}
+                  <span className={`text-[7px] mt-1 uppercase tracking-wider font-bold ${isObsDetected ? 'text-blue-400' : 'text-red-400/80'}`}>
+                    {isObsDetected ? '• OBS Virtual Camera Detected' : '• OBS Virtual Camera Not Found'}
                   </span>
                 </span>
                 

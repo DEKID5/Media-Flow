@@ -77,9 +77,8 @@ def main():
     time.sleep(2)
 
     try:
-        # Request standard RGBA pixel format
-        # By not specifying a device, it will pick the first available one (usually Unity Video Capture)
-        with pyvirtualcam.Camera(width=TARGET_WIDTH, height=TARGET_HEIGHT, fps=FPS, fmt=pyvirtualcam.PixelFormat.RGBA) as cam:
+        # The user requested to use ONLY OBS Virtual Camera.
+        with pyvirtualcam.Camera(width=TARGET_WIDTH, height=TARGET_HEIGHT, fps=FPS, fmt=pyvirtualcam.PixelFormat.RGBA, device='OBS Virtual Camera') as cam:
             print(f"DEVICE_ACTIVE: {cam.device}")
             print(f"--- VIRTUAL CAMERA ACTIVE ---")
             print(f"DEVICE: {cam.device}")
