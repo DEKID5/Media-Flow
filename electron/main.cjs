@@ -80,7 +80,55 @@ function createOperatorWindow() {
   }
 }
 
-function createAudienceWindow(viewType = 'audience') {
+function startBridge(targetType) {
+  if (virtualCameraBridgeProcess) {
+    virtualCameraBridgeProcess.kill();
+    virtualCameraBridgeProcess = null;
+  }
+
+  const scriptPath = isDev 
+    ? path.join(__dirname, '../resources/bridge/virtual_camera_bridge.py')
+    : path.join(process.resourcesPath, 'bridge/virtual_camera_bridge.py');
+  
+  console.log(`Starting VCam Bridge: ${scriptPath} --target ${targetType}`);
+  virtualCameraBridgeProcess = spawn('python', ['-u', scriptPath, '--target', targetType]);
+  
+  virtualCameraBridgeProcess.stdout.on('data', (data) => {
+    const output = data.toString().trim();
+    console.log(`[VirtualCam] ${output}`);
+    
+    if (output.includes('DEVICE_ACTIVE:')) {
+      const deviceName = output.split('DEVICE_ACTIVE:')[1].trim();
+      if (operatorWindow && !operatorWindow.isDestroyed()) {
+        operatorWindow.webContents.send('bridge-status', { status: 'active', device: deviceName });
+      }
+    }
+  });
+  
+  virtualCameraBridgeProcess.stderr.on('data', (data) => {
+    const error = data.toString().trim();
+    console.error(`[VirtualCam Error] ${error}`);
+    if (operatorWindow && !operatorWindow.isDestroyed()) {
+      operatorWindow.webContents.send('bridge-status', { status: 'error', message: error });
+    }
+  });
+
+  virtualCameraBridgeProcess.on('error', (err) => {
+    console.error(`[VirtualCam Process Error] ${err.message}`);
+    if (operatorWindow && !operatorWindow.isDestroyed()) {
+      operatorWindow.webContents.send('bridge-status', { status: 'error', message: `Process failed to start: ${err.message}` });
+    }
+  });
+
+  virtualCameraBridgeProcess.on('exit', (code) => {
+    console.log(`[VirtualCam Process Exit] Code: ${code}`);
+    if (operatorWindow && !operatorWindow.isDestroyed()) {
+      operatorWindow.webContents.send('bridge-status', { status: 'inactive' });
+    }
+  });
+}
+
+function createAudienceWindow(viewType = 'audience', targetType = 'obs') {
   const displays = screen.getAllDisplays();
   const externalDisplay = displays.find((display) => {
     return display.bounds.x !== 0 || display.bounds.y !== 0;
@@ -89,8 +137,8 @@ function createAudienceWindow(viewType = 'audience') {
   const isZoom = viewType === 'zoom';
 
   audienceWindow = new BrowserWindow({
-    width: 1280, // Target broadcast resolution
-    height: 720,
+    width: 1920, // High resolution broadcast
+    height: 1080,
     x: isZoom ? -2000 : (externalDisplay ? externalDisplay.bounds.x : 100), 
     y: isZoom ? -2000 : (externalDisplay ? externalDisplay.bounds.y : 100),
     show: true, 
@@ -116,52 +164,8 @@ function createAudienceWindow(viewType = 'audience') {
   // Prevent window from being throttled when hidden
   if (isZoom) {
     audienceWindow.webContents.setBackgroundThrottling(false);
-
-    if (virtualCameraBridgeProcess) {
-      virtualCameraBridgeProcess.kill();
-    }
-
-    // Spawn the Python Virtual Camera Bridge
-    // Resolve bridge script path (must be outside ASAR for python to execute)
-    const scriptPath = isDev 
-      ? path.join(__dirname, '../resources/bridge/virtual_camera_bridge.py')
-      : path.join(process.resourcesPath, 'bridge/virtual_camera_bridge.py');
-    
-    virtualCameraBridgeProcess = spawn('python', ['-u', scriptPath]);
-    
-    virtualCameraBridgeProcess.stdout.on('data', (data) => {
-      const output = data.toString().trim();
-      console.log(`[VirtualCam] ${output}`);
-      
-      if (output.includes('DEVICE_ACTIVE:')) {
-        const deviceName = output.split('DEVICE_ACTIVE:')[1].trim();
-        if (operatorWindow && !operatorWindow.isDestroyed()) {
-          operatorWindow.webContents.send('bridge-status', { status: 'active', device: deviceName });
-        }
-      }
-    });
-    
-    virtualCameraBridgeProcess.stderr.on('data', (data) => {
-      const error = data.toString().trim();
-      console.error(`[VirtualCam Error] ${error}`);
-      if (operatorWindow && !operatorWindow.isDestroyed()) {
-        operatorWindow.webContents.send('bridge-status', { status: 'error', message: error });
-      }
-    });
-
-    virtualCameraBridgeProcess.on('error', (err) => {
-      console.error(`[VirtualCam Process Error] ${err.message}`);
-      if (operatorWindow && !operatorWindow.isDestroyed()) {
-        operatorWindow.webContents.send('bridge-status', { status: 'error', message: `Process failed to start: ${err.message}` });
-      }
-    });
-
-    virtualCameraBridgeProcess.on('exit', (code) => {
-      console.log(`[VirtualCam Process Exit] Code: ${code}`);
-      if (operatorWindow && !operatorWindow.isDestroyed()) {
-        operatorWindow.webContents.send('bridge-status', { status: 'inactive' });
-      }
-    });
+    startBridge(targetType);
+  }
 
     audienceWindow.on('closed', () => {
       if (virtualCameraBridgeProcess) {
@@ -169,15 +173,14 @@ function createAudienceWindow(viewType = 'audience') {
         virtualCameraBridgeProcess = null;
       }
     });
-  }
 
-  if (isDev) {
-    audienceWindow.loadURL(`http://localhost:3000?view=${viewType}`);
-  } else {
-    audienceWindow.loadFile(path.join(__dirname, '../dist/index.html'), {
-      query: { view: viewType }
-    });
-  }
+    if (isDev) {
+      audienceWindow.loadURL(`http://localhost:3000?view=${viewType}`);
+    } else {
+      audienceWindow.loadFile(path.join(__dirname, '../dist/index.html'), {
+        query: { view: viewType }
+      });
+    }
 }
 
 app.whenReady().then(() => {
@@ -291,12 +294,34 @@ app.whenReady().then(() => {
     return uniqueMedia;
   });
 
-  ipcMain.handle('openExternalDisplay', (event, viewType) => {
+  ipcMain.handle('openExternalDisplay', (event, viewType, targetType = 'obs') => {
     if (!audienceWindow || audienceWindow.isDestroyed()) {
-      createAudienceWindow(viewType);
+      createAudienceWindow(viewType, targetType);
     } else {
       const isZoom = viewType === 'zoom';
-      audienceWindow.setTitle(isZoom ? 'Mediaflow cam' : 'MediaFlow - Audience');
+      const displays = screen.getAllDisplays();
+      const externalDisplay = displays.find(d => d.bounds.x !== 0 || d.bounds.y !== 0);
+
+      if (isZoom) {
+        startBridge(targetType);
+        
+        audienceWindow.setBounds({ x: -2000, y: -2000, width: 1920, height: 1080 });
+        audienceWindow.setFullScreen(false);
+        audienceWindow.setSkipTaskbar(true);
+      } else {
+        const targetBounds = externalDisplay ? externalDisplay.bounds : { x: 100, y: 100, width: 1920, height: 1080 };
+        audienceWindow.setBounds(targetBounds);
+        if (externalDisplay) audienceWindow.setFullScreen(true);
+        audienceWindow.setSkipTaskbar(false);
+        
+        // Kill bridge if switching away from zoom
+        if (virtualCameraBridgeProcess) {
+          virtualCameraBridgeProcess.kill();
+          virtualCameraBridgeProcess = null;
+        }
+      }
+
+      audienceWindow.setTitle(isZoom ? 'MEDIAFLOW_NATIVE_BRIDGE_TARGET' : 'MediaFlow - Audience');
       
       // Update URL if type changed
       if (isDev) {
@@ -307,8 +332,8 @@ app.whenReady().then(() => {
         });
       }
 
+      audienceWindow.show();
       if (!isZoom) {
-        audienceWindow.show();
         audienceWindow.focus();
       }
     }

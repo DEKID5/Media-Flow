@@ -281,7 +281,8 @@ export function OperatorDashboard() {
     bgmSeekTo: undefined,
     isPermissionGranted: false,
     selectedCameraId: '',
-    isMeetingLive: false
+    isMeetingLive: false,
+    vcamTarget: 'obs'
   });
 
   const [mediaFolders, setMediaFolders] = useState<FileSystemDirectoryHandle[]>([]);
@@ -1535,9 +1536,9 @@ export function OperatorDashboard() {
                 <button 
                   onClick={() => {
                     if ((window as any).mediaflow) {
-                      (window as any).mediaflow.openExternalDisplay('zoom');
+                      (window as any).mediaflow.openExternalDisplay('zoom', state.vcamTarget);
                     } else {
-                      window.open('/?view=zoom', 'ZoomFeed', 'width=1280,height=720');
+                      window.open('/?view=zoom', 'ZoomFeed', 'width=1920,height=1080');
                     }
                   }}
                   className={`
@@ -1552,9 +1553,9 @@ export function OperatorDashboard() {
                     <div className="w-1 h-1 rounded-full bg-white" />
                   </div>
                   <span className="flex flex-col items-start leading-none">
-                    <span className="text-white">Broadcast to Zoom</span>
-                    <span className={`text-[7px] mt-1 uppercase tracking-wider font-bold ${isObsDetected ? 'text-blue-400' : 'text-red-400/80'}`}>
-                      {isObsDetected ? '• OBS Virtual Camera Detected' : '• OBS Virtual Camera Not Found'}
+                    <span className="text-white">Broadcast to {state.vcamTarget === 'unity' ? 'Unity Cam' : 'Zoom (OBS)'}</span>
+                    <span className={`text-[7px] mt-1 uppercase tracking-wider font-bold ${isObsDetected || state.vcamTarget === 'unity' ? 'text-blue-400' : 'text-red-400/80'}`}>
+                      {state.vcamTarget === 'unity' ? '• Unity Capture Selected' : (isObsDetected ? '• OBS Virtual Camera Detected' : '• OBS Virtual Camera Not Found')}
                     </span>
                   </span>
                   
@@ -2638,17 +2639,27 @@ export function OperatorDashboard() {
                     </div>
                     <div className="mt-6 p-4 rounded-xl bg-blue-500/10 border border-blue-500/20">
                        <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2 flex items-center gap-2">
-                         <Cast size={12} /> Output to Zoom / OBS
+                         <Cast size={12} /> Output Target
                        </h4>
+                       <div className="flex bg-black/40 p-1 rounded-lg border border-white/5 mb-4">
+                          <button 
+                            onClick={() => setState(s => ({ ...s, vcamTarget: 'obs' }))}
+                            className={`flex-1 py-2 rounded-md text-[9px] font-black uppercase tracking-widest transition-all ${state.vcamTarget === 'obs' ? 'bg-blue-500 text-white shadow-lg' : 'text-white/40 hover:text-white/60'}`}
+                          >
+                            OBS Virtual Cam
+                          </button>
+                          <button 
+                            onClick={() => setState(s => ({ ...s, vcamTarget: 'unity' }))}
+                            className={`flex-1 py-2 rounded-md text-[9px] font-black uppercase tracking-widest transition-all ${state.vcamTarget === 'unity' ? 'bg-blue-500 text-white shadow-lg' : 'text-white/40 hover:text-white/60'}`}
+                          >
+                            Unity Capture
+                          </button>
+                       </div>
                        <p className="text-[9px] text-white/60 leading-relaxed uppercase tracking-tight">
-                         To use this application as a camera in Zoom:
+                         {state.vcamTarget === 'unity' 
+                           ? "Unity Capture is a low-latency driver. Make sure the driver is installed." 
+                           : "To use OBS Virtual Camera, ensure OBS Studio is installed and the Virtual Camera is started."}
                        </p>
-                       <ul className="mt-2 space-y-1 text-[9px] text-white/40 list-disc list-inside uppercase tracking-tighter">
-                         <li>Open the <span className="text-white">Audience View</span> (External Display)</li>
-                         <li>In Zoom, use <span className="text-white">Share Screen</span></li>
-                         <li>Select the <span className="text-white">Audience View</span> window</li>
-                         <li>Check <span className="text-white">Optimize for Video</span></li>
-                       </ul>
                     </div>
                   </div>
                 </section>
