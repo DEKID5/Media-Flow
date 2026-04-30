@@ -1520,14 +1520,14 @@ export function OperatorDashboard() {
             onClick={() => setMonitorMuted(!monitorMuted)}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all text-[10px] font-black uppercase tracking-widest ${
               !monitorMuted 
-                ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)]" 
-                : "bg-white/5 hover:bg-white/10 border-white/10 text-white/30 hover:text-white/50"
+                ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)]' 
+                : 'bg-red-500/10 border-red-500/20 text-red-500/40 hover:text-red-500/60'
             }`}
-            title={monitorMuted ? "Turn on local monitor" : "Turn off local monitor"}
+            title={monitorMuted ? "Unmute local operator speakers" : "Mute local operator speakers"}
           >
-            <Activity size={14} className={!monitorMuted ? "animate-pulse" : ""} />
-            <span>Monitor</span>
-            <div className={`w-1.5 h-1.5 rounded-full ${!monitorMuted ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-white/10"}`} />
+            {monitorMuted ? <VolumeX size={14} /> : <Volume2 size={14} className="animate-pulse" />}
+            <span>Operator</span>
+            <div className={`w-1.5 h-1.5 rounded-full ${!monitorMuted ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-red-500/20'}`} />
           </button>
 
           <AnimatePresence>
