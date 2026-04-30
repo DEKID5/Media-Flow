@@ -23,6 +23,20 @@ TARGET_WIDTH = 1920
 TARGET_HEIGHT = 1080
 FPS = 30
 
+try:
+    ctypes.windll.winmm.timeBeginPeriod(1)
+except Exception:
+    pass
+
+try:
+    ABOVE_NORMAL_PRIORITY_CLASS = 0x00008000
+    ctypes.windll.kernel32.SetPriorityClass(
+        ctypes.windll.kernel32.GetCurrentProcess(),
+        ABOVE_NORMAL_PRIORITY_CLASS
+    )
+except Exception:
+    pass
+
 def fit_frame_to_target(frame, target_width, target_height):
     src_height, src_width = frame.shape[:2]
     if src_width == target_width and src_height == target_height:
@@ -178,6 +192,10 @@ def main():
     except KeyboardInterrupt: pass
     except Exception as e: print(f"FATAL_ERROR: {str(e)}")
     finally:
+        try:
+            ctypes.windll.winmm.timeEndPeriod(1)
+        except Exception:
+            pass
         if cam: cam.__exit__(None, None, None)
 
 if __name__ == '__main__':

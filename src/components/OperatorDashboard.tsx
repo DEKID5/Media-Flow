@@ -266,7 +266,7 @@ export function OperatorDashboard() {
     isPlayingBgm: false,
     timer: { seconds: 0, isRunning: false, duration: 0 },
     previewTimer: false,
-    mixer: { masterVolume: 65, isMuted: false, monitorVolume: 50, isMonitorMuted: false },
+    mixer: { masterVolume: 65, isMuted: false },
     displaySettings: {
       mainDisplay: 'timer',
       secondaryDisplay: 'audience',
@@ -304,6 +304,7 @@ export function OperatorDashboard() {
   const [lastAudienceSignal, setLastAudienceSignal] = useState(0);
   const [bridgeStatus, setBridgeStatus] = useState<{ status: string, device?: string, message?: string }>({ status: 'inactive' });
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
+  const [audioOutputName, setAudioOutputName] = useState('System Default');
   const isObsDetected = useMemo(() => {
     return availableCameras.some(cam => cam.label.toLowerCase().includes('obs'));
   }, [availableCameras]);
@@ -312,7 +313,10 @@ export function OperatorDashboard() {
     const handleDevices = () => {
       navigator.mediaDevices.enumerateDevices().then(devices => {
         const cams = devices.filter(d => d.kind === 'videoinput');
+        const outputs = devices.filter(d => d.kind === 'audiooutput');
+        const defaultOutput = outputs.find(d => d.deviceId === 'default') || outputs[0];
         setAvailableCameras(cams);
+        setAudioOutputName(defaultOutput?.label || 'System Default');
         if (cams.length > 0 && !state.selectedCameraId) {
           setState(s => ({ ...s, selectedCameraId: cams[0].deviceId }));
         }
@@ -1203,6 +1207,26 @@ export function OperatorDashboard() {
     setState(s => ({ ...s, programAsset: null, isProgramPaused: false }));
   };
 
+  const setUnifiedVolume = (volume: number) => {
+    setState(s => ({
+      ...s,
+      mixer: {
+        ...s.mixer,
+        masterVolume: volume
+      }
+    }));
+  };
+
+  const toggleUnifiedMute = () => {
+    setState(s => ({
+      ...s,
+      mixer: {
+        ...s.mixer,
+        isMuted: !s.mixer.isMuted
+      }
+    }));
+  };
+
   useEffect(() => {
     const interval = setInterval(() => {
       if (isAudienceLive && Date.now() - lastAudienceSignal > 5000) {
@@ -1330,9 +1354,10 @@ export function OperatorDashboard() {
               asset={state.bgmAsset}
               id="bgm-monitor"
               autoPlay={state.isPlayingBgm}
-              muted={state.mixer.isMonitorMuted}
-              volume={state.mixer.monitorVolume}
+              muted={state.mixer.isMuted}
+              volume={state.mixer.masterVolume}
               seekTo={state.bgmSeekTo}
+              channelOneOutput={true}
               onEnd={nextBg}
             />
           </div>
@@ -1460,7 +1485,7 @@ export function OperatorDashboard() {
                 : 'bg-white/5 hover:bg-white/10 border-white/10 text-white/50 hover:text-white/70'
             }`}
           >
-            {state.mixer.isMuted && state.mixer.isMonitorMuted 
+            {state.mixer.isMuted
               ? <VolumeX size={14} className="text-red-400" /> 
               : <Volume2 size={14} className="text-blue-400" />
             }
@@ -1485,51 +1510,36 @@ export function OperatorDashboard() {
                   </span>
                 </div>
                 <div className="p-4 space-y-4">
-                  {/* Audience (Program) Volume */}
                   <div className="space-y-2">
                     <div className="flex justify-between items-center text-[9px] font-black uppercase tracking-widest">
-                      <span className="text-emerald-400">Audience (Program)</span>
+                      <span className="text-blue-400">Program Volume</span>
                       <span className="text-white/40 font-mono">{state.mixer.masterVolume}%</span>
                     </div>
                     <div className="flex items-center gap-3">
                       <button 
-                        onClick={() => setState(s => ({ ...s, mixer: { ...s.mixer, isMuted: !s.mixer.isMuted } }))}
+                        onClick={toggleUnifiedMute}
                         className={`p-1.5 rounded-lg transition-colors ${state.mixer.isMuted ? 'bg-red-500/20 text-red-500' : 'bg-white/5 text-white/40 hover:text-white'}`}
                       >
                         {state.mixer.isMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
                       </button>
                       <input 
                         type="range"
-                        className="flex-1 accent-emerald-500 appearance-none bg-white/5 h-1 rounded-full cursor-pointer"
+                        className="flex-1 accent-blue-500 appearance-none bg-white/5 h-1 rounded-full cursor-pointer"
                         min="0" max="100"
                         value={state.mixer.masterVolume}
-                        onChange={(e) => setState(s => ({ ...s, mixer: { ...s.mixer, masterVolume: parseInt(e.target.value) } }))}
+                        onChange={(e) => setUnifiedVolume(parseInt(e.target.value))}
                       />
                     </div>
                   </div>
 
                   <div className="h-px bg-white/5" />
 
-                  {/* Operator (Monitor) Volume */}
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center text-[9px] font-black uppercase tracking-widest">
-                      <span className="text-blue-400">Operator (Monitor)</span>
-                      <span className="text-white/40 font-mono">{state.mixer.monitorVolume}%</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <button 
-                        onClick={() => setState(s => ({ ...s, mixer: { ...s.mixer, isMonitorMuted: !s.mixer.isMonitorMuted } }))}
-                        className={`p-1.5 rounded-lg transition-colors ${state.mixer.isMonitorMuted ? 'bg-red-500/20 text-red-500' : 'bg-white/5 text-white/40 hover:text-white'}`}
-                      >
-                        {state.mixer.isMonitorMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
-                      </button>
-                      <input 
-                        type="range"
-                        className="flex-1 accent-blue-500 appearance-none bg-white/5 h-1 rounded-full cursor-pointer"
-                        min="0" max="100"
-                        value={state.mixer.monitorVolume}
-                        onChange={(e) => setState(s => ({ ...s, mixer: { ...s.mixer, monitorVolume: parseInt(e.target.value) } }))}
-                      />
+                  <div className="rounded-lg border border-white/5 bg-black/30 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[8px] font-black uppercase tracking-[0.2em] text-white/30">Audio Output</span>
+                      <span className="min-w-0 truncate text-right text-[9px] font-mono text-white/60" title={audioOutputName}>
+                        {audioOutputName}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -1760,8 +1770,9 @@ export function OperatorDashboard() {
                           asset={state.programAsset}
                           className="w-full h-full object-contain"
                           autoPlay={!state.isProgramPaused}
-                          muted={state.mixer.isMonitorMuted}
-                          volume={state.mixer.monitorVolume}
+                          muted={state.mixer.isMuted}
+                          volume={state.mixer.masterVolume}
+                          channelOneOutput={true}
                           controls={false}
                           deviceId={state.selectedCameraId}
                           onEnd={handleCut}
@@ -2108,15 +2119,14 @@ export function OperatorDashboard() {
                   </div>
                 </div>
                 <div className="p-4 space-y-4">
-                  {/* Master / Audience Volume */}
                   <div className="space-y-2">
                     <div className="flex justify-between items-center text-[9px] font-black uppercase tracking-widest">
-                      <span className="text-emerald-400">Audience (Program)</span>
+                      <span className="text-blue-400">Program Volume</span>
                       <span className="text-white/40 font-mono">{state.mixer.masterVolume}%</span>
                     </div>
                     <div className="flex items-center gap-3">
                       <button 
-                        onClick={() => setState(s => ({ ...s, mixer: { ...s.mixer, isMuted: !s.mixer.isMuted } }))}
+                        onClick={toggleUnifiedMute}
                         className={`p-2 rounded-lg transition-colors ${state.mixer.isMuted ? 'bg-red-500/20 text-red-500' : 'bg-white/5 text-white/40 hover:text-white'}`}
                       >
                         {state.mixer.isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
@@ -2124,37 +2134,21 @@ export function OperatorDashboard() {
                       <div className="flex-1 h-8 flex items-center">
                        <input 
                          type="range"
-                         className="w-full accent-emerald-500 appearance-none bg-white/5 h-1 rounded-full cursor-pointer"
+                         className="w-full accent-blue-500 appearance-none bg-white/5 h-1 rounded-full cursor-pointer"
                          min="0" max="100"
                          value={state.mixer.masterVolume}
-                         onChange={(e) => setState(s => ({ ...s, mixer: { ...s.mixer, masterVolume: parseInt(e.target.value) } }))}
+                         onChange={(e) => setUnifiedVolume(parseInt(e.target.value))}
                        />
                       </div>
                     </div>
                   </div>
 
-                  {/* Monitor / Operator Volume */}
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center text-[9px] font-black uppercase tracking-widest">
-                      <span className="text-blue-400">Operator (Monitor)</span>
-                      <span className="text-white/40 font-mono">{state.mixer.monitorVolume}%</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <button 
-                        onClick={() => setState(s => ({ ...s, mixer: { ...s.mixer, isMonitorMuted: !s.mixer.isMonitorMuted } }))}
-                        className={`p-2 rounded-lg transition-colors ${state.mixer.isMonitorMuted ? 'bg-red-500/20 text-red-500' : 'bg-white/5 text-white/40 hover:text-white'}`}
-                      >
-                        {state.mixer.isMonitorMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-                      </button>
-                      <div className="flex-1 h-8 flex items-center">
-                       <input 
-                         type="range"
-                         className="w-full accent-blue-500 appearance-none bg-white/5 h-1 rounded-full cursor-pointer"
-                         min="0" max="100"
-                         value={state.mixer.monitorVolume}
-                         onChange={(e) => setState(s => ({ ...s, mixer: { ...s.mixer, monitorVolume: parseInt(e.target.value) } }))}
-                       />
-                      </div>
+                  <div className="rounded-lg border border-white/5 bg-black/30 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[8px] font-black uppercase tracking-[0.2em] text-white/30">Audio Output</span>
+                      <span className="min-w-0 truncate text-right text-[9px] font-mono text-white/60" title={audioOutputName}>
+                        {audioOutputName}
+                      </span>
                     </div>
                   </div>
                 </div>

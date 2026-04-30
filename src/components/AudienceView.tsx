@@ -69,45 +69,10 @@ export function AudienceView() {
 
   useEffect(() => {
     const el = bgmRef.current;
-    if (!el || !state?.bgmAsset || typeof window === 'undefined' || typeof window.AudioContext === 'undefined') return;
+    if (!el || !state?.bgmAsset) return;
 
-    let cancelled = false;
-
-    const ensureChannelOneOutput = async () => {
-      try {
-        if (!bgmAudioGraphRef.current) {
-          const context = new window.AudioContext();
-          const source = context.createMediaElementSource(el);
-          const splitter = context.createChannelSplitter(2);
-          const merger = context.createChannelMerger(2);
-          const gain = context.createGain();
-
-          source.connect(splitter);
-          splitter.connect(merger, 0, 0);
-          splitter.connect(merger, 0, 1);
-          merger.connect(gain);
-          gain.connect(context.destination);
-
-          bgmAudioGraphRef.current = { context, source, splitter, merger, gain };
-        }
-
-        const graph = bgmAudioGraphRef.current;
-        if (!graph || cancelled) return;
-
-        graph.gain.gain.value = state.mixer.isMuted ? 0 : (state.mixer.masterVolume ?? 100) / 100;
-        if (state.isPlayingBgm && graph.context.state === 'suspended') {
-          await graph.context.resume();
-        }
-      } catch (error) {
-        console.warn('AudienceView: channel-one BGM routing failed', error);
-      }
-    };
-
-    void ensureChannelOneOutput();
-
-    return () => {
-      cancelled = true;
-    };
+    el.volume = state.mixer.isMuted ? 0 : (state.mixer.masterVolume ?? 100) / 100;
+    el.muted = false;
   }, [state?.bgmAsset?.id, state?.isPlayingBgm, state?.mixer.isMuted, state?.mixer.masterVolume]);
 
   useEffect(() => {
@@ -163,10 +128,11 @@ export function AudienceView() {
   
   // VCam Mode Logic:
   // - auto: camera when no media, media when media is present
-  // - camera: always show camera (if in zoom mode)
-  // - media: always show media (if present)
-  const isMediaShowing = !!programAsset && state.vcamMode !== 'camera' && programAsset.type !== 'camera';
-  const showCamera = isZoom;
+  // - camera: camera only when program media is not active
+  // - media: keep camera off and show media if present
+  const isProgramMediaActive = isProgramVisible && programAsset.type !== 'camera';
+  const isMediaShowing = isProgramMediaActive;
+  const showCamera = isZoom && !isProgramMediaActive && state.vcamMode !== 'media';
   const showProgramLayer = isProgramVisible && (!isZoom || isMediaShowing);
   const effectivelyLive = isZoom || state.isMeetingLive;
   const zoomMirrorCompensationClass = isZoom ? 'scale-x-[-1]' : '';
@@ -205,37 +171,34 @@ export function AudienceView() {
         )}
 
         {/* Live Camera Feed (Zoom View Only) */}
-        <AnimatePresence>
-          {showCamera && (
-            <motion.div 
-              key="camera-feed"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 1.2, ease: "easeInOut" }}
-              className="absolute inset-0 z-0"
-            >
-              <SmartMedia 
-                asset={{ id: 'live-camera', type: 'camera', name: 'Live Camera' }}
-                className="w-full h-full object-cover"
-                autoPlay={true}
-                muted={true}
-                deviceId={state.selectedCameraId}
-                isZoomView={true}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {showCamera && (
+          <motion.div
+            key="camera-feed"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.35, ease: "easeOut" }}
+            className="absolute inset-0 z-0"
+          >
+            <SmartMedia
+              asset={{ id: 'live-camera', type: 'camera', name: 'Live Camera' }}
+              className="w-full h-full object-cover"
+              autoPlay={true}
+              muted={true}
+              deviceId={state.selectedCameraId}
+              isZoomView={true}
+            />
+          </motion.div>
+        )}
 
         {/* Media Layer (Videos/Images) */}
-        <AnimatePresence mode="popLayout">
+        <AnimatePresence>
           {programAsset && showProgramLayer && (
             <motion.div 
               key={programAsset.id}
-              initial={{ opacity: 0, scale: 1.05 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.8, ease: "easeInOut" }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
               className="absolute inset-0 z-10 flex items-center justify-center bg-black"
             >
               <SmartMedia 

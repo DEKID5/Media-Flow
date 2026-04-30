@@ -30,8 +30,6 @@ export interface TimerState {
 export interface MixerState {
   masterVolume: number;
   isMuted: boolean;
-  monitorVolume: number;
-  isMonitorMuted: boolean;
 }
 
 export interface DisplaySettings {

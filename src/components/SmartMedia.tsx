@@ -17,6 +17,7 @@ export interface SmartMediaProps {
   isThumbnail?: boolean;
   deviceId?: string;
   isZoomView?: boolean; // When true, do NOT mirror the camera (bridge capture is not flipped)
+  channelOneOutput?: boolean;
 }
 
 const CAMERA_ICON = "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?q=80&w=1000&auto=format&fit=crop";
@@ -34,7 +35,8 @@ export function SmartMedia({
   onError, 
   isThumbnail,
   deviceId,
-  isZoomView = false
+  isZoomView = false,
+  channelOneOutput = false
 }: SmartMediaProps) {
   const [url, setUrl] = useState<string | null>(null);
   const isCameraAsset = asset?.type === 'camera';
@@ -133,10 +135,15 @@ export function SmartMedia({
   useEffect(() => {
     const el = videoRef.current || audioRef.current;
     if (el) {
-      el.volume = (volume ?? 100) / 100;
-      el.muted = muted ?? false;
+      if (channelOneOutput && audioGraphRef.current) {
+        el.volume = 1;
+        el.muted = false;
+      } else {
+        el.volume = (volume ?? 100) / 100;
+        el.muted = muted ?? false;
+      }
     }
-  }, [volume, muted, url]);
+  }, [channelOneOutput, volume, muted, url]);
 
   useEffect(() => {
     const el = videoRef.current || audioRef.current;
@@ -163,7 +170,7 @@ export function SmartMedia({
     const el = videoRef.current || audioRef.current;
     if (!el || isThumbnail || isCameraAsset) return;
     if (typeof window === 'undefined' || typeof window.AudioContext === 'undefined') return;
-    if (muted) return;
+    if (!channelOneOutput) return;
 
     let cancelled = false;
 
@@ -181,14 +188,16 @@ export function SmartMedia({
           splitter.connect(merger, 0, 1);
           merger.connect(gain);
           gain.connect(context.destination);
+          gain.gain.value = muted ? 0 : (volume ?? 100) / 100;
 
           audioGraphRef.current = { context, source, splitter, merger, gain };
+          el.volume = 1;
+          el.muted = false;
         }
 
         const graph = audioGraphRef.current;
         if (!graph || cancelled) return;
 
-        graph.gain.gain.value = (volume ?? 100) / 100;
         if (graph.context.state === 'suspended' && autoPlay) {
           await graph.context.resume();
         }
@@ -210,7 +219,18 @@ export function SmartMedia({
         audioGraphRef.current = null;
       }
     };
-  }, [asset?.id, autoPlay, isCameraAsset, isThumbnail, muted, volume, url]);
+  }, [asset?.id, channelOneOutput, isCameraAsset, isThumbnail, url]);
+
+  useEffect(() => {
+    const graph = audioGraphRef.current;
+    if (!graph || !channelOneOutput) return;
+
+    const nextGain = muted ? 0 : (volume ?? 100) / 100;
+    graph.gain.gain.setTargetAtTime(nextGain, graph.context.currentTime, 0.015);
+    if (graph.context.state === 'suspended' && autoPlay) {
+      graph.context.resume().catch(() => {});
+    }
+  }, [autoPlay, channelOneOutput, muted, volume]);
 
   useEffect(() => {
     if (!asset) return;
@@ -465,8 +485,10 @@ export function SmartMedia({
         src={videoSrc} 
         className={`${className} ${cameraMirrorClass}`}
         autoPlay={isThumbnail ? false : autoPlay} 
-        muted={isThumbnail ? true : (asset.type === 'camera' ? true : muted)} 
+        muted={isThumbnail ? true : (asset.type === 'camera' ? true : (channelOneOutput ? false : muted))}
         controls={asset.type === 'camera' ? false : controls}
+        controlsList="nodownload noplaybackrate noremoteplayback"
+        disableRemotePlayback
         onEnded={onEnd}
         onError={onError}
         onLoadedMetadata={(e) => {
@@ -508,7 +530,7 @@ export function SmartMedia({
                 id={id}
                 src={normalizedUrl || ''}
                 autoPlay={autoPlay}
-                muted={muted}
+                muted={channelOneOutput ? false : muted}
                 onEnded={onEnd}
                 onError={onError}
                 preload="auto"
@@ -528,7 +550,7 @@ export function SmartMedia({
         id={id}
         src={normalizedUrl || ''} 
         autoPlay={autoPlay} 
-        muted={muted} 
+        muted={channelOneOutput ? false : muted}
         onEnded={onEnd}
         onError={onError}
         preload="auto"
