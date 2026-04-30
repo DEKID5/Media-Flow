@@ -1520,39 +1520,51 @@ export function OperatorDashboard() {
              >
                <RotateCw size={14} />
              </button>
-                           <button 
-                onClick={() => {
-                  if ((window as any).mediaflow) {
-                    (window as any).mediaflow.openExternalDisplay('zoom');
-                  } else {
-                    window.open('/?view=zoom', 'ZoomFeed', 'width=1280,height=720');
-                  }
-                }}
-                className={`
-                  relative flex items-center gap-3 px-6 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all shadow-2xl overflow-hidden
-                  ${isAudienceLive ? 'bg-zinc-900 text-white border-2 border-blue-500 shadow-blue-500/40' : 'bg-zinc-800 hover:bg-zinc-700 text-white/80 border border-white/10'}
-                `}
-              >
-                {isAudienceLive && (
-                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-white to-blue-500 animate-[shimmer_2s_infinite]" />
-                )}
-                <div className={`w-3 h-3 rounded-full flex items-center justify-center ${isAudienceLive ? 'bg-blue-500 animate-pulse' : 'bg-white/20'}`}>
-                   <div className="w-1 h-1 rounded-full bg-white" />
-                </div>
-                <span className="flex flex-col items-start leading-none">
-                  <span className="text-white">Broadcast to Zoom</span>
-                  <span className={`text-[7px] mt-1 uppercase tracking-wider font-bold ${isObsDetected ? 'text-blue-400' : 'text-red-400/80'}`}>
-                    {isObsDetected ? '• OBS Virtual Camera Detected' : '• OBS Virtual Camera Not Found'}
+             <div className="flex flex-col items-center gap-1">
+                <button 
+                  onClick={() => {
+                    if ((window as any).mediaflow) {
+                      (window as any).mediaflow.openExternalDisplay('zoom');
+                    } else {
+                      window.open('/?view=zoom', 'ZoomFeed', 'width=1280,height=720');
+                    }
+                  }}
+                  className={`
+                    relative flex items-center gap-3 px-6 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all shadow-2xl overflow-hidden
+                    ${isAudienceLive ? 'bg-zinc-900 text-white border-2 border-blue-500 shadow-blue-500/40' : 'bg-zinc-800 hover:bg-zinc-700 text-white/80 border border-white/10'}
+                  `}
+                >
+                  {isAudienceLive && (
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-white to-blue-500 animate-[shimmer_2s_infinite]" />
+                  )}
+                  <div className={`w-3 h-3 rounded-full flex items-center justify-center ${isAudienceLive ? 'bg-blue-500 animate-pulse' : 'bg-white/20'}`}>
+                    <div className="w-1 h-1 rounded-full bg-white" />
+                  </div>
+                  <span className="flex flex-col items-start leading-none">
+                    <span className="text-white">Broadcast to Zoom</span>
+                    <span className={`text-[7px] mt-1 uppercase tracking-wider font-bold ${isObsDetected ? 'text-blue-400' : 'text-red-400/80'}`}>
+                      {isObsDetected ? '• OBS Virtual Camera Detected' : '• OBS Virtual Camera Not Found'}
+                    </span>
                   </span>
-                </span>
-                
-                <style>{`
-                  @keyframes shimmer {
-                    0% { transform: translateX(-100%); }
-                    100% { transform: translateX(100%); }
-                  }
-                `}</style>
-              </button>
+                  
+                  <style>{`
+                    @keyframes shimmer {
+                      0% { transform: translateX(-100%); }
+                      100% { transform: translateX(100%); }
+                    }
+                  `}</style>
+                </button>
+                {!isObsDetected && (
+                  <a 
+                    href="https://github.com/miaulightouch/obs-virtual-cam" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-[7px] text-amber-500/60 hover:text-amber-400 underline font-black uppercase tracking-widest transition-colors"
+                  >
+                    Install Driver
+                  </a>
+                )}
+              </div>
              <button 
                onClick={() => {
                  if ((window as any).mediaflow) {
