@@ -1,0 +1,593 @@
+2026-05-12 03:59:46.589 qrc:/MediaFlow/qml/OperatorDashboard.qml:644: TypeError: Cannot read property 'timerSeconds' of null
+2026-05-12 03:59:46.596 qrc:/MediaFlow/qml/OperatorDashboard.qml:609: TypeError: Cannot read property 'meetingSchedule' of null
+2026-05-12 03:59:46.598 qrc:/MediaFlow/qml/OperatorDashboard.qml:568: TypeError: Cannot read property 'mediaLibrary' of null
+2026-05-12 03:59:46.602 qrc:/MediaFlow/qml/OperatorDashboard.qml:124: TypeError: Cannot read property 'meetingType' of null
+2026-05-12 03:59:46.611 qrc:/MediaFlow/qml/OperatorDashboard.qml:117: TypeError: Cannot read property 'meetingType' of null
+2026-05-12 03:59:46.617 qrc:/MediaFlow/qml/OperatorDashboard.qml:104: TypeError: Cannot read property 'meetingType' of null
+2026-05-13 20:55:15.120 qrc:/MediaFlow/qml/OperatorDashboard.qml:472:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 20:55:15.121 qrc:/MediaFlow/qml/OperatorDashboard.qml:472:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 20:55:15.126 qrc:/MediaFlow/qml/OperatorDashboard.qml:232:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 20:55:15.312 qrc:/MediaFlow/qml/OperatorDashboard.qml:419: TypeError: Cannot read property 'associatedMediaIds' of undefined
+2026-05-13 20:55:15.325 qrc:/MediaFlow/qml/OperatorDashboard.qml:419: TypeError: Cannot read property 'associatedMediaIds' of undefined
+2026-05-13 20:55:15.328 qrc:/MediaFlow/qml/OperatorDashboard.qml:419: TypeError: Cannot read property 'associatedMediaIds' of undefined
+2026-05-13 20:55:15.623 qrc:/MediaFlow/qml/OperatorDashboard.qml:419: TypeError: Cannot read property 'associatedMediaIds' of undefined
+2026-05-13 20:55:15.623 qrc:/MediaFlow/qml/OperatorDashboard.qml:419: TypeError: Cannot read property 'associatedMediaIds' of undefined
+2026-05-13 20:55:15.624 qrc:/MediaFlow/qml/OperatorDashboard.qml:419: TypeError: Cannot read property 'associatedMediaIds' of undefined
+2026-05-13 20:55:15.800 MediaExtractor: Directory does not exist: "C:/Users/SETH/AppData/Local/Packages/48C9FCC0.Watchtower_xzhgwqvnvmbce/LocalState/Publications"
+2026-05-13 20:55:15.801 MediaExtractor: Directory does not exist: "C:/Users/SETH/AppData/Local/Packages/48C9FCC0.Watchtower_xzhgwqvnvmbce/LocalState/Data/Media"
+2026-05-13 20:55:15.801 MediaExtractor: Scanning directory: "C:/Users/SETH/AppData/Local/Packages/WatchtowerBibleandTractSo.45909CDBADF3C_5rz59y55nfz3e/LocalState/Publications"
+2026-05-13 20:55:16.803 BroadcastController: BGM scan found 35 tracks
+2026-05-13 20:55:17.425 MediaExtractor: Directory does not exist: "C:/Users/SETH/AppData/Local/Packages/WatchtowerBibleandTractSo.45909CDBADF3C_5rz59y55nfz3e/LocalState/Data/Media"
+2026-05-13 20:55:17.426 MediaExtractor: Scanning directory: "C:/Users/SETH/Videos/JWLibrary"
+2026-05-13 20:55:17.681 MediaExtractor: Directory does not exist: "C:/Users/SETH/Movies/JWLibrary"
+2026-05-13 20:55:17.716 MediaExtractor: QFileSystemWatcher active on 10 directories
+2026-05-13 20:55:21.489 VideoThumbnailProvider: Failed to load "C:/Users/SETH/Videos/JWLibrary/jwb-101_EW_07_r720P.mp4"
+2026-05-13 20:55:26.027 VideoThumbnailProvider: Timeout on "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_012_r720P.mp4"
+2026-05-13 20:55:26.468 VideoThumbnailProvider: Failed to load "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_012_r720P.mp4"
+2026-05-13 20:55:30.528 VideoThumbnailProvider: Timeout on "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_038_r720P.mp4"
+2026-05-13 20:55:30.979 VideoThumbnailProvider: Failed to load "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_038_r720P.mp4"
+2026-05-13 20:55:35.049 VideoThumbnailProvider: Timeout on "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_058_r720P.mp4"
+2026-05-13 20:55:35.441 VideoThumbnailProvider: Failed to load "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_058_r720P.mp4"
+2026-05-13 20:55:39.503 VideoThumbnailProvider: Timeout on "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_086_r720P.mp4"
+2026-05-13 20:55:39.887 VideoThumbnailProvider: Failed to load "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_086_r720P.mp4"
+2026-05-13 20:55:43.951 VideoThumbnailProvider: Timeout on "C:/Users/SETH/Videos/JWLibrary/sjjm_E_002_r720P.mp4"
+2026-05-13 20:55:44.374 VideoThumbnailProvider: Failed to load "C:/Users/SETH/Videos/JWLibrary/sjjm_E_002_r720P.mp4"
+2026-05-13 20:55:46.660 VideoThumbnailProvider: Failed to load "C:/Users/SETH/Videos/JWLibrary/sjjm_E_003_r720P.mp4"
+2026-05-13 20:57:05.517 qrc:/MediaFlow/qml/OperatorDashboard.qml:419: TypeError: Cannot read property 'associatedMediaIds' of undefined
+2026-05-13 20:57:20.934 qrc:/MediaFlow/qml/OperatorDashboard.qml:419: TypeError: Cannot read property 'associatedMediaIds' of undefined
+2026-05-13 20:58:37.733 qrc:/MediaFlow/qml/OperatorDashboard.qml:419: TypeError: Cannot read property 'associatedMediaIds' of undefined
+2026-05-13 20:58:37.735 qrc:/MediaFlow/qml/OperatorDashboard.qml:419: TypeError: Cannot read property 'associatedMediaIds' of undefined
+2026-05-13 20:58:37.736 qrc:/MediaFlow/qml/OperatorDashboard.qml:419: TypeError: Cannot read property 'associatedMediaIds' of undefined
+2026-05-13 20:58:37.741 qrc:/MediaFlow/qml/OperatorDashboard.qml:419: TypeError: Cannot read property 'associatedMediaIds' of undefined
+2026-05-13 20:58:37.741 qrc:/MediaFlow/qml/OperatorDashboard.qml:419: TypeError: Cannot read property 'associatedMediaIds' of undefined
+2026-05-13 20:58:55.251 qrc:/MediaFlow/qml/components/MediaSourcePanel.qml:86:13: Unable to assign QJSValue to QObject*
+2026-05-13 21:17:37.153 qrc:/MediaFlow/qml/OperatorDashboard.qml:472:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 21:17:37.157 qrc:/MediaFlow/qml/OperatorDashboard.qml:472:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 21:17:37.170 qrc:/MediaFlow/qml/OperatorDashboard.qml:232:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 21:17:37.604 qrc:/MediaFlow/qml/OperatorDashboard.qml:419: TypeError: Cannot read property 'associatedMediaIds' of undefined
+2026-05-13 21:17:37.612 qrc:/MediaFlow/qml/OperatorDashboard.qml:419: TypeError: Cannot read property 'associatedMediaIds' of undefined
+2026-05-13 21:17:37.617 qrc:/MediaFlow/qml/OperatorDashboard.qml:419: TypeError: Cannot read property 'associatedMediaIds' of undefined
+2026-05-13 21:17:38.313 BroadcastController: BGM scan found 35 tracks
+2026-05-13 21:17:38.349 qrc:/MediaFlow/qml/OperatorDashboard.qml:419: TypeError: Cannot read property 'associatedMediaIds' of undefined
+2026-05-13 21:17:38.351 qrc:/MediaFlow/qml/OperatorDashboard.qml:419: TypeError: Cannot read property 'associatedMediaIds' of undefined
+2026-05-13 21:17:38.353 qrc:/MediaFlow/qml/OperatorDashboard.qml:419: TypeError: Cannot read property 'associatedMediaIds' of undefined
+2026-05-13 21:23:03.315 qrc:/MediaFlow/qml/OperatorDashboard.qml:472:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 21:23:03.316 qrc:/MediaFlow/qml/OperatorDashboard.qml:472:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 21:23:03.320 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:23:03.335 qrc:/MediaFlow/qml/OperatorDashboard.qml:232:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 21:23:03.719 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:23:03.725 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:23:04.465 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:23:04.556 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:23:04.565 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:23:04.639 BroadcastController: BGM scan found 35 tracks
+2026-05-13 21:23:23.291 VideoThumbnailProvider: Timeout on "C:/Users/SETH/Videos/JWLibrary/sjjm_E_002_r720P.mp4"
+2026-05-13 21:23:23.393 VideoThumbnailProvider: Failed to load "C:/Users/SETH/Videos/JWLibrary/sjjm_E_002_r720P.mp4"
+2026-05-13 21:23:28.941 BroadcastEngine: Preview = "sjjm_E_002_r720P"
+2026-05-13 21:23:31.859 BroadcastEngine: TAKE LIVE → "sjjm_E_002_r720P"
+2026-05-13 21:24:04.843 BroadcastEngine: CUT LIVE → clearing (same asset already live)
+2026-05-13 21:24:04.844 BroadcastEngine: CLEAR LIVE → standby
+2026-05-13 21:24:08.914 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:24:19.156 BroadcastEngine: Preview = "sjjm_EW_038_r720P"
+2026-05-13 21:24:21.322 BroadcastEngine: TAKE LIVE → "sjjm_EW_038_r720P"
+2026-05-13 21:24:30.426 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:24:30.543 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:24:30.661 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:24:31.494 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:24:31.551 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:24:32.781 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:24:32.794 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:24:32.808 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:24:32.822 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:24:32.836 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:24:33.148 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:24:33.246 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:24:33.287 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:24:33.358 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:24:33.942 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:27:13.971 BroadcastEngine: CLEAR LIVE → standby
+2026-05-13 21:31:03.211 BroadcastEngine: TAKE LIVE → "sjjm_EW_038_r720P"
+2026-05-13 21:31:06.172 BroadcastEngine: CUT LIVE → clearing (same asset already live)
+2026-05-13 21:31:06.173 BroadcastEngine: CLEAR LIVE → standby
+2026-05-13 21:31:15.710 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:31:15.828 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:31:16.231 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:31:16.362 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:32:13.404 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:32:14.751 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:32:16.182 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:33:06.383 The cached device pixel ratio value was stale on window expose.  Please file a QTBUG which explains how to reproduce.
+2026-05-13 21:33:33.740 AudienceWindow opened on screen: "\\\\.\\DISPLAY1"
+2026-05-13 21:35:56.149 BroadcastEngine: TAKE LIVE → "sjjm_EW_038_r720P"
+2026-05-13 21:35:56.156 qrc:/MediaFlow/qml/AudienceWindow.qml:46:5: QML QQuickImage: Error decoding: file:///C:/Users/SETH/Videos/JWLibrary/sjjm_EW_038_r720P.mp4: Unsupported image format
+2026-05-13 21:35:58.552 BroadcastEngine: CUT LIVE → clearing (same asset already live)
+2026-05-13 21:35:58.553 BroadcastEngine: CLEAR LIVE → standby
+2026-05-13 21:36:16.686 BroadcastEngine: TAKE LIVE → "sjjm_EW_038_r720P"
+2026-05-13 21:36:16.693 qrc:/MediaFlow/qml/AudienceWindow.qml:46:5: QML QQuickImage: Error decoding: file:///C:/Users/SETH/Videos/JWLibrary/sjjm_EW_038_r720P.mp4: Unsupported image format
+2026-05-13 21:36:26.859 qrc:/MediaFlow/qml/AudienceWindow.qml:46:5: QML QQuickImage: Error decoding: file:///C:/Users/SETH/Videos/JWLibrary/sjjm_EW_038_r720P.mp4: Unsupported image format
+2026-05-13 21:37:26.597 BroadcastEngine: CUT LIVE → clearing (same asset already live)
+2026-05-13 21:37:26.597 BroadcastEngine: CLEAR LIVE → standby
+2026-05-13 21:39:07.642 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:39:07.731 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:39:07.843 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:39:08.655 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:39:08.753 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:39:08.822 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:39:09.412 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:39:09.420 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:39:09.510 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:39:09.517 qrc:/MediaFlow/qml/OperatorDashboard.qml:418:45: QML Repeater: Binding loop detected for property "model":
+qrc:/MediaFlow/qml/OperatorDashboard.qml:419:49
+2026-05-13 21:39:40.834 qrc:/MediaFlow/qml/OperatorDashboard.qml:521:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 21:39:40.836 qrc:/MediaFlow/qml/OperatorDashboard.qml:521:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 21:39:40.841 qrc:/MediaFlow/qml/OperatorDashboard.qml:232:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 21:39:42.520 BroadcastController: BGM scan found 35 tracks
+2026-05-13 21:39:58.400 VideoThumbnailProvider: Timeout on "C:/Users/SETH/Videos/JWLibrary/sjjm_E_002_r720P.mp4"
+2026-05-13 21:39:58.443 VideoThumbnailProvider: Failed to load "C:/Users/SETH/Videos/JWLibrary/sjjm_E_002_r720P.mp4"
+2026-05-13 21:40:12.928 VideoThumbnailProvider: Timeout on "C:/Users/SETH/Videos/JWLibrary/sjjm_E_002_r720P.mp4"
+2026-05-13 21:40:12.969 VideoThumbnailProvider: Failed to load "C:/Users/SETH/Videos/JWLibrary/sjjm_E_002_r720P.mp4"
+2026-05-13 21:43:24.276 qrc:/MediaFlow/qml/OperatorDashboard.qml:521:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 21:43:24.276 qrc:/MediaFlow/qml/OperatorDashboard.qml:521:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 21:43:24.283 qrc:/MediaFlow/qml/OperatorDashboard.qml:232:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 21:43:25.921 BroadcastController: BGM scan found 35 tracks
+2026-05-13 21:43:41.698 VideoThumbnailProvider: Timeout on "C:/Users/SETH/Videos/JWLibrary/sjjm_E_002_r720P.mp4"
+2026-05-13 21:43:41.741 VideoThumbnailProvider: Failed to load "C:/Users/SETH/Videos/JWLibrary/sjjm_E_002_r720P.mp4"
+2026-05-13 21:45:07.604 BroadcastEngine: Preview = "jwb-101_EW_07_r720P"
+2026-05-13 21:45:09.209 BroadcastEngine: TAKE LIVE → "jwb-101_EW_07_r720P"
+2026-05-13 21:45:32.442 AudienceWindow opened on screen: "\\\\.\\DISPLAY1"
+2026-05-13 21:45:32.551 qrc:/MediaFlow/qml/AudienceWindow.qml:46:5: QML QQuickImage: Error decoding: file:///C:/Users/SETH/Videos/JWLibrary/jwb-101_EW_07_r720P.mp4: Unsupported image format
+2026-05-13 21:45:43.836 BroadcastEngine: CUT LIVE → clearing (same asset already live)
+2026-05-13 21:45:43.836 BroadcastEngine: CLEAR LIVE → standby
+2026-05-13 21:49:02.196 qrc:/MediaFlow/qml/OperatorDashboard.qml:521:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 21:49:02.208 qrc:/MediaFlow/qml/OperatorDashboard.qml:521:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 21:49:02.226 qrc:/MediaFlow/qml/OperatorDashboard.qml:232:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 21:49:03.878 BroadcastController: BGM scan found 35 tracks
+2026-05-13 21:49:43.624 BroadcastEngine: Preview = "sjjm_E_002_r720P"
+2026-05-13 21:49:45.091 BroadcastEngine: TAKE LIVE → "sjjm_E_002_r720P"
+2026-05-13 21:49:47.924 BroadcastEngine: CUT LIVE → clearing (same asset already live)
+2026-05-13 21:49:47.925 BroadcastEngine: CLEAR LIVE → standby
+2026-05-13 21:55:48.118 qrc:/MediaFlow/qml/OperatorDashboard.qml:545:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 21:55:48.120 qrc:/MediaFlow/qml/OperatorDashboard.qml:545:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 21:55:48.125 qrc:/MediaFlow/qml/OperatorDashboard.qml:256:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 21:55:49.767 BroadcastController: BGM scan found 35 tracks
+2026-05-13 21:57:15.516 BroadcastEngine: Preview = "jwb-101_EW_07_r720P"
+2026-05-13 21:58:03.976 qrc:/MediaFlow/qml/OperatorDashboard.qml:545:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 21:58:03.976 qrc:/MediaFlow/qml/OperatorDashboard.qml:545:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 21:58:03.983 qrc:/MediaFlow/qml/OperatorDashboard.qml:256:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 21:58:05.612 BroadcastController: BGM scan found 35 tracks
+2026-05-13 21:58:10.119 AudienceWindow projected to screen: "HISENSE" Geometry: QRect(1920,0 1280x720)
+2026-05-13 21:58:17.919 AudienceWindow projected to screen: "HISENSE" Geometry: QRect(1920,0 1280x720)
+2026-05-13 21:58:21.337 AudienceWindow projected to screen: "HISENSE" Geometry: QRect(1920,0 1280x720)
+2026-05-13 21:58:26.042 BroadcastEngine: Preview = "sjjm_E_002_r720P"
+2026-05-13 21:58:28.419 BroadcastEngine: TAKE LIVE → "sjjm_E_002_r720P"
+2026-05-13 21:58:28.426 qrc:/MediaFlow/qml/AudienceWindow.qml:49:5: QML QQuickImage: Error decoding: file:///C:/Users/SETH/Videos/JWLibrary/sjjm_E_002_r720P.mp4: Unsupported image format
+2026-05-13 21:58:52.513 BroadcastEngine: CLEAR LIVE → standby
+2026-05-13 21:58:52.735 BroadcastEngine: TAKE LIVE → "sjjm_E_002_r720P"
+2026-05-13 21:58:52.738 qrc:/MediaFlow/qml/AudienceWindow.qml:49:5: QML QQuickImage: Error decoding: file:///C:/Users/SETH/Videos/JWLibrary/sjjm_E_002_r720P.mp4: Unsupported image format
+2026-05-13 22:00:58.808 BroadcastEngine: Preview = "jwb-101_EW_07_r720P"
+2026-05-13 22:01:01.128 BroadcastEngine: TAKE LIVE → "jwb-101_EW_07_r720P"
+2026-05-13 22:01:01.130 qrc:/MediaFlow/qml/AudienceWindow.qml:49:5: QML QQuickImage: Error decoding: file:///C:/Users/SETH/Videos/JWLibrary/jwb-101_EW_07_r720P.mp4: Unsupported image format
+2026-05-13 22:03:50.249 BroadcastEngine: Preview = "sjjm_E_002_r720P"
+2026-05-13 22:03:52.424 BroadcastEngine: TAKE LIVE → "sjjm_E_002_r720P"
+2026-05-13 22:03:52.430 qrc:/MediaFlow/qml/AudienceWindow.qml:49:5: QML QQuickImage: Error decoding: file:///C:/Users/SETH/Videos/JWLibrary/sjjm_E_002_r720P.mp4: Unsupported image format
+2026-05-13 22:04:17.209 MediaFlow: Song not found locally: "sjjm_E_049"
+2026-05-13 22:06:06.168 QFont::setPointSize: Point size <= 0 (0), must be greater than 0
+2026-05-13 22:06:34.946 AudienceWindow projected to screen: "HISENSE" Geometry: QRect(1920,0 1280x720)
+2026-05-13 22:06:51.683 BroadcastEngine: CLEAR LIVE → standby
+2026-05-13 22:07:47.278 AudienceWindow projected to screen: "HISENSE" Geometry: QRect(1920,0 1280x720)
+2026-05-13 22:12:42.973 qrc:/MediaFlow/qml/OperatorDashboard.qml:545:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 22:12:42.975 qrc:/MediaFlow/qml/OperatorDashboard.qml:545:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 22:12:42.988 qrc:/MediaFlow/qml/OperatorDashboard.qml:256:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 22:13:01.222 BroadcastEngine: Preview = "sjjm_E_002_r720P"
+2026-05-13 22:27:15.973 qrc:/MediaFlow/qml/OperatorDashboard.qml:560:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 22:27:15.975 qrc:/MediaFlow/qml/OperatorDashboard.qml:560:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 22:27:15.994 qrc:/MediaFlow/qml/OperatorDashboard.qml:271:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 22:27:16.460 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot call method 'toUpperCase' of undefined
+2026-05-13 22:27:16.504 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot call method 'toUpperCase' of undefined
+2026-05-13 22:27:16.508 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot call method 'toUpperCase' of undefined
+2026-05-13 22:27:17.385 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot read property 'toUpperCase' of undefined
+2026-05-13 22:27:17.387 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot read property 'toUpperCase' of undefined
+2026-05-13 22:27:17.388 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot read property 'toUpperCase' of undefined
+2026-05-13 22:27:42.296 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot read property 'toUpperCase' of undefined
+2026-05-13 22:27:44.374 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot read property 'toUpperCase' of undefined
+2026-05-13 22:27:46.784 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot read property 'toUpperCase' of undefined
+2026-05-13 22:27:48.188 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot read property 'toUpperCase' of undefined
+2026-05-13 22:27:49.619 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot read property 'toUpperCase' of undefined
+2026-05-13 22:27:49.745 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot read property 'toUpperCase' of undefined
+2026-05-13 22:27:57.596 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot read property 'toUpperCase' of undefined
+2026-05-13 22:27:57.651 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot read property 'toUpperCase' of undefined
+2026-05-13 22:27:57.755 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot read property 'toUpperCase' of undefined
+2026-05-13 22:28:00.978 BroadcastEngine: Cannot cut — no preview.
+2026-05-13 22:28:00.982 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot read property 'toUpperCase' of undefined
+2026-05-13 22:28:00.984 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot read property 'toUpperCase' of undefined
+2026-05-13 22:28:00.985 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot read property 'toUpperCase' of undefined
+2026-05-13 22:28:00.997 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot read property 'toUpperCase' of undefined
+2026-05-13 22:28:00.999 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot read property 'toUpperCase' of undefined
+2026-05-13 22:28:00.999 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot read property 'toUpperCase' of undefined
+2026-05-13 22:28:07.273 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot read property 'toUpperCase' of undefined
+2026-05-13 22:28:07.350 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot read property 'toUpperCase' of undefined
+2026-05-13 22:28:07.398 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot read property 'toUpperCase' of undefined
+2026-05-13 22:28:07.461 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot read property 'toUpperCase' of undefined
+2026-05-13 22:28:07.773 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot read property 'toUpperCase' of undefined
+2026-05-13 22:28:08.085 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot read property 'toUpperCase' of undefined
+2026-05-13 22:28:08.620 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot read property 'toUpperCase' of undefined
+2026-05-13 22:28:08.662 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot read property 'toUpperCase' of undefined
+2026-05-13 22:28:08.732 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot read property 'toUpperCase' of undefined
+2026-05-13 22:28:08.767 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot read property 'toUpperCase' of undefined
+2026-05-13 22:28:08.836 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot read property 'toUpperCase' of undefined
+2026-05-13 22:28:08.905 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot read property 'toUpperCase' of undefined
+2026-05-13 22:28:09.712 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot read property 'toUpperCase' of undefined
+2026-05-13 22:28:09.864 qrc:/MediaFlow/qml/OperatorDashboard.qml:447: TypeError: Cannot read property 'toUpperCase' of undefined
+2026-05-13 22:28:17.262 ThumbnailJob: ffmpeg timeout for "C:/Users/SETH/Videos/JWLibrary/sjjm_E_002_r720P.mp4"
+2026-05-13 22:28:19.349 BroadcastEngine: Preview = "Song 2"
+2026-05-13 22:32:30.792 qrc:/MediaFlow/qml/OperatorDashboard.qml:560:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 22:32:30.792 qrc:/MediaFlow/qml/OperatorDashboard.qml:560:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 22:32:30.814 qrc:/MediaFlow/qml/OperatorDashboard.qml:271:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 22:38:56.407 qrc:/MediaFlow/qml/OperatorDashboard.qml:570:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 22:38:56.408 qrc:/MediaFlow/qml/OperatorDashboard.qml:570:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 22:38:56.434 qrc:/MediaFlow/qml/OperatorDashboard.qml:271:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 22:39:37.872 qrc:/MediaFlow/qml/components/MediaSourcePanel.qml:219:9: Unable to assign QJSValue to QObject*
+2026-05-13 22:42:53.641 qrc:/MediaFlow/qml/OperatorDashboard.qml:573:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 22:42:53.641 qrc:/MediaFlow/qml/OperatorDashboard.qml:573:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 22:42:53.663 qrc:/MediaFlow/qml/OperatorDashboard.qml:271:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 22:43:00.238 BroadcastEngine: Cannot cut — no preview.
+2026-05-13 22:43:31.315 BroadcastEngine: Preview = "Song 2"
+2026-05-13 22:43:45.141 BroadcastEngine: TAKE LIVE → "Song 2"
+2026-05-13 22:43:47.504 BroadcastEngine: CUT LIVE → clearing (same asset already live)
+2026-05-13 22:43:47.504 BroadcastEngine: CLEAR LIVE → standby
+2026-05-13 22:45:23.979 BroadcastEngine: CUT LIVE → "Song 2"
+2026-05-13 22:45:25.723 BroadcastEngine: CUT LIVE → clearing (same asset already live)
+2026-05-13 22:45:25.723 BroadcastEngine: CLEAR LIVE → standby
+2026-05-13 22:48:54.329 Retrying to obtain clipboard.
+2026-05-13 22:50:44.235 qrc:/MediaFlow/qml/OperatorDashboard.qml:573:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 22:50:44.235 qrc:/MediaFlow/qml/OperatorDashboard.qml:573:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 22:50:44.260 qrc:/MediaFlow/qml/OperatorDashboard.qml:271:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 22:50:54.680 BroadcastEngine: Preview = "Song 2"
+2026-05-13 22:51:00.606 BroadcastEngine: TAKE LIVE → "Song 2"
+2026-05-13 22:51:03.016 BroadcastEngine: CUT LIVE (Fade Stop)
+2026-05-13 22:51:03.017 BroadcastEngine: CLEAR LIVE → standby
+2026-05-13 22:51:05.600 BroadcastEngine: CUT LIVE (Fade Stop)
+2026-05-13 22:51:05.601 BroadcastEngine: CLEAR LIVE → standby
+2026-05-13 22:51:06.511 BroadcastEngine: CUT LIVE (Fade Stop)
+2026-05-13 22:51:06.511 BroadcastEngine: CLEAR LIVE → standby
+2026-05-13 22:51:06.719 BroadcastEngine: CUT LIVE (Fade Stop)
+2026-05-13 22:51:06.720 BroadcastEngine: CLEAR LIVE → standby
+2026-05-13 22:51:06.956 BroadcastEngine: CUT LIVE (Fade Stop)
+2026-05-13 22:51:06.956 BroadcastEngine: CLEAR LIVE → standby
+2026-05-13 22:56:06.128 qrc:/MediaFlow/qml/OperatorDashboard.qml:605:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 22:56:06.129 qrc:/MediaFlow/qml/OperatorDashboard.qml:605:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 22:56:06.153 qrc:/MediaFlow/qml/OperatorDashboard.qml:271:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 22:56:30.919 Retrying to obtain clipboard.
+2026-05-13 22:58:22.336 Retrying to obtain clipboard.
+2026-05-13 22:59:04.050 BroadcastEngine: Preview = "sjjm_EW_070_r720P"
+2026-05-13 22:59:08.161 BroadcastEngine: TAKE LIVE → "sjjm_EW_070_r720P"
+2026-05-13 22:59:54.009 BroadcastEngine: CUT LIVE (Fade Stop)
+2026-05-13 22:59:54.010 BroadcastEngine: CLEAR LIVE → standby
+2026-05-13 23:00:55.836 qrc:/MediaFlow/qml/OperatorDashboard.qml:605:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:00:55.837 qrc:/MediaFlow/qml/OperatorDashboard.qml:605:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:00:55.862 qrc:/MediaFlow/qml/OperatorDashboard.qml:271:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 23:01:01.323 BroadcastEngine: CUT LIVE (Fade Stop)
+2026-05-13 23:01:01.324 BroadcastEngine: CLEAR LIVE → standby
+2026-05-13 23:01:16.413 BroadcastEngine: Preview = "Song 2"
+2026-05-13 23:01:34.415 BroadcastEngine: Preview = "202026082_univ_sqr"
+2026-05-13 23:01:36.505 BroadcastEngine: TAKE LIVE → "202026082_univ_sqr"
+2026-05-13 23:01:39.161 BroadcastEngine: CUT LIVE (Fade Stop)
+2026-05-13 23:01:39.161 BroadcastEngine: CLEAR LIVE → standby
+2026-05-13 23:01:40.514 BroadcastEngine: TAKE LIVE → "202026082_univ_sqr"
+2026-05-13 23:01:42.432 BroadcastEngine: CUT LIVE (Fade Stop)
+2026-05-13 23:01:42.432 BroadcastEngine: CLEAR LIVE → standby
+2026-05-13 23:03:17.805 qrc:/MediaFlow/qml/OperatorDashboard.qml:605:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:03:17.805 qrc:/MediaFlow/qml/OperatorDashboard.qml:605:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:03:17.820 qrc:/MediaFlow/qml/OperatorDashboard.qml:271:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 23:04:28.984 BroadcastEngine: CUT LIVE (Fade Stop)
+2026-05-13 23:04:28.984 BroadcastEngine: CLEAR LIVE → standby
+2026-05-13 23:04:58.333 qrc:/MediaFlow/qml/OperatorDashboard.qml:605:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:04:58.335 qrc:/MediaFlow/qml/OperatorDashboard.qml:605:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:04:58.354 qrc:/MediaFlow/qml/OperatorDashboard.qml:271:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 23:05:05.618 BroadcastEngine: CUT LIVE (Fade Stop)
+2026-05-13 23:05:05.619 BroadcastEngine: CLEAR LIVE → standby
+2026-05-13 23:05:14.939 NativeThumbnailGenerator: Processing "C:/Users/SETH/Videos/JWLibrary/jwb-101_EW_07_r720P.mp4"
+2026-05-13 23:05:15.155 NativeThumbnailGenerator: Captured at 60018 ms
+2026-05-13 23:06:33.791 BroadcastEngine: Preview = "jwb-101_EW_07_r720P"
+2026-05-13 23:06:35.523 BroadcastEngine: TAKE LIVE → "jwb-101_EW_07_r720P"
+2026-05-13 23:06:40.477 BroadcastEngine: CUT LIVE (Fade Stop)
+2026-05-13 23:06:40.477 BroadcastEngine: CLEAR LIVE → standby
+2026-05-13 23:07:11.552 Retrying to obtain clipboard.
+2026-05-13 23:07:33.152 qrc:/MediaFlow/qml/OperatorDashboard.qml:605:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:07:33.153 qrc:/MediaFlow/qml/OperatorDashboard.qml:605:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:07:33.170 qrc:/MediaFlow/qml/OperatorDashboard.qml:271:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 23:11:33.103 qrc:/MediaFlow/qml/OperatorDashboard.qml:605:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:11:33.103 qrc:/MediaFlow/qml/OperatorDashboard.qml:605:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:11:33.118 qrc:/MediaFlow/qml/OperatorDashboard.qml:271:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 23:11:42.983 BroadcastEngine: CUT LIVE (Fade Stop)
+2026-05-13 23:11:42.985 BroadcastEngine: CLEAR LIVE → standby
+2026-05-13 23:12:32.100 BroadcastEngine: Preview = "jwb-101_EW_07_r720P"
+2026-05-13 23:13:44.562 BroadcastEngine: TAKE LIVE → "jwb-101_EW_07_r720P"
+2026-05-13 23:13:52.650 BroadcastEngine: Preview = "Song 2"
+2026-05-13 23:14:09.784 BroadcastEngine: TAKE LIVE → "Song 2"
+2026-05-13 23:14:12.972 BroadcastEngine: CUT LIVE (Fade Stop)
+2026-05-13 23:14:12.972 BroadcastEngine: CLEAR LIVE → standby
+2026-05-13 23:14:14.202 BroadcastEngine: CUT LIVE (Fade Stop)
+2026-05-13 23:14:14.202 BroadcastEngine: CLEAR LIVE → standby
+2026-05-13 23:14:15.278 BroadcastEngine: CUT LIVE (Fade Stop)
+2026-05-13 23:14:15.278 BroadcastEngine: CLEAR LIVE → standby
+2026-05-13 23:14:17.098 BroadcastEngine: TAKE LIVE → "Song 2"
+2026-05-13 23:14:19.614 BroadcastEngine: CUT LIVE (Fade Stop)
+2026-05-13 23:14:19.615 BroadcastEngine: CLEAR LIVE → standby
+2026-05-13 23:14:22.170 BroadcastEngine: TAKE LIVE → "Song 2"
+2026-05-13 23:14:27.354 BroadcastEngine: TAKE LIVE → "Song 2"
+2026-05-13 23:14:30.876 BroadcastEngine: CUT LIVE (Fade Stop)
+2026-05-13 23:14:30.876 BroadcastEngine: CLEAR LIVE → standby
+2026-05-13 23:16:19.421 qrc:/MediaFlow/qml/OperatorDashboard.qml:605:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:16:19.421 qrc:/MediaFlow/qml/OperatorDashboard.qml:605:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:16:19.434 qrc:/MediaFlow/qml/OperatorDashboard.qml:271:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 23:16:25.736 BroadcastEngine: Preview = "Song 2"
+2026-05-13 23:16:30.029 BroadcastEngine: Preview = "jwb-101_EW_07_r720P"
+2026-05-13 23:17:52.084 qrc:/MediaFlow/qml/OperatorDashboard.qml:605:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:17:52.085 qrc:/MediaFlow/qml/OperatorDashboard.qml:605:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:17:52.099 qrc:/MediaFlow/qml/OperatorDashboard.qml:271:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 23:21:59.822 qrc:/MediaFlow/qml/OperatorDashboard.qml:605:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:21:59.822 qrc:/MediaFlow/qml/OperatorDashboard.qml:605:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:21:59.837 qrc:/MediaFlow/qml/OperatorDashboard.qml:271:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 23:30:33.469 qrc:/MediaFlow/qml/OperatorDashboard.qml:598:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:30:33.470 qrc:/MediaFlow/qml/OperatorDashboard.qml:598:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:30:33.512 qrc:/MediaFlow/qml/OperatorDashboard.qml:264:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 23:31:20.019 qrc:/MediaFlow/qml/OperatorDashboard.qml:123:29 Parameter "index" is not declared. Injection of parameters into signal handlers is deprecated. Use JavaScript functions with formal parameters instead.
+2026-05-13 23:31:20.019 qrc:/MediaFlow/qml/OperatorDashboard.qml:123: TypeError: Property 'setCurrentLanguageCode' of object BroadcastController(0xc3cbeffac0) is not a function
+2026-05-13 23:31:25.020 BroadcastEngine: Preview = "Song 2"
+2026-05-13 23:31:39.318 qrc:/MediaFlow/qml/OperatorDashboard.qml:123: TypeError: Property 'setCurrentLanguageCode' of object BroadcastController(0xc3cbeffac0) is not a function
+2026-05-13 23:32:53.077 NativeThumbnailGenerator: Processing "C:/Users/SETH/Videos/JWLibrary/sjjm_E_003_r720P.mp4"
+2026-05-13 23:32:53.224 NativeThumbnailGenerator: Success for "199996ba-61b8-483f-ab91-28fc1712cfcd" Title: "3. Our Strength, Our Hope, Our Confidence"
+2026-05-13 23:32:56.855 BroadcastEngine: Preview = "3. Our Strength, Our Hope, Our Confidence"
+2026-05-13 23:33:22.491 BroadcastEngine: TAKE LIVE → "3. Our Strength, Our Hope, Our Confidence"
+2026-05-13 23:33:24.937 BroadcastEngine: CUT LIVE (Fade Stop)
+2026-05-13 23:33:24.938 BroadcastEngine: CLEAR LIVE → standby
+2026-05-13 23:34:18.847 qrc:/MediaFlow/qml/OperatorDashboard.qml:598:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:34:18.848 qrc:/MediaFlow/qml/OperatorDashboard.qml:598:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:34:18.863 qrc:/MediaFlow/qml/OperatorDashboard.qml:264:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 23:34:44.745 qrc:/MediaFlow/qml/OperatorDashboard.qml:598:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:34:44.746 qrc:/MediaFlow/qml/OperatorDashboard.qml:598:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:34:44.759 qrc:/MediaFlow/qml/OperatorDashboard.qml:264:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 23:34:51.378 qrc:/MediaFlow/qml/OperatorDashboard.qml:123:29 Parameter "index" is not declared. Injection of parameters into signal handlers is deprecated. Use JavaScript functions with formal parameters instead.
+2026-05-13 23:34:51.378 qrc:/MediaFlow/qml/OperatorDashboard.qml:123: TypeError: Property 'setCurrentLanguageCode' of object BroadcastController(0x88dbb7f880) is not a function
+2026-05-13 23:38:46.538 qrc:/MediaFlow/qml/OperatorDashboard.qml:598:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:38:46.538 qrc:/MediaFlow/qml/OperatorDashboard.qml:598:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:38:46.551 qrc:/MediaFlow/qml/OperatorDashboard.qml:264:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 23:39:37.758 qrc:/MediaFlow/qml/OperatorDashboard.qml:123:29 Parameter "index" is not declared. Injection of parameters into signal handlers is deprecated. Use JavaScript functions with formal parameters instead.
+2026-05-13 23:39:37.758 qrc:/MediaFlow/qml/OperatorDashboard.qml:123: TypeError: Property 'setCurrentLanguageCode' of object BroadcastController(0x2f2cbffca0) is not a function
+2026-05-13 23:42:15.784 Retrying to obtain clipboard.
+2026-05-13 23:43:03.180 qrc:/MediaFlow/qml/OperatorDashboard.qml:123: TypeError: Property 'setCurrentLanguageCode' of object BroadcastController(0x2f2cbffca0) is not a function
+2026-05-13 23:43:18.723 qrc:/MediaFlow/qml/OperatorDashboard.qml:123: TypeError: Property 'setCurrentLanguageCode' of object BroadcastController(0x2f2cbffca0) is not a function
+2026-05-13 23:43:30.387 qrc:/MediaFlow/qml/OperatorDashboard.qml:123: TypeError: Property 'setCurrentLanguageCode' of object BroadcastController(0x2f2cbffca0) is not a function
+2026-05-13 23:43:36.896 BroadcastEngine: Preview = "Song 2"
+2026-05-13 23:43:38.058 BroadcastEngine: Preview = "3. Our Strength, Our Hope, Our Confidence"
+2026-05-13 23:44:48.671 qrc:/MediaFlow/qml/OperatorDashboard.qml:598:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:44:48.671 qrc:/MediaFlow/qml/OperatorDashboard.qml:598:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:44:48.687 qrc:/MediaFlow/qml/OperatorDashboard.qml:264:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 23:46:07.829 MediaExtractor: Directory does not exist: "C:/Users/SETH/AppData/Local/Packages/48C9FCC0.Watchtower_xzhgwqvnvmbce/LocalState/Publications"
+2026-05-13 23:46:07.829 MediaExtractor: Directory does not exist: "C:/Users/SETH/AppData/Local/Packages/48C9FCC0.Watchtower_xzhgwqvnvmbce/LocalState/Data/Media"
+2026-05-13 23:46:07.829 MediaExtractor: Scanning directory: "C:/Users/SETH/AppData/Local/Packages/WatchtowerBibleandTractSo.45909CDBADF3C_5rz59y55nfz3e/LocalState/Publications"
+2026-05-13 23:46:08.344 qrc:/MediaFlow/qml/OperatorDashboard.qml:598:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:46:08.345 qrc:/MediaFlow/qml/OperatorDashboard.qml:598:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:46:08.352 qrc:/MediaFlow/qml/OperatorDashboard.qml:264:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 23:46:09.827 MediaExtractor: Directory does not exist: "C:/Users/SETH/AppData/Local/Packages/WatchtowerBibleandTractSo.45909CDBADF3C_5rz59y55nfz3e/LocalState/Data/Media"
+2026-05-13 23:46:09.828 MediaExtractor: Scanning directory: "C:/Users/SETH/Videos/JWLibrary"
+2026-05-13 23:46:09.865 NativeThumbnailGenerator: Processing "C:/Users/SETH/Videos/JWLibrary/lffv_EW_111_r720P.mp4"
+2026-05-13 23:46:10.001 MediaExtractor: Directory does not exist: "C:/Users/SETH/Movies/JWLibrary"
+2026-05-13 23:46:10.020 NativeThumbnailGenerator: Success for "04b9b346-79dc-47ab-8fe1-e0481b9a9073" Title: "Ale Si Míawɔ Ɖokuisinusɔsrɔ̃ Wòaɖe Vi Na Mí"
+2026-05-13 23:46:10.026 NativeThumbnailGenerator: Processing "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_012_r720P.mp4"
+2026-05-13 23:46:10.063 MediaExtractor: QFileSystemWatcher active on 10 directories
+2026-05-13 23:46:10.128 NativeThumbnailGenerator: Processing "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_028_r720P.mp4"
+2026-05-13 23:46:10.344 NativeThumbnailGenerator: Success for "bec5ec8f-e74a-4f27-8cf2-c5a716b8bdbe" Title: "28. Míanye Yehowa Xɔlɔ̃wo"
+2026-05-13 23:46:10.449 NativeThumbnailGenerator: Processing "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_038_r720P.mp4"
+2026-05-13 23:46:10.635 NativeThumbnailGenerator: Success for "fb616dc5-5d21-4c42-b549-6983ea45965e" Title: "38. Yehowa Ana Nàsẽ Ŋu"
+2026-05-13 23:46:10.739 NativeThumbnailGenerator: Processing "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_049_r720P.mp4"
+2026-05-13 23:46:17.861 NativeThumbnailGenerator: Timeout/Failed for "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_049_r720P.mp4"
+2026-05-13 23:46:17.862 NativeThumbnailGenerator: Processing "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_058_r720P.mp4"
+2026-05-13 23:46:18.046 NativeThumbnailGenerator: Success for "7b679dd2-7f55-4b4b-8906-395f43025d1a" Title: "58. Míadi Ŋutifafalɔ̃lawo"
+2026-05-13 23:46:18.153 NativeThumbnailGenerator: Processing "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_086_r720P.mp4"
+2026-05-13 23:46:18.187 NativeThumbnailGenerator: Timeout/Failed for "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_086_r720P.mp4"
+2026-05-13 23:46:18.187 NativeThumbnailGenerator: Processing "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_097_r720P.mp4"
+2026-05-13 23:46:18.344 NativeThumbnailGenerator: Success for "6b108f4c-800f-48f9-b469-b9d97cbbd945" Title: "97. Mawu Ƒe Nya Nue Míenɔa Agbe Ðo"
+2026-05-13 23:47:25.442 qrc:/MediaFlow/qml/OperatorDashboard.qml:123:29 Parameter "index" is not declared. Injection of parameters into signal handlers is deprecated. Use JavaScript functions with formal parameters instead.
+2026-05-13 23:47:25.442 qrc:/MediaFlow/qml/OperatorDashboard.qml:123: TypeError: Property 'setCurrentLanguageCode' of object BroadcastController(0x4e647cfbf0) is not a function
+2026-05-13 23:51:06.614 MediaExtractor: Directory does not exist: "C:/Users/SETH/AppData/Local/Packages/48C9FCC0.Watchtower_xzhgwqvnvmbce/LocalState/Publications"
+2026-05-13 23:51:06.615 MediaExtractor: Directory does not exist: "C:/Users/SETH/AppData/Local/Packages/48C9FCC0.Watchtower_xzhgwqvnvmbce/LocalState/Data/Media"
+2026-05-13 23:51:06.615 MediaExtractor: Scanning directory: "C:/Users/SETH/AppData/Local/Packages/WatchtowerBibleandTractSo.45909CDBADF3C_5rz59y55nfz3e/LocalState/Publications"
+2026-05-13 23:51:07.051 qrc:/MediaFlow/qml/OperatorDashboard.qml:598:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:51:07.051 qrc:/MediaFlow/qml/OperatorDashboard.qml:598:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:51:07.057 qrc:/MediaFlow/qml/OperatorDashboard.qml:264:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 23:51:08.036 MediaExtractor: Directory does not exist: "C:/Users/SETH/AppData/Local/Packages/WatchtowerBibleandTractSo.45909CDBADF3C_5rz59y55nfz3e/LocalState/Data/Media"
+2026-05-13 23:51:08.036 MediaExtractor: Scanning directory: "C:/Users/SETH/Videos/JWLibrary"
+2026-05-13 23:51:08.074 NativeThumbnailGenerator: Processing "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_012_r720P.mp4"
+2026-05-13 23:51:08.203 MediaExtractor: Directory does not exist: "C:/Users/SETH/Movies/JWLibrary"
+2026-05-13 23:51:08.238 MediaExtractor: QFileSystemWatcher active on 10 directories
+2026-05-13 23:51:08.277 NativeThumbnailGenerator: Success for "9af2c7db-2924-4b48-ae09-9c36035f32b4" Title: " 12. Mawu Gã Yehowa"
+2026-05-13 23:51:08.386 NativeThumbnailGenerator: Processing "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_049_r720P.mp4"
+2026-05-13 23:51:16.076 NativeThumbnailGenerator: Timeout/Failed for "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_049_r720P.mp4"
+2026-05-13 23:51:16.078 NativeThumbnailGenerator: Processing "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_086_r720P.mp4"
+2026-05-13 23:51:16.264 NativeThumbnailGenerator: Success for "798efcc0-2a9d-4843-9ef2-7c6a8631b67c" Title: "86. Míana Yehowa Nafia Nu Mí"
+2026-05-13 23:52:14.965 MediaExtractor: Directory does not exist: "C:/Users/SETH/AppData/Local/Packages/48C9FCC0.Watchtower_xzhgwqvnvmbce/LocalState/Publications"
+2026-05-13 23:52:14.965 MediaExtractor: Directory does not exist: "C:/Users/SETH/AppData/Local/Packages/48C9FCC0.Watchtower_xzhgwqvnvmbce/LocalState/Data/Media"
+2026-05-13 23:52:14.966 MediaExtractor: Scanning directory: "C:/Users/SETH/AppData/Local/Packages/WatchtowerBibleandTractSo.45909CDBADF3C_5rz59y55nfz3e/LocalState/Publications"
+2026-05-13 23:52:15.346 qrc:/MediaFlow/qml/OperatorDashboard.qml:598:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:52:15.346 qrc:/MediaFlow/qml/OperatorDashboard.qml:598:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:52:15.351 qrc:/MediaFlow/qml/OperatorDashboard.qml:264:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 23:52:16.225 MediaExtractor: Directory does not exist: "C:/Users/SETH/AppData/Local/Packages/WatchtowerBibleandTractSo.45909CDBADF3C_5rz59y55nfz3e/LocalState/Data/Media"
+2026-05-13 23:52:16.226 MediaExtractor: Scanning directory: "C:/Users/SETH/Videos/JWLibrary"
+2026-05-13 23:52:16.297 NativeThumbnailGenerator: Processing "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_049_r720P.mp4"
+2026-05-13 23:52:16.377 MediaExtractor: Directory does not exist: "C:/Users/SETH/Movies/JWLibrary"
+2026-05-13 23:52:16.417 MediaExtractor: QFileSystemWatcher active on 10 directories
+2026-05-13 23:52:24.294 NativeThumbnailGenerator: Timeout/Failed for "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_049_r720P.mp4"
+2026-05-13 23:52:26.151 qrc:/MediaFlow/qml/OperatorDashboard.qml:123:29 Parameter "index" is not declared. Injection of parameters into signal handlers is deprecated. Use JavaScript functions with formal parameters instead.
+2026-05-13 23:52:26.151 qrc:/MediaFlow/qml/OperatorDashboard.qml:123: TypeError: Property 'setCurrentLanguageCode' of object BroadcastController(0x916b75f670) is not a function
+2026-05-13 23:55:49.427 MediaExtractor: Directory does not exist: "C:/Users/SETH/AppData/Local/Packages/48C9FCC0.Watchtower_xzhgwqvnvmbce/LocalState/Publications"
+2026-05-13 23:55:49.427 MediaExtractor: Directory does not exist: "C:/Users/SETH/AppData/Local/Packages/48C9FCC0.Watchtower_xzhgwqvnvmbce/LocalState/Data/Media"
+2026-05-13 23:55:49.428 MediaExtractor: Scanning directory: "C:/Users/SETH/AppData/Local/Packages/WatchtowerBibleandTractSo.45909CDBADF3C_5rz59y55nfz3e/LocalState/Publications"
+2026-05-13 23:55:49.746 qrc:/MediaFlow/qml/OperatorDashboard.qml:598:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:55:49.746 qrc:/MediaFlow/qml/OperatorDashboard.qml:598:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:55:49.752 qrc:/MediaFlow/qml/OperatorDashboard.qml:264:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 23:55:50.661 MediaExtractor: Directory does not exist: "C:/Users/SETH/AppData/Local/Packages/WatchtowerBibleandTractSo.45909CDBADF3C_5rz59y55nfz3e/LocalState/Data/Media"
+2026-05-13 23:55:50.661 MediaExtractor: Scanning directory: "C:/Users/SETH/Videos/JWLibrary"
+2026-05-13 23:55:50.736 NativeThumbnailGenerator: Processing "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_049_r720P.mp4"
+2026-05-13 23:55:50.803 MediaExtractor: Directory does not exist: "C:/Users/SETH/Movies/JWLibrary"
+2026-05-13 23:55:50.844 MediaExtractor: QFileSystemWatcher active on 10 directories
+2026-05-13 23:55:58.737 NativeThumbnailGenerator: Timeout/Failed for "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_049_r720P.mp4"
+2026-05-13 23:59:32.669 MediaExtractor: Directory does not exist: "C:/Users/SETH/AppData/Local/Packages/48C9FCC0.Watchtower_xzhgwqvnvmbce/LocalState/Publications"
+2026-05-13 23:59:32.669 MediaExtractor: Directory does not exist: "C:/Users/SETH/AppData/Local/Packages/48C9FCC0.Watchtower_xzhgwqvnvmbce/LocalState/Data/Media"
+2026-05-13 23:59:32.670 MediaExtractor: Scanning directory: "C:/Users/SETH/AppData/Local/Packages/WatchtowerBibleandTractSo.45909CDBADF3C_5rz59y55nfz3e/LocalState/Publications"
+2026-05-13 23:59:33.019 qrc:/MediaFlow/qml/OperatorDashboard.qml:598:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:59:33.020 qrc:/MediaFlow/qml/OperatorDashboard.qml:598:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-13 23:59:33.040 qrc:/MediaFlow/qml/OperatorDashboard.qml:264:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-13 23:59:34.077 MediaExtractor: Directory does not exist: "C:/Users/SETH/AppData/Local/Packages/WatchtowerBibleandTractSo.45909CDBADF3C_5rz59y55nfz3e/LocalState/Data/Media"
+2026-05-13 23:59:34.077 MediaExtractor: Scanning directory: "C:/Users/SETH/Videos/JWLibrary"
+2026-05-13 23:59:34.151 NativeThumbnailGenerator: Processing "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_049_r720P.mp4"
+2026-05-13 23:59:34.231 MediaExtractor: Directory does not exist: "C:/Users/SETH/Movies/JWLibrary"
+2026-05-13 23:59:34.273 MediaExtractor: QFileSystemWatcher active on 10 directories
+2026-05-13 23:59:42.153 NativeThumbnailGenerator: Timeout/Failed for "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_049_r720P.mp4"
+2026-05-14 00:03:10.884 MediaExtractor: Directory does not exist: "C:/Users/SETH/AppData/Local/Packages/48C9FCC0.Watchtower_xzhgwqvnvmbce/LocalState/Publications"
+2026-05-14 00:03:10.885 MediaExtractor: Directory does not exist: "C:/Users/SETH/AppData/Local/Packages/48C9FCC0.Watchtower_xzhgwqvnvmbce/LocalState/Data/Media"
+2026-05-14 00:03:10.885 MediaExtractor: Scanning directory: "C:/Users/SETH/AppData/Local/Packages/WatchtowerBibleandTractSo.45909CDBADF3C_5rz59y55nfz3e/LocalState/Publications"
+2026-05-14 00:03:11.270 qrc:/MediaFlow/qml/OperatorDashboard.qml:598:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-14 00:03:11.271 qrc:/MediaFlow/qml/OperatorDashboard.qml:598:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-14 00:03:11.291 qrc:/MediaFlow/qml/OperatorDashboard.qml:264:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-14 00:03:12.212 MediaExtractor: Directory does not exist: "C:/Users/SETH/AppData/Local/Packages/WatchtowerBibleandTractSo.45909CDBADF3C_5rz59y55nfz3e/LocalState/Data/Media"
+2026-05-14 00:03:12.213 MediaExtractor: Scanning directory: "C:/Users/SETH/Videos/JWLibrary"
+2026-05-14 00:03:12.290 NativeThumbnailGenerator: Processing "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_049_r720P.mp4"
+2026-05-14 00:03:12.356 MediaExtractor: Directory does not exist: "C:/Users/SETH/Movies/JWLibrary"
+2026-05-14 00:03:12.384 MediaExtractor: QFileSystemWatcher active on 10 directories
+2026-05-14 00:03:20.298 NativeThumbnailGenerator: Timeout/Failed for "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_049_r720P.mp4"
+2026-05-14 00:17:42.967 MediaExtractor: Directory does not exist: "C:/Users/SETH/AppData/Local/Packages/48C9FCC0.Watchtower_xzhgwqvnvmbce/LocalState/Publications"
+2026-05-14 00:17:42.968 MediaExtractor: Directory does not exist: "C:/Users/SETH/AppData/Local/Packages/48C9FCC0.Watchtower_xzhgwqvnvmbce/LocalState/Data/Media"
+2026-05-14 00:17:42.968 MediaExtractor: Scanning directory: "C:/Users/SETH/AppData/Local/Packages/WatchtowerBibleandTractSo.45909CDBADF3C_5rz59y55nfz3e/LocalState/Publications"
+2026-05-14 00:17:43.189 qrc:/MediaFlow/qml/OperatorDashboard.qml:598:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-14 00:17:43.189 qrc:/MediaFlow/qml/OperatorDashboard.qml:598:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-14 00:17:43.194 qrc:/MediaFlow/qml/OperatorDashboard.qml:264:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-14 00:17:44.437 MediaExtractor: Directory does not exist: "C:/Users/SETH/AppData/Local/Packages/WatchtowerBibleandTractSo.45909CDBADF3C_5rz59y55nfz3e/LocalState/Data/Media"
+2026-05-14 00:17:44.438 MediaExtractor: Scanning directory: "C:/Users/SETH/Videos/JWLibrary"
+2026-05-14 00:17:44.514 NativeThumbnailGenerator: Processing "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_049_r720P.mp4"
+2026-05-14 00:17:44.581 MediaExtractor: Directory does not exist: "C:/Users/SETH/Movies/JWLibrary"
+2026-05-14 00:17:44.618 MediaExtractor: QFileSystemWatcher active on 10 directories
+2026-05-14 00:17:52.510 NativeThumbnailGenerator: Timeout/Failed for "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_049_r720P.mp4"
+2026-05-14 00:24:32.913 MediaExtractor: Directory does not exist: "C:/Users/SETH/AppData/Local/Packages/48C9FCC0.Watchtower_xzhgwqvnvmbce/LocalState/Publications"
+2026-05-14 00:24:32.914 MediaExtractor: Directory does not exist: "C:/Users/SETH/AppData/Local/Packages/48C9FCC0.Watchtower_xzhgwqvnvmbce/LocalState/Data/Media"
+2026-05-14 00:24:32.914 MediaExtractor: Scanning directory: "C:/Users/SETH/AppData/Local/Packages/WatchtowerBibleandTractSo.45909CDBADF3C_5rz59y55nfz3e/LocalState/Publications"
+2026-05-14 00:24:33.251 qrc:/MediaFlow/qml/OperatorDashboard.qml:598:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-14 00:24:33.252 qrc:/MediaFlow/qml/OperatorDashboard.qml:598:21: QML Dialog: Binding loop detected for property "implicitWidth":
+qrc:/qt-project.org/imports/QtQuick/Controls/Basic/Dialog.qml:11:5
+2026-05-14 00:24:33.257 qrc:/MediaFlow/qml/OperatorDashboard.qml:264:29: QML MouseArea: Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.
+2026-05-14 00:24:34.141 MediaExtractor: Directory does not exist: "C:/Users/SETH/AppData/Local/Packages/WatchtowerBibleandTractSo.45909CDBADF3C_5rz59y55nfz3e/LocalState/Data/Media"
+2026-05-14 00:24:34.142 MediaExtractor: Scanning directory: "C:/Users/SETH/Videos/JWLibrary"
+2026-05-14 00:24:34.214 NativeThumbnailGenerator: Processing "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_049_r720P.mp4"
+2026-05-14 00:24:34.289 MediaExtractor: Directory does not exist: "C:/Users/SETH/Movies/JWLibrary"
+2026-05-14 00:24:34.325 MediaExtractor: QFileSystemWatcher active on 10 directories
+2026-05-14 00:24:42.210 NativeThumbnailGenerator: Timeout/Failed for "C:/Users/SETH/Videos/JWLibrary/sjjm_EW_049_r720P.mp4"

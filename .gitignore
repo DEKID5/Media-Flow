@@ -1,14 +1,15 @@
 
-node_modules
-dist
-dist-electron
 .env
 *.log
 drivers/unitycapture.zip
 drivers/temp
-build/dist
-out
 .DS_Store
-.cache
-resources/python/*
-!resources/python/README.md
+
+# CMake / Qt
+build/
+cmake-build*/
+CMakeUserPresets.json
+*.user
+
+# Legacy embeddable Python (delete manually if Windows locks DLLs)
+resources/python/

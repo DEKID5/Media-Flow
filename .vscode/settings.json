@@ -1,6 +1,3 @@
 {
-  "python.defaultInterpreterPath": "${workspaceFolder}/resources/python/python.exe",
-  "python.analysis.extraPaths": [
-    "${workspaceFolder}/resources/python/Lib/site-packages"
-  ]
+  "cmake.configureOnOpen": false
 }

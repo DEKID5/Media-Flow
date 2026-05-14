@@ -1,20 +1,27 @@
-# Build Notes
+# Build (Qt 6 only)
 
-## Windows Desktop Installer
+This repository is a **C++/Qt 6** application. UI is **QML**; logic runs in **C++** on worker threads where appropriate.
 
-The Windows desktop build bundles an embedded Python runtime for the Zoom/OBS bridge.
+## Prerequisites
+
+- CMake 3.21+
+- Qt 6.5+ (Core, Gui, Widgets, Qml, Quick, Sql, Multimedia, MultimediaQuick, Concurrent)
+
+## Configure and build (Windows example)
 
 ```powershell
-npm run build:desktop
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="C:\Qt\6.8.0\msvc2022_64"
+cmake --build build --config Release
 ```
 
-`build:desktop` runs `npm run bridge:python` first. That script downloads the official Python embeddable runtime, installs the bridge packages from `resources/bridge/requirements.txt`, verifies imports, and places the finished runtime in `resources/python`.
+The executable is **`MediaFlow`** (target `mediaflow`). Run it from `build\Release\MediaFlow.exe` or your generator output directory.
 
-The generated installer includes:
+Set **`CMAKE_PREFIX_PATH`** to your Qt installation’s kit root (the folder that contains `lib/cmake/Qt6`).
 
-- `resources/bridge/virtual_camera_bridge.py`
-- `resources/bridge/requirements.txt`
-- `resources/python/python.exe`
-- Python packages required by the bridge: `numpy`, `pyvirtualcam`, `pywin32`
+## Optional: ffmpeg (UDP bridge / OBS)
 
-Users still need OBS Studio with OBS Virtual Camera available, but they do not need to install Python manually.
+The in-app **Start bridge** action runs `ffmpeg` as a separate process. Install [ffmpeg](https://ffmpeg.org) and ensure it is on `PATH`, or set the environment variable **`MEDIAFLOW_FFMPEG`** to the full path of `ffmpeg.exe`, or fill in the **ffmpeg** field in the operator UI.
+
+## Optional: remove locked `resources/python`
+
+If an old Electron-era embeddable Python folder remains and Windows reports “access denied” when deleting, close any process using those files, then delete `resources/python` manually. It is not used by the Qt build.

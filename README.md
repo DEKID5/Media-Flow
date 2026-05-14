@@ -1,47 +1,16 @@
-# MediaFlow Broadcast Suite
+# Media Flow (Qt 6)
 
-A cross-platform desktop broadcast management suite built with React, Electron, and Vite.
+Desktop media operator and audience display for Kingdom Hall–style workflows. Built with **C++** and **Qt 6 QML** (no Node.js, Electron, or Python runtime in this tree).
 
-## Development
+## Build
 
-### Web Browser
-To run the application in a standard web browser:
-```bash
-npm run dev
-```
+See [BUILD.md](BUILD.md).
 
-### Desktop App (Electron)
-To run the application as a desktop app:
-```bash
-npm run dev:desktop
-```
+## Features (current Qt port)
 
-### Windows Installer
-To build the Windows installer with the Zoom/OBS bridge runtime bundled:
-```bash
-npm run build:desktop
-```
+- JW Library `userData.db` discovery under `%LOCALAPPDATA%`, inspection via **QSqlDatabase** on a worker thread (temp copy when the live DB is locked).
+- Recursive media scan of JW Library package paths and `Videos\JWLibrary`, with optional language suffix filter; import files and scan custom folders into the library.
+- **Broadcast state** on `MediaFlow`: program + **preview** buses, transport pause, **midweek/weekend meeting schedule**, **live** toggle, **vcam mode**, **countdown timer**, **room volume + mute**, **BGM** (C++ `QMediaPlayer`), **camera** list with program-to-camera.
+- **ffmpeg UDP bridge** (optional `ffmpeg` on PATH or `MEDIAFLOW_FFMPEG`) to feed OBS or other receivers; see [DESIGN.md](DESIGN.md).
+- Operator + **audience** window (fullscreen on second screen when present); **Zoom** **Alt+S** on Windows.
 
-The desktop build prepares an embedded Python runtime automatically, so installed users do not need to install Python manually. OBS Studio / OBS Virtual Camera must still be available on the machine.
-
-## Architecture
-
-MediaFlow uses a two-window architecture:
-1. **Operator Dashboard**: The main control center for managing media, timers, and mixers.
-2. **Audience View**: A secondary window (usually on an external display) that shows the program output.
-
-State is synchronized in real-time between windows using the browser's `BroadcastChannel` API.
-
-## Preload API Reference (`window.mediaflow`)
-
-When running in Electron, the following methods are available via the `mediaflow` bridge:
-
-- `getSystemSnapshot()`: Returns system info (memory, displays, platform).
-- `findJwDatabase()`: Attempts to locate the JW Library user database.
-- `openExternalDisplay()`: Opens or focuses the audience view window.
-- `isDesktop`: Boolean indicating if the app is running in Electron.
-
-## Persistence
-Settings and library state are persisted in `localStorage`:
-- `mf_assets`: Indexed media assets.
-- `mf_state`: Last known operator state.
