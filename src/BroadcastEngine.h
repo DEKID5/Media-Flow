@@ -39,6 +39,7 @@ public:
     // Volume control — called by controller when masterVolume/mixerMuted changes
     void setProgramVolume(qreal volume);
     void setProgramMuted(bool muted);
+    void setVirtualAudioRouting(bool enabled);
 
 public slots:
     void setPreviewAsset(const MediaAsset &asset);

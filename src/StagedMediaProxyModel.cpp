@@ -1,5 +1,9 @@
 #include "StagedMediaProxyModel.h"
 #include "MediaLibraryModel.h"
+#include "SongSearchUtils.h"
+
+#include <QFileInfo>
+#include <QRegularExpression>
 
 StagedMediaProxyModel::StagedMediaProxyModel(QObject *parent)
     : QSortFilterProxyModel(parent)
@@ -43,11 +47,36 @@ void StagedMediaProxyModel::setCategoryFilter(const QString &c)
     }
 }
 
+void StagedMediaProxyModel::setLanguageCode(const QString &code)
+{
+    const QString normalized = SongSearchUtils::normalizeLanguageCode(code);
+    if (m_languageCode != normalized) {
+        m_languageCode = normalized;
+        invalidateFilter();
+        emit languageCodeChanged();
+        emit filterChanged();
+    }
+}
+
 bool StagedMediaProxyModel::filterAcceptsRow(int source_row, const QModelIndex &source_parent) const
 {
-    if (m_filterType == "all") return true;
-
     QModelIndex idx = sourceModel()->index(source_row, 0, source_parent);
+    const QString type = sourceModel()->data(idx, MediaLibraryModel::TypeRole).toString();
+    const QString name = sourceModel()->data(idx, MediaLibraryModel::NameRole).toString();
+    const QString path = sourceModel()->data(idx, MediaLibraryModel::PathRole).toString();
+    const QString fileName = QFileInfo(path).fileName();
+    const QString haystack = fileName.isEmpty() ? name : fileName;
+
+    if ((type == QStringLiteral("video") || type == QStringLiteral("audio"))) {
+        static const QRegularExpression languageMarker(QStringLiteral("_[A-Z]{1,3}_"));
+        if (languageMarker.match(haystack).hasMatch() || languageMarker.match(path).hasMatch()) {
+            const QString required = QStringLiteral("_%1_").arg(m_languageCode);
+            if (!haystack.contains(required, Qt::CaseInsensitive) && !path.contains(required, Qt::CaseInsensitive))
+                return false;
+        }
+    }
+
+    if (m_filterType == "all") return true;
     
     if (m_filterType == "segment") {
         if (m_selectedSegmentId.isEmpty()) return false;
@@ -60,13 +89,13 @@ bool StagedMediaProxyModel::filterAcceptsRow(int source_row, const QModelIndex &
     }
 
     if (m_filterType == "videos") {
-        return sourceModel()->data(idx, MediaLibraryModel::TypeRole).toString() == "video";
+        return type == "video";
     }
     if (m_filterType == "images") {
-        return sourceModel()->data(idx, MediaLibraryModel::TypeRole).toString() == "image";
+        return type == "image";
     }
     if (m_filterType == "audio") {
-        return sourceModel()->data(idx, MediaLibraryModel::TypeRole).toString() == "audio";
+        return type == "audio";
     }
 
     if (m_filterType == "category") {

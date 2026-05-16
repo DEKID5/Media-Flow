@@ -43,6 +43,17 @@ Item {
         }
     }
 
+    function requestZoomBroadcast() {
+        if (!MediaFlowBackend)
+            return
+
+        if (MediaFlowBackend.vcamEnabled || MediaFlowBackend.hasObsVirtualCamera()) {
+            MediaFlowBackend.toggleZoomBroadcast()
+        } else {
+            obsWarningDialog.open()
+        }
+    }
+
     Rectangle {
         anchors.fill: parent
         color: "#050505"
@@ -110,18 +121,32 @@ Item {
                         BroadcastIcon { name: "globe"; iconSize: 12; Layout.leftMargin: 8; opacity: 0.7 }
                         ComboBox {
                             id: langCombo
+                            property bool syncingFromBackend: false
                             Layout.fillWidth: true
                             flat: true
                             model: (MediaFlowBackend || {}).getSupportedLanguages() || []
                             textRole: "name"
-                            currentIndex: {
-                                let current = (MediaFlowBackend || {}).currentLanguageCode || "E";
+                            Component.onCompleted: syncFromBackend()
+
+                            function indexOfLanguage(code) {
+                                let current = (code || "E").toUpperCase()
                                 for (let i = 0; i < model.length; i++) {
-                                    if (model[i].code === current) return i;
+                                    if ((model[i].code || "").toUpperCase() === current) return i
                                 }
                                 return 0;
                             }
-                            onActivated: (index) => { if (MediaFlowBackend) MediaFlowBackend.currentLanguage = model[index] }
+
+                            function syncFromBackend() {
+                                syncingFromBackend = true
+                                currentIndex = indexOfLanguage((MediaFlowBackend || {}).currentLanguageCode || "E")
+                                syncingFromBackend = false
+                            }
+
+                            onActivated: (index) => {
+                                if (MediaFlowBackend && model[index]) {
+                                    MediaFlowBackend.setCurrentLanguageCode(model[index].code)
+                                }
+                            }
                             
                             contentItem: Label {
                                 text: langCombo.currentText
@@ -206,40 +231,10 @@ Item {
                         }
                     }
                     
-                    // EXTEND FEED TOGGLE
-                    Rectangle {
-                        Layout.preferredHeight: 24; Layout.preferredWidth: 100; radius: 6
-                        color: (MediaFlowBackend || {}).feedExtended ? "#1A10B981" : "#0DFFFFFF"
-                        border.color: (MediaFlowBackend || {}).feedExtended ? "#10B981" : "#33FFFFFF"
-                        RowLayout {
-                            anchors.centerIn: parent; spacing: 6
-                            Rectangle { width: 4; height: 4; radius: 2; color: (MediaFlowBackend || {}).feedExtended ? "#10B981" : "#A1A1AA" }
-                            Label { text: "EXTEND FEED"; color: (MediaFlowBackend || {}).feedExtended ? "#FFFFFF" : "#A1A1AA"; font.pixelSize: 8; font.bold: true }
-                        }
-                        MouseArea { 
-                            anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                            onClicked: (MediaFlowBackend || {}).toggleAudienceWindow()
-                        }
-                    }
-
                     RowLayout {
                         spacing: 6
                         Rectangle { width: 6; height: 6; radius: 3; color: "#10B981" }
                         Label { text: "SYNC: OK"; color: "#A1A1AA"; font.pixelSize: 8; font.bold: true }
-                    }
-
-                    // RESET APP
-                    Rectangle {
-                        Layout.preferredHeight: 24; Layout.preferredWidth: 80; radius: 6
-                        color: "#1AEF4444"; border.color: "#EF4444"
-                        Label { 
-                            anchors.centerIn: parent; text: "RESET APP"; color: "#EF4444"
-                            font.pixelSize: 8; font.bold: true 
-                        }
-                        MouseArea { 
-                            anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                            onClicked: resetConfirmDialog.open()
-                        }
                     }
 
                     Rectangle { width: 1; height: 16; color: "#1AFFFFFF" }
@@ -279,7 +274,7 @@ Item {
                                     Rectangle { width: 8; height: 8; radius: 4; color: (MediaFlowBackend || {}).vcamEnabled ? "#3B82F6" : "#A1A1AA"; border.color: "white"; border.width: 1 }
                                     Label { text: "BROADCAST TO ZOOM"; color: (MediaFlowBackend || {}).vcamEnabled ? "white" : "#A1A1AA"; font.pixelSize: 9; font.bold: true }
                                 }
-                                MouseArea { anchors.fill: parent; onClicked: (MediaFlowBackend || {}).toggleZoomBroadcast() }
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: requestZoomBroadcast() }
                             }
                             RowLayout {
                                 spacing: 4; Layout.alignment: Qt.AlignVCenter
@@ -620,79 +615,9 @@ Item {
 
                 // TIMERS & BGM
                 ColumnLayout {
-                    Layout.fillWidth: true; Layout.fillHeight: true; Layout.preferredWidth: 350; spacing: 20
+                    Layout.fillWidth: true; Layout.fillHeight: true; Layout.preferredWidth: 350; spacing: 12
                     TimerPanel { }
-
-                    Rectangle {
-                        Layout.fillWidth: true; Layout.fillHeight: true
-                        color: "#0A0A0A"; radius: 12; border.color: "#1AFFFFFF"
-                        ColumnLayout {
-                            anchors.fill: parent; anchors.margins: 20; spacing: 16
-                            
-                            // Header
-                            RowLayout {
-                                RowLayout {
-                                    spacing: 8
-                                    Rectangle { width: 3; height: 14; color: theme.accentEmerald; radius: 1.5 }
-                                    Label { text: "BACKGROUND MUSIC"; font.bold: true; font.pixelSize: 11; color: "white"; font.letterSpacing: 1.5 }
-                                }
-                                Item { Layout.fillWidth: true }
-                                Label { 
-                                    text: ((MediaFlowBackend || {}).bgmCount || 0) + " TRACKS"
-                                    color: theme.accentBlue; font.pixelSize: 9; font.bold: true 
-                                }
-                            }
-                            
-                            Item { Layout.fillHeight: true }
-
-                            // Center Info
-                            ColumnLayout {
-                                Layout.fillWidth: true; spacing: 12
-                                BroadcastIcon { 
-                                    name: "music"; iconSize: 48; Layout.alignment: Qt.AlignHCenter; opacity: 0.1 
-                                }
-                                Label { 
-                                    text: (MediaFlowBackend || {}).bgmTrackName || "NO TRACKS DETECTED"
-                                    font.pixelSize: 10; color: "#A1A1AA"; Layout.alignment: Qt.AlignHCenter; font.bold: true; font.letterSpacing: 0.5
-                                }
-                            }
-
-                            Item { Layout.fillHeight: true }
-
-                            // CONTROLS (Uniform and Professional)
-                            RowLayout {
-                                Layout.fillWidth: true; spacing: 12
-                                
-                                PillButton { 
-                                    Layout.preferredWidth: 44; Layout.preferredHeight: 44
-                                    iconName: "skip-back"; iconSize: 16
-                                    onClicked: (MediaFlowBackend || {}).backBgm() 
-                                }
-                                
-                                PillButton { 
-                                    id: playBtn
-                                    Layout.fillWidth: true; Layout.preferredHeight: 44
-                                    text: (MediaFlowBackend || {}).isPlayingBgm ? "PAUSE" : "PLAY"
-                                    primary: true
-                                    accentColor: theme.accentBlue
-                                    iconName: (MediaFlowBackend || {}).isPlayingBgm ? "pause" : "play"
-                                    onClicked: (MediaFlowBackend || {}).toggleBgmPlayback() 
-                                }
-                                
-                                PillButton { 
-                                    Layout.preferredWidth: 44; Layout.preferredHeight: 44
-                                    iconName: "skip-forward"; iconSize: 16
-                                    onClicked: (MediaFlowBackend || {}).nextBgm() 
-                                }
-                                
-                                PillButton { 
-                                    Layout.preferredWidth: 60; Layout.preferredHeight: 44
-                                    text: "STOP"
-                                    onClicked: (MediaFlowBackend || {}).stopBgm() 
-                                }
-                            }
-                        }
-                    }
+                    BackgroundMusicPanel { }
                 }
             }
         }
@@ -726,6 +651,9 @@ Item {
 
     Connections {
         target: (MediaFlowBackend || null)
+        function onCurrentLanguageCodeChanged() {
+            langCombo.syncFromBackend()
+        }
         function onSongNotFound(num) {
             toast.show("SONG " + num + " NOT FOUND LOCALLY. PLEASE DOWNLOAD IN JW LIBRARY.")
         }
@@ -749,33 +677,19 @@ Item {
     }
 
     Dialog {
-        id: resetConfirmDialog
-        title: "Reset Application?"
-        anchors.centerIn: parent
+        id: obsWarningDialog
+        title: "OBS Camera Not Found"
         modal: true
-        standardButtons: Dialog.Yes | Dialog.No
-        
-        background: Rectangle {
-            color: "#0A0A0A"
-            radius: 12
-            border.color: "#33FFFFFF"
-        }
-
-        header: Rectangle {
-            height: 40; color: "transparent"
-            Label {
-                anchors.centerIn: parent; text: "RESET APPLICATION"; color: "white"; font.bold: true; font.pixelSize: 12
-            }
-        }
-
+        anchors.centerIn: Overlay.overlay
+        standardButtons: Dialog.Ok
+        background: Rectangle { color: "#1a1a1e"; radius: 12; border.color: "#333" }
         contentItem: Label {
-            text: "This will clear all media links, imported files, and thumbnail cache.\nAre you sure?"
-            color: "#A1A1AA"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter
-            topPadding: 20; bottomPadding: 20
-        }
-        
-        onAccepted: {
-            if (MediaFlowBackend) MediaFlowBackend.resetApp()
+            text: "Install or enable OBS-Camera, then try Broadcast to Zoom again."
+            color: "white"
+            font.pixelSize: 12
+            wrapMode: Text.WordWrap
+            width: 320
         }
     }
+
 }

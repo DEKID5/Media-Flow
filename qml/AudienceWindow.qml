@@ -1,5 +1,7 @@
 import QtQuick
 import QtQuick.Window
+import QtQuick.Layouts
+import QtQuick.Controls
 import QtMultimedia
 import MediaFlow 1.0
 
@@ -8,10 +10,6 @@ Window {
     width: 1920; height: 1080; visible: false
     title: qsTr("MediaFlow — Audience Display")
     color: "black"
-    
-    // Automatic screen binding (can also be overridden by C++ setScreen)
-    screen: (Qt.application.screens.length > 1) ? Qt.application.screens[1] : Qt.application.screens[0]
-
     // =====================================================================
     //  DUAL-PLAYER A/B — mirrors the operator's Live monitor
     //  Audio output comes from HERE (the audience display)

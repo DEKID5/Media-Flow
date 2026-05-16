@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QHash>
 #include <QPointer>
 #include <QQmlApplicationEngine>
 #include <QThread>
@@ -8,6 +9,7 @@
 #include <QUrl>
 #include <QVariant>
 #include <QAudioOutput>
+#include <QCameraDevice>
 #include <QMediaPlayer>
 
 #include "MediaLibraryModel.h"
@@ -17,7 +19,7 @@
 #include "BroadcastEngine.h"
 #include "StagedMediaProxyModel.h"
 #include "MediaAsset.h"
-#include "FfmpegUdpBridge.h"
+#include "VirtualCameraManager.h"
 
 class MediaExtractor;
 class MediaThumbnailManager;
@@ -38,6 +40,7 @@ class BroadcastController final : public QObject
     Q_PROPERTY(MeetingScheduleModel *meetingSchedule READ meetingSchedule CONSTANT)
     Q_PROPERTY(CameraDeviceModel *cameraDevices READ cameraDevices CONSTANT)
     Q_PROPERTY(BroadcastEngine *broadcastEngine READ broadcastEngine CONSTANT)
+    Q_PROPERTY(QCameraDevice programCameraDevice READ programCameraDevice WRITE setProgramCameraDevice NOTIFY programCameraDeviceChanged)
 
     // --- State Properties ---
     Q_PROPERTY(QString selectedSegmentId READ selectedSegmentId WRITE selectSegment NOTIFY selectedSegmentIdChanged)
@@ -56,6 +59,7 @@ class BroadcastController final : public QObject
 
     // --- BGM System ---
     Q_PROPERTY(QString bgmPath READ bgmPath NOTIFY bgmChanged)
+    Q_PROPERTY(QString bgmCoverArt READ bgmCoverArt NOTIFY bgmChanged)
     Q_PROPERTY(bool isPlayingBgm READ isPlayingBgm NOTIFY bgmChanged)
     Q_PROPERTY(QString bgmTrackName READ bgmTrackName NOTIFY bgmChanged)
     Q_PROPERTY(int bgmCount READ bgmCount NOTIFY bgmChanged)
@@ -72,6 +76,7 @@ public:
     CameraDeviceModel *cameraDevices() const { return m_cameraModel; }
     BroadcastEngine *broadcastEngine() const { return m_broadcastEngine; }
     QSortFilterProxyModel *stagedMediaProxy() const { return m_filterProxy; }
+    QCameraDevice programCameraDevice() const { return m_programCameraDevice; }
 
     QString selectedSegmentId() const { return m_selectedSegmentId; }
     QString meetingType() const { return m_meetingType; }
@@ -90,6 +95,7 @@ public:
     // --- Legacy Timer Getters Removed ---
 
     QString bgmPath() const;
+    QString bgmCoverArt() const { return m_bgmCoverArt; }
     bool isPlayingBgm() const;
     QString bgmTrackName() const;
     int bgmCount() const { return m_bgmPlaylist.count(); }
@@ -106,10 +112,12 @@ public:
     Q_INVOKABLE void setMixerMuted(bool muted);
     Q_INVOKABLE void setMeetingLive(bool live);
     Q_INVOKABLE void toggleMeetingLive() { setMeetingLive(!m_isMeetingLive); }
+    Q_INVOKABLE void setProgramCameraDevice(const QCameraDevice &device);
 
     Q_INVOKABLE void requestScanJwMedia();
     Q_INVOKABLE void requestScanCustomFolder();
     Q_INVOKABLE QVariantMap findSong(int num, const QString &lang, bool prefVideo, const QString &track);
+    Q_INVOKABLE QVariantMap getSong(int number, const QString &langCode) const;
     Q_INVOKABLE void stageMedia(const QString &assetId);
     Q_INVOKABLE void previewMediaByPath(const QString &path);
     Q_INVOKABLE void importMediaToFileSystem(const QString &category);
@@ -117,12 +125,11 @@ public:
     Q_INVOKABLE void findAndStageSong(int songNumber, const QString &languageCode, const QString &targetSegmentId);
     Q_INVOKABLE void renameCategory(const QString &oldName, const QString &newName);
     Q_INVOKABLE void removeMedia(const QString &id);
-    Q_INVOKABLE void resetApp();
-
     Q_INVOKABLE void openAudienceWindow();
     Q_INVOKABLE void closeAudienceWindow();
     Q_INVOKABLE void toggleAudienceWindow();
     Q_INVOKABLE void toggleZoomBroadcast();
+    Q_INVOKABLE bool hasObsVirtualCamera() const;
 
     Q_INVOKABLE QVariantList getSupportedLanguages() const;
     Q_INVOKABLE QVariantMap getLanguageMap() const;
@@ -144,6 +151,7 @@ signals:
     void mixerMutedChanged();
     void isMeetingLiveChanged();
     void vcamEnabledChanged();
+    void programCameraDeviceChanged();
     void scanStatusChanged();
     void hasSecondaryScreenChanged();
     void songNotFound(int songNumber);
@@ -164,6 +172,10 @@ private:
     void loadBgmTrack(int index);
     void saveState();
     void loadState();
+    bool openZoomWindow();
+    void indexMediaAsset(const QVariantMap &asset);
+    void clearMediaIndexes();
+    void applyLanguageCode(const QString &languageCode, bool persist, bool reResolveSongs);
     QString languageName(const QString &languageCode) const;
     QString resolveSongToSegment(int songNumber, const QString &languageCode, const QString &targetSegmentId, bool warnOnMissing);
     void reResolveSongSegmentsForCurrentLanguage();
@@ -175,7 +187,7 @@ private:
     MeetingScheduleModel *m_meetingModel = nullptr;
     CameraDeviceModel *m_cameraModel;
     BroadcastEngine *m_broadcastEngine;
-    FfmpegUdpBridge *m_bridge;
+    VirtualCameraManager *m_vcamManager;
 
     QString m_selectedSegmentId;
     QString m_meetingType = "midweek";
@@ -186,11 +198,13 @@ private:
     bool m_vcamEnabled = false;
     bool m_feedExtended = false;
     QString m_scanStatus;
+    QCameraDevice m_programCameraDevice;
 
     // BGM
     QMediaPlayer *m_bgmPlayer = nullptr;
     QAudioOutput *m_bgmAudio = nullptr;
     QStringList m_bgmPlaylist;
+    QString m_bgmCoverArt;
     int m_bgmIndex = 0;
 
     // Thumbnail extractor
@@ -198,4 +212,7 @@ private:
 
     MediaExtractor *m_extractor = nullptr;
     QPointer<QQuickWindow> m_audienceWindow;
+    QPointer<QQuickWindow> m_zoomWindow;
+    QHash<QString, QVariantMap> m_mediaIndexByPath;
+    QHash<QString, QVariantMap> m_songIndex;
 };

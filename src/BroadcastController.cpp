@@ -7,14 +7,15 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QMediaDevices>
 #include <QQuickWindow>
 #include <QScreen>
 #include <QQmlComponent>
 #include <QQmlContext>
+#include <QQmlError>
 #include <QDebug>
 #include <QUuid>
 #include <QBuffer>
-#include <QMediaDevices>
 #include <QCameraDevice>
 #include <QTimer>
 #include <QImageReader>
@@ -25,6 +26,78 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QFile>
+#include <QSaveFile>
+
+namespace {
+
+QString normalizedMediaPath(const QString &path)
+{
+    return QFileInfo(path).absoluteFilePath().toLower();
+}
+
+QString songIndexKey(const QString &languageCode, int songNumber, const QString &type = {}, const QString &track = {})
+{
+    return QStringLiteral("%1|%2|%3|%4")
+        .arg(SongSearchUtils::normalizeLanguageCode(languageCode),
+             QString::number(songNumber),
+             type.isEmpty() ? QStringLiteral("*") : type.toLower(),
+             track.isEmpty() ? QStringLiteral("*") : track.toLower());
+}
+
+QVariantMap parseSongMetadata(const QString &filePath)
+{
+    const QFileInfo fi(filePath);
+    const QString fileName = fi.fileName();
+
+    static const QRegularExpression jwSongRegex(
+        QStringLiteral("^sjj([mc])_([A-Z]+)_(\\d{1,3})(?:_r(\\d+)P)?"),
+        QRegularExpression::CaseInsensitiveOption);
+    QRegularExpressionMatch match = jwSongRegex.match(fileName);
+
+    QVariantMap metadata;
+    if (match.hasMatch()) {
+        metadata.insert(QStringLiteral("isSong"), true);
+        metadata.insert(QStringLiteral("trackType"),
+                        match.captured(1).compare(QStringLiteral("m"), Qt::CaseInsensitive) == 0
+                            ? QStringLiteral("vocal")
+                            : QStringLiteral("instrumental"));
+        metadata.insert(QStringLiteral("languageCode"), SongSearchUtils::normalizeLanguageCode(match.captured(2)));
+        metadata.insert(QStringLiteral("songNumber"), match.captured(3).toInt());
+        if (!match.captured(4).isEmpty())
+            metadata.insert(QStringLiteral("resolution"), match.captured(4).toInt());
+        return metadata;
+    }
+
+    static const QRegularExpression altSongRegex(
+        QStringLiteral("^(?:snnw|snn|sjj)_([A-Z]+)_(\\d{1,3})"),
+        QRegularExpression::CaseInsensitiveOption);
+    match = altSongRegex.match(fileName);
+    if (match.hasMatch()) {
+        metadata.insert(QStringLiteral("isSong"), true);
+        metadata.insert(QStringLiteral("trackType"), QStringLiteral("vocal"));
+        metadata.insert(QStringLiteral("languageCode"), SongSearchUtils::normalizeLanguageCode(match.captured(1)));
+        metadata.insert(QStringLiteral("songNumber"), match.captured(2).toInt());
+    }
+
+    return metadata;
+}
+
+int mediaRank(const QVariantMap &asset)
+{
+    int rank = 0;
+    if (asset.value(QStringLiteral("type")).toString() == QStringLiteral("video"))
+        rank += 1000;
+    else if (asset.value(QStringLiteral("type")).toString() == QStringLiteral("audio"))
+        rank += 500;
+
+    if (asset.value(QStringLiteral("trackType")).toString() == QStringLiteral("vocal"))
+        rank += 100;
+
+    rank += asset.value(QStringLiteral("resolution")).toInt();
+    return rank;
+}
+
+} // namespace
 
 // ──────────────────────────────────────────────────────────────────
 //  Constructor / Destructor
@@ -39,8 +112,9 @@ BroadcastController::BroadcastController(QQmlApplicationEngine *engine, QObject 
     , m_meetingModel(new MeetingScheduleModel(this))
     , m_cameraModel(new CameraDeviceModel(this))
     , m_broadcastEngine(new BroadcastEngine(this))
-    , m_bridge(new FfmpegUdpBridge(this))
+    , m_vcamManager(new VirtualCameraManager(this))
 {
+    m_programCameraDevice = QMediaDevices::defaultVideoInput();
     m_proxyModel->setSourceModel(m_libraryModel);
     m_filterProxy->setSourceModel(m_libraryModel);
 
@@ -73,40 +147,28 @@ BroadcastController::BroadcastController(QQmlApplicationEngine *engine, QObject 
     // ── Media Thumbnail Manager (Async/Hash-cached) ──
     m_thumbManager = new MediaThumbnailManager(this);
     connect(m_thumbManager, &MediaThumbnailManager::thumbnailReady, this, [this](const QString &id, const QString &cachePath, const QString &title) {
+        if (id == QStringLiteral("bgm-cover")) {
+            m_bgmCoverArt = QUrl::fromLocalFile(cachePath).toString();
+            emit bgmChanged();
+            return;
+        }
         m_libraryModel->updateThumbnail(id, QUrl::fromLocalFile(cachePath).toString());
         if (!title.isEmpty()) {
             m_libraryModel->updateName(id, title);
             saveState();
         }
+        indexMediaAsset(m_libraryModel->getRowById(id));
     });
 
     // ── Initial Load ──
     loadState();
     
-    // Auto scan JW media on startup if nothing loaded?
-    if (m_libraryModel->rowCount() <= QMediaDevices::videoInputs().size()) {
-        requestScanJwMedia();
-    }
+    // Startup prefetch: build the media/song indexes in the background without blocking launch.
+    requestScanJwMedia();
 }
 
 BroadcastController::~BroadcastController()
 {
-    saveState();
-}
-
-void BroadcastController::resetApp()
-{
-    m_libraryModel->clear();
-    m_meetingModel->clearAllMedia();
-    m_filterProxy->setStagedIds({});
-    
-    QString appData = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    QFile::remove(appData + "/app_state.json");
-    
-    QDir cacheDir(appData + "/MediaThumbnails");
-    if (cacheDir.exists()) cacheDir.removeRecursively();
-
-    registerCameras();
     saveState();
 }
 
@@ -188,20 +250,13 @@ QVariantMap BroadcastController::currentLanguage() const
 
 void BroadcastController::setCurrentLanguage(const QVariantMap &language)
 {
-    setCurrentLanguageCode(language.value(QStringLiteral("code")).toString());
+    const QString code = language.value(QStringLiteral("code")).toString();
+    setCurrentLanguageCode(code.isEmpty() ? language.value(QStringLiteral("name")).toString() : code);
 }
 
 void BroadcastController::setCurrentLanguageCode(const QString &lang)
 {
-    const QString normalized = SongSearchUtils::normalizeLanguageCode(lang);
-    if (m_languageCode != normalized) {
-        m_languageCode = normalized;
-        if (m_proxyModel) m_proxyModel->setLanguageCode(normalized);
-        emit currentLanguageCodeChanged();
-        emit currentLanguageChanged();
-        reResolveSongSegmentsForCurrentLanguage();
-        saveState();
-    }
+    applyLanguageCode(lang, true, true);
 }
 
 void BroadcastController::setMasterVolume(int v)
@@ -213,12 +268,17 @@ void BroadcastController::setMasterVolume(int v)
     }
 }
 
-void BroadcastController::setMixerMuted(bool muted)
-{
-    if (m_mixerMuted != muted) {
-        m_mixerMuted = muted;
-        emit mixerMutedChanged();
-    }
+void BroadcastController::setMixerMuted(bool muted) {
+    if (m_mixerMuted == muted) return;
+    m_mixerMuted = muted;
+    m_broadcastEngine->setProgramMuted(muted);
+    emit mixerMutedChanged();
+}
+
+void BroadcastController::setProgramCameraDevice(const QCameraDevice &device) {
+    if (m_programCameraDevice == device) return;
+    m_programCameraDevice = device;
+    emit programCameraDeviceChanged();
 }
 
 void BroadcastController::setMeetingLive(bool live)
@@ -257,7 +317,10 @@ void BroadcastController::loadBgmTrack(int index)
 {
     if (index < 0 || index >= m_bgmPlaylist.count()) return;
     m_bgmIndex = index;
+    m_bgmCoverArt.clear();
     m_bgmPlayer->setSource(QUrl::fromLocalFile(m_bgmPlaylist.at(index)));
+    if (m_thumbManager)
+        m_thumbManager->enqueue(QStringLiteral("bgm-cover"), m_bgmPlaylist.at(index), QStringLiteral("audio"));
     emit bgmChanged();
 }
 
@@ -353,12 +416,36 @@ void BroadcastController::updateScreenCount() { emit hasSecondaryScreenChanged()
 
 QVariantMap BroadcastController::findSong(int num, const QString &lang, bool prefVideo, const QString &track)
 {
-    Q_UNUSED(prefVideo);
-    Q_UNUSED(track);
-    QVariantMap res = SongSearchUtils::findSongFile(num, lang, m_libraryModel->toVariantList());
-    if (res.value(QStringLiteral("found")).toBool() && !res.contains(QStringLiteral("path")))
-        res.insert(QStringLiteral("path"), res.value(QStringLiteral("absolutePath")));
-    return res;
+    const QString type = prefVideo ? QStringLiteral("video") : QStringLiteral("audio");
+    QVariantMap result = m_songIndex.value(songIndexKey(lang, num, type, track));
+    if (result.isEmpty())
+        result = m_songIndex.value(songIndexKey(lang, num, type));
+    if (result.isEmpty())
+        result = getSong(num, lang);
+
+    if (!result.value(QStringLiteral("found")).toBool())
+        return result;
+
+    result.insert(QStringLiteral("preferredType"), type);
+    result.insert(QStringLiteral("preferredTrack"), track);
+    return result;
+}
+
+QVariantMap BroadcastController::getSong(int number, const QString &langCode) const
+{
+    QVariantMap result = m_songIndex.value(songIndexKey(langCode, number));
+    if (result.isEmpty()) {
+        result.insert(QStringLiteral("found"), false);
+        result.insert(QStringLiteral("code"), SongSearchUtils::normalizeLanguageCode(langCode));
+        result.insert(QStringLiteral("songNumber"), number);
+        result.insert(QStringLiteral("languageName"), SongSearchUtils::languageNameForCode(langCode));
+        return result;
+    }
+
+    result.insert(QStringLiteral("found"), true);
+    if (!result.contains(QStringLiteral("path")))
+        result.insert(QStringLiteral("path"), result.value(QStringLiteral("absolutePath")));
+    return result;
 }
 
 
@@ -369,19 +456,36 @@ void BroadcastController::openAudienceWindow()
 
     if (!m_audienceWindow) {
         QQmlComponent component(m_engine, QUrl(QStringLiteral("qrc:/MediaFlow/qml/AudienceWindow.qml")));
-        if (component.status() != QQmlComponent::Ready) return;
-        m_audienceWindow = qobject_cast<QQuickWindow *>(component.create());
+        if (component.status() != QQmlComponent::Ready) {
+            qWarning() << "AudienceWindow component failed:" << component.errors();
+            m_feedExtended = false;
+            emit feedExtendedChanged();
+            return;
+        }
+        QObject *created = component.create();
+        m_audienceWindow = qobject_cast<QQuickWindow *>(created);
+        if (!m_audienceWindow) {
+            qWarning() << "AudienceWindow did not create a QQuickWindow:" << created;
+            if (created)
+                created->deleteLater();
+            m_feedExtended = false;
+            emit feedExtendedChanged();
+            return;
+        }
     }
 
     if (m_audienceWindow) {
         m_audienceWindow->hide();
-        m_audienceWindow->setScreen(targetScreen);
+        if (targetScreen)
+            m_audienceWindow->setScreen(targetScreen);
         if (screens.size() > 1) {
             m_audienceWindow->setGeometry(targetScreen->geometry());
             m_audienceWindow->showFullScreen();
         } else {
             m_audienceWindow->resize(1280, 720);
             m_audienceWindow->show();
+            m_audienceWindow->raise();
+            m_audienceWindow->requestActivate();
         }
         m_feedExtended = true;
         emit feedExtendedChanged();
@@ -390,11 +494,128 @@ void BroadcastController::openAudienceWindow()
 
 void BroadcastController::closeAudienceWindow() { if (m_audienceWindow) m_audienceWindow->hide(); m_feedExtended = false; emit feedExtendedChanged(); }
 void BroadcastController::toggleAudienceWindow() { if (m_feedExtended) closeAudienceWindow(); else openAudienceWindow(); }
-void BroadcastController::toggleZoomBroadcast() { if (m_bridge->running()) m_bridge->stop(); else m_bridge->startWithCamera("Integrated Camera"); m_vcamEnabled = m_bridge->running(); emit vcamEnabledChanged(); }
+
+bool BroadcastController::openZoomWindow()
+{
+    if (!m_zoomWindow) {
+        QQmlComponent component(m_engine, QUrl(QStringLiteral("qrc:/MediaFlow/qml/VirtualCameraWindow.qml")));
+        if (component.status() != QQmlComponent::Ready) {
+            qWarning() << "VirtualCameraWindow component failed:" << component.errors();
+            return false;
+        }
+
+        QObject *created = component.create();
+        m_zoomWindow = qobject_cast<QQuickWindow *>(created);
+        if (!m_zoomWindow) {
+            qWarning() << "VirtualCameraWindow did not create a QQuickWindow:" << created;
+            if (created)
+                created->deleteLater();
+            return false;
+        }
+    }
+
+    m_zoomWindow->setGeometry(-10000, -10000, 1920, 1080);
+    m_zoomWindow->show();
+    return true;
+}
+
+bool BroadcastController::hasObsVirtualCamera() const
+{
+    const QList<QCameraDevice> cameras = QMediaDevices::videoInputs();
+    for (const QCameraDevice &camera : cameras) {
+        const QString description = camera.description();
+        const QString id = QString::fromUtf8(camera.id());
+        if (description.contains(QStringLiteral("OBS Virtual Camera"), Qt::CaseInsensitive)
+            || description.contains(QStringLiteral("OBS-Camera"), Qt::CaseInsensitive)
+            || description.contains(QStringLiteral("OBS Camera"), Qt::CaseInsensitive)
+            || id.contains(QStringLiteral("OBS Virtual Camera"), Qt::CaseInsensitive)
+            || id.contains(QStringLiteral("OBS-Camera"), Qt::CaseInsensitive)
+            || id.contains(QStringLiteral("OBS Camera"), Qt::CaseInsensitive)
+            || id.contains(QStringLiteral("obs"), Qt::CaseInsensitive)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void BroadcastController::toggleZoomBroadcast() { 
+    qDebug() << "toggleZoomBroadcast() clicked!";
+    if (m_vcamManager->isBroadcasting()) {
+        m_vcamManager->stop(); 
+        if (m_zoomWindow)
+            m_zoomWindow->hide();
+    } else {
+        if (!hasObsVirtualCamera()) {
+            qWarning() << "OBS Virtual Camera is not installed or not detected.";
+        } else if (openZoomWindow() && m_zoomWindow) {
+            m_vcamManager->start(m_zoomWindow.data());
+        }
+    }
+    m_vcamEnabled = m_vcamManager->isBroadcasting(); 
+    emit vcamEnabledChanged(); 
+}
+
+void BroadcastController::clearMediaIndexes()
+{
+    m_mediaIndexByPath.clear();
+    m_songIndex.clear();
+}
+
+void BroadcastController::indexMediaAsset(const QVariantMap &asset)
+{
+    const QString path = asset.value(QStringLiteral("absolutePath")).toString();
+    if (path.isEmpty())
+        return;
+
+    QVariantMap indexed = asset;
+    const QVariantMap songMetadata = parseSongMetadata(path);
+    for (auto it = songMetadata.cbegin(); it != songMetadata.cend(); ++it)
+        indexed.insert(it.key(), it.value());
+
+    if (!indexed.contains(QStringLiteral("path")))
+        indexed.insert(QStringLiteral("path"), path);
+    if (!indexed.contains(QStringLiteral("name")) || indexed.value(QStringLiteral("name")).toString().isEmpty())
+        indexed.insert(QStringLiteral("name"), QFileInfo(path).fileName());
+
+    m_mediaIndexByPath.insert(normalizedMediaPath(path), indexed);
+
+    if (!indexed.value(QStringLiteral("isSong")).toBool())
+        return;
+
+    const QString languageCode = indexed.value(QStringLiteral("languageCode")).toString();
+    const int songNumber = indexed.value(QStringLiteral("songNumber")).toInt();
+    const QString type = indexed.value(QStringLiteral("type")).toString();
+    const QString track = indexed.value(QStringLiteral("trackType")).toString();
+    if (languageCode.isEmpty() || songNumber <= 0)
+        return;
+
+    indexed.insert(QStringLiteral("found"), true);
+    indexed.insert(QStringLiteral("code"), languageCode);
+    indexed.insert(QStringLiteral("languageName"), SongSearchUtils::languageNameForCode(languageCode));
+
+    const QStringList keys{
+        songIndexKey(languageCode, songNumber),
+        songIndexKey(languageCode, songNumber, type),
+        songIndexKey(languageCode, songNumber, type, track),
+        songIndexKey(languageCode, songNumber, QString(), track)
+    };
+
+    for (const QString &key : keys) {
+        const QVariantMap existing = m_songIndex.value(key);
+        if (existing.isEmpty() || mediaRank(indexed) > mediaRank(existing))
+            m_songIndex.insert(key, indexed);
+    }
+}
 
 void BroadcastController::onMediaFound(MediaType type, const QString &name, const QString &absolutePath, const QImage &thumbnail, const QDateTime &creationDate)
 {
     Q_UNUSED(creationDate); Q_UNUSED(thumbnail);
+    if (m_libraryModel->containsPath(absolutePath)) {
+        indexMediaAsset(m_libraryModel->getRowById(m_libraryModel->idOfPath(absolutePath)));
+        return;
+    }
+
     QVariantMap m;
     QString id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     m.insert("id", id);
@@ -428,7 +649,12 @@ void BroadcastController::onMediaFound(MediaType type, const QString &name, cons
     m.insert("category", "General");
     m.insert("thumbnailPath", (type == MediaType::Image) ? QUrl::fromLocalFile(absolutePath).toString() : "");
     m.insert("isStaged", false);
+    const QVariantMap songMetadata = parseSongMetadata(absolutePath);
+    for (auto it = songMetadata.cbegin(); it != songMetadata.cend(); ++it)
+        m.insert(it.key(), it.value());
+
     m_libraryModel->appendFromVariantList({m});
+    indexMediaAsset(m);
     if (m_thumbManager) m_thumbManager->enqueue(id, absolutePath, typeStr);
 }
 
@@ -438,7 +664,7 @@ void BroadcastController::saveState()
 {
     QString path = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
     QDir().mkpath(path);
-    QFile file(path + "/app_state.json");
+    QSaveFile file(path + "/app_state.json");
     if (!file.open(QIODevice::WriteOnly)) return;
     QJsonObject root;
     root["midweek"] = QJsonArray::fromVariantList(m_meetingModel->getFullState("midweek"));
@@ -450,28 +676,41 @@ void BroadcastController::saveState()
     }
     root["importedMedia"] = QJsonArray::fromVariantList(importedItems);
     root["meetingType"] = m_meetingType;
-    root["currentLanguageCode"] = m_languageCode;
+    const QString code = SongSearchUtils::normalizeLanguageCode(m_languageCode);
+    root["currentLanguageCode"] = code;
+    root["currentLanguageName"] = SongSearchUtils::languageNameForCode(code);
     file.write(QJsonDocument(root).toJson());
+    file.commit();
 }
 
 void BroadcastController::loadState()
 {
     QString path = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/app_state.json";
     QFile file(path);
-    if (!file.open(QIODevice::ReadOnly)) return;
-    QJsonObject root = QJsonDocument::fromJson(file.readAll()).object();
-    m_libraryModel->appendFromVariantList(root["importedMedia"].toArray().toVariantList());
+    if (!file.open(QIODevice::ReadOnly)) {
+        applyLanguageCode(m_languageCode, false, false);
+        return;
+    }
+    QJsonParseError parseError;
+    QJsonObject root = QJsonDocument::fromJson(file.readAll(), &parseError).object();
+    if (parseError.error != QJsonParseError::NoError) {
+        applyLanguageCode(m_languageCode, false, false);
+        return;
+    }
+    const QVariantList importedMedia = root["importedMedia"].toArray().toVariantList();
+    m_libraryModel->appendFromVariantList(importedMedia);
+    for (const QVariant &item : importedMedia)
+        indexMediaAsset(item.toMap());
     m_meetingModel->setFullState("midweek", root["midweek"].toArray().toVariantList());
     m_meetingModel->setFullState("weekend", root["weekend"].toArray().toVariantList());
     m_meetingType = root["meetingType"].toString("midweek");
-    m_languageCode = root["currentLanguageCode"].toString("E");
+    const QString loadedLanguage = root["currentLanguageCode"].toString(root["languageCode"].toString("E"));
     
     // Sync models with loaded state
     if (m_meetingModel) m_meetingModel->loadMeeting(m_meetingType);
-    if (m_proxyModel) m_proxyModel->setLanguageCode(m_languageCode);
+    applyLanguageCode(loadedLanguage, false, false);
 
     emit meetingTypeChanged();
-    emit currentLanguageCodeChanged();
     if (!m_selectedSegmentId.isEmpty()) selectSegment(m_selectedSegmentId);
 }
 
@@ -496,6 +735,7 @@ void BroadcastController::browseAndAddMedia(const QString &seqId, const QString 
     m.insert("isImported", true);
     m.insert("thumbnailPath", (mediaType == "image") ? QUrl::fromLocalFile(file).toString() : "");
     m_libraryModel->appendFromVariantList({m});
+    indexMediaAsset(m);
     
     if (m_thumbManager) m_thumbManager->enqueue(id, file, mediaType);
     
@@ -526,6 +766,7 @@ void BroadcastController::importMediaToFileSystem(const QString &category) {
     m.insert("category", category);
     m.insert("isImported", true);
     m_libraryModel->appendFromVariantList({m});
+    indexMediaAsset(m);
     if (m_thumbManager) m_thumbManager->enqueue(id, file, m["type"].toString());
     saveState();
 }
@@ -562,6 +803,7 @@ QVariantMap BroadcastController::addMediaToSegment(const QString &segmentId, con
     result.insert("category", "Meeting");
 
     m_libraryModel->appendFromVariantList({result});
+    indexMediaAsset(result);
     
     // Thumbnail generation
     if (m_thumbManager) m_thumbManager->enqueue(id, file, mediaType);
@@ -589,6 +831,28 @@ QVariantMap BroadcastController::getLanguageMap() const {
     return map;
 }
 
+void BroadcastController::applyLanguageCode(const QString &languageCode, bool persist, bool reResolveSongs)
+{
+    const QString normalized = SongSearchUtils::normalizeLanguageCode(languageCode);
+    const bool changed = m_languageCode != normalized;
+
+    m_languageCode = normalized;
+    if (m_proxyModel)
+        m_proxyModel->setLanguageCode(normalized);
+    if (m_filterProxy)
+        m_filterProxy->setLanguageCode(normalized);
+
+    if (changed) {
+        emit currentLanguageCodeChanged();
+        emit currentLanguageChanged();
+        if (reResolveSongs)
+            reResolveSongSegmentsForCurrentLanguage();
+    }
+
+    if (persist)
+        saveState();
+}
+
 QString BroadcastController::languageName(const QString &languageCode) const
 {
     return SongSearchUtils::languageNameForCode(languageCode);
@@ -597,7 +861,7 @@ QString BroadcastController::languageName(const QString &languageCode) const
 QString BroadcastController::resolveSongToSegment(int songNumber, const QString &languageCode, const QString &targetSegmentId, bool warnOnMissing)
 {
     const QString code = SongSearchUtils::normalizeLanguageCode(languageCode);
-    const QVariantMap result = SongSearchUtils::findSongFile(songNumber, code, m_libraryModel->toVariantList());
+    const QVariantMap result = getSong(songNumber, code);
     const int row = m_meetingModel->rowOfId(targetSegmentId);
 
     if (!result.value(QStringLiteral("found")).toBool()) {

@@ -7,6 +7,7 @@
 #include <QUrl>
 #include <QtConcurrent>
 #include <QDebug>
+#include <QMutexLocker>
 
 static const QStringList kNameFilters = {
     // Videos
@@ -32,7 +33,7 @@ MediaExtractor::MediaExtractor(QObject *parent)
 
 void MediaExtractor::startScan()
 {
-    QtConcurrent::run([this]() {
+    auto future = QtConcurrent::run([this]() {
         for (const QString &dirPath : m_targetDirs) {
             scanDir(dirPath);
         }
@@ -42,11 +43,12 @@ void MediaExtractor::startScan()
 
         emit scanFinished();
     });
+    Q_UNUSED(future);
 }
 
 void MediaExtractor::scanDirectory(const QString &dirPath)
 {
-    QtConcurrent::run([this, dirPath]() {
+    auto future = QtConcurrent::run([this, dirPath]() {
         scanDir(dirPath);
 
         // Also watch this new directory
@@ -67,6 +69,7 @@ void MediaExtractor::scanDirectory(const QString &dirPath)
 
         emit scanFinished();
     });
+    Q_UNUSED(future);
 }
 
 void MediaExtractor::scanDir(const QString &dirPath)
@@ -82,28 +85,35 @@ void MediaExtractor::scanDir(const QString &dirPath)
 
     while (it.hasNext()) {
         QString filePath = it.next();
-        // Dedup: skip already-indexed files
-        if (m_indexedPaths.contains(filePath)) continue;
-        m_indexedPaths.insert(filePath);
+        {
+            QMutexLocker locker(&m_indexMutex);
+            if (m_indexedPaths.contains(filePath))
+                continue;
+            m_indexedPaths.insert(filePath);
+        }
         processFile(filePath);
     }
 }
 
 void MediaExtractor::setupWatcher()
 {
-    if (m_watcher) return;
-    m_watcher = new QFileSystemWatcher(this);
-    connect(m_watcher, &QFileSystemWatcher::directoryChanged,
-            this, &MediaExtractor::onDirectoryChanged);
+    if (!m_watcher) {
+        m_watcher = new QFileSystemWatcher(this);
+        connect(m_watcher, &QFileSystemWatcher::directoryChanged,
+                this, &MediaExtractor::onDirectoryChanged);
+    }
 
     for (const QString &dirPath : m_targetDirs) {
         QDir dir(dirPath);
         if (!dir.exists()) continue;
-        m_watcher->addPath(dirPath);
+        if (!m_watcher->directories().contains(dirPath))
+            m_watcher->addPath(dirPath);
         // Also watch subdirectories
         QDirIterator it(dirPath, QDir::Dirs | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
         while (it.hasNext()) {
-            m_watcher->addPath(it.next());
+            const QString subdir = it.next();
+            if (!m_watcher->directories().contains(subdir))
+                m_watcher->addPath(subdir);
         }
     }
     qDebug() << "MediaExtractor: QFileSystemWatcher active on" << m_watcher->directories().count() << "directories";
@@ -112,15 +122,11 @@ void MediaExtractor::setupWatcher()
 void MediaExtractor::onDirectoryChanged(const QString &path)
 {
     qDebug() << "MediaExtractor: Directory changed:" << path;
-    // Rescan just this directory for new files (non-recursive for speed)
-    QDirIterator it(path, kNameFilters, QDir::Files);
-    while (it.hasNext()) {
-        QString filePath = it.next();
-        if (m_indexedPaths.contains(filePath)) continue;
-        m_indexedPaths.insert(filePath);
-        processFile(filePath);
-        qDebug() << "MediaExtractor: New file detected:" << filePath;
-    }
+    auto future = QtConcurrent::run([this, path]() {
+        scanDir(path);
+        QMetaObject::invokeMethod(this, &MediaExtractor::setupWatcher, Qt::QueuedConnection);
+    });
+    Q_UNUSED(future);
 }
 
 void MediaExtractor::processFile(const QString &filePath)

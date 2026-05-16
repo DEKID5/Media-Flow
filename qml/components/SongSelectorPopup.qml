@@ -28,7 +28,7 @@ Rectangle {
         let num = parseInt(songInput.text)
         if (!isNaN(num)) {
             console.log("SongSelectorPopup Searching: " + num + " Lang: " + root.currentLanguageCode)
-            searchResult = MediaFlowBackend.findSong(num, root.currentLanguageCode, true, "vocal")
+            searchResult = MediaFlowBackend.getSong(num, root.currentLanguageCode)
         }
     }
 

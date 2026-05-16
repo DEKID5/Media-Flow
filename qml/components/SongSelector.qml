@@ -9,22 +9,18 @@ Rectangle {
     color: "transparent"
 
     property int songIndex: -1
+    property string targetSegmentId: ""
     property var searchResult: ({"found": false, "file_missing": true})
 
     function updateSearch() {
         if (!MediaFlowBackend) return;
-        let model = langCombo.model;
-        if (!model || model.length === 0) return;
-        let lang = model[langCombo.currentIndex].code;
+        let lang = MediaFlowBackend.currentLanguageCode || "E";
         let num = parseInt(songNumInput.text);
         if (isNaN(num)) return;
-        let prefVideo = videoToggle.checked;
-        let track = vocalToggle.checked ? "vocal" : "instrumental";
-        
-        console.log("SongSelector Searching: Num=" + num + " Lang=" + lang + " Video=" + prefVideo);
-        searchResult = MediaFlowBackend.findSong(num, lang, prefVideo, track);
-        if (searchResult.found) {
-            MediaFlowBackend.setLinkedMedia(songIndex, searchResult.path, searchResult.type);
+        console.log("SongSelector Searching: Num=" + num + " Lang=" + lang);
+        searchResult = MediaFlowBackend.getSong(num, lang);
+        if (searchResult.found && targetSegmentId !== "") {
+            MediaFlowBackend.findAndStageSong(num, lang, targetSegmentId);
         }
     }
 
@@ -53,19 +49,19 @@ Rectangle {
             ColumnLayout {
                 Layout.fillWidth: true
                 Label { text: "LANGUAGE"; font.pixelSize: 9; color: "#A1A1AA"; font.bold: true }
-                ComboBox {
-                    id: langCombo
+                Rectangle {
                     Layout.fillWidth: true
-                    model: (MediaFlowBackend || {}).getSupportedLanguages() || []
-                    textRole: "name"
-                    currentIndex: {
-                        let current = (MediaFlowBackend || {}).currentLanguageCode || "E";
-                        for (let i = 0; i < model.length; i++) {
-                            if (model[i].code === current) return i;
-                        }
-                        return 0;
+                    implicitHeight: 36
+                    radius: 8
+                    color: "#0DFFFFFF"
+                    border.color: "#1AFFFFFF"
+                    Label {
+                        anchors.centerIn: parent
+                        text: (((MediaFlowBackend || {}).currentLanguage || {"name": "English"}).name).toUpperCase()
+                        color: "white"
+                        font.pixelSize: 10
+                        font.bold: true
                     }
-                    onCurrentIndexChanged: updateSearch()
                 }
             }
         }
@@ -141,7 +137,7 @@ Rectangle {
         
         SongSelectorPopup {
             songIndex: root.songIndex
-            currentLanguage: langCombo.currentText
+            targetSegmentId: root.targetSegmentId
         }
     }
 }

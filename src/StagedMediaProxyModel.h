@@ -14,6 +14,7 @@ class StagedMediaProxyModel : public QSortFilterProxyModel
     Q_PROPERTY(QString selectedSegmentId READ selectedSegmentId WRITE setSelectedSegmentId NOTIFY selectedSegmentIdChanged)
     Q_PROPERTY(QString filterType READ filterType WRITE setFilterType NOTIFY filterChanged)
     Q_PROPERTY(QString categoryFilter READ categoryFilter WRITE setCategoryFilter NOTIFY filterChanged)
+    Q_PROPERTY(QString languageCode READ languageCode WRITE setLanguageCode NOTIFY languageCodeChanged)
     Q_PROPERTY(QStringList stagedIds READ stagedIds WRITE setStagedIds NOTIFY stagedIdsChanged)
 
 public:
@@ -28,12 +29,16 @@ public:
     QString categoryFilter() const { return m_categoryFilter; }
     void setCategoryFilter(const QString &c);
 
+    QString languageCode() const { return m_languageCode; }
+    void setLanguageCode(const QString &code);
+
     QStringList stagedIds() const { return m_stagedIds; }
     void setStagedIds(const QStringList &ids);
 
 signals:
     void selectedSegmentIdChanged();
     void filterChanged();
+    void languageCodeChanged();
     void stagedIdsChanged();
 
 protected:
@@ -43,5 +48,6 @@ private:
     QString m_selectedSegmentId;
     QString m_filterType = "segment";
     QString m_categoryFilter;
+    QString m_languageCode = "E";
     QStringList m_stagedIds;
 };

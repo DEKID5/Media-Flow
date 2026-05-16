@@ -6,6 +6,7 @@
 #include <QImage>
 #include <QDateTime>
 #include <QFileSystemWatcher>
+#include <QMutex>
 #include <QSet>
 
 enum class MediaType {
@@ -51,4 +52,5 @@ private:
     QStringList m_targetDirs;
     QFileSystemWatcher *m_watcher = nullptr;
     QSet<QString> m_indexedPaths;     // Dedup: tracks all files already emitted
+    QMutex m_indexMutex;
 };

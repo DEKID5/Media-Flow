@@ -31,6 +31,24 @@ Rectangle {
 
     property bool activeIsA: true  // which player is currently showing
 
+    // ── Camera Background ──
+    CaptureSession {
+        id: monitorCameraSession
+        camera: Camera {
+            id: monitorCamera
+            cameraDevice: monitor.cameraDevice
+            active: !monitor.asset || !monitor.asset.absolutePath || monitor.asset.type === "input"
+        }
+        videoOutput: monitorCameraOut
+    }
+    VideoOutput {
+        id: monitorCameraOut
+        anchors.fill: parent
+        fillMode: VideoOutput.PreserveAspectCrop
+        z: 0
+        visible: monitorCamera.active
+    }
+
     // ── Player A ──
     MediaPlayer {
         id: playerA
@@ -123,7 +141,7 @@ Rectangle {
     Rectangle {
         anchors.fill: parent; z: 0
         color: "black"
-        visible: (!asset || !asset.absolutePath) && mediaType !== "input"
+        visible: (!asset || !asset.absolutePath) && mediaType !== "input" && !monitorCamera.active
         Column {
             anchors.centerIn: parent; spacing: 12
             Rectangle {

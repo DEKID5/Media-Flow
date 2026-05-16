@@ -4,6 +4,7 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
+#include <QQuickWindow>
 
 #include "BroadcastController.h"
 #include "MediaLibraryModel.h"
@@ -35,6 +36,7 @@ int main(int argc, char *argv[])
     QApplication::setApplicationName(QStringLiteral("MediaFlow"));
 
     QQuickStyle::setStyle(QStringLiteral("Basic"));
+    QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
 
     QQmlApplicationEngine engine;
 

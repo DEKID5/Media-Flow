@@ -39,6 +39,10 @@ set(MFQ_SOURCES
     src/MediaLibraryProxyModel.h
     src/MediaScanWorker.cpp
     src/MediaScanWorker.h
+    src/VirtualCameraManager.cpp
+    src/VirtualCameraManager.h
+    src/SharedMemoryWriter.cpp
+    src/SharedMemoryWriter.h
 )
 
 if(WIN32)
@@ -56,13 +60,16 @@ qt_add_qml_module(mediaflow
         qml/Theme.qml
         qml/OperatorDashboard.qml
         qml/AudienceWindow.qml
+        qml/VirtualCameraWindow.qml
         qml/components/PillButton.qml
         qml/components/MonitorView.qml
         qml/components/SongSelectorPopup.qml
         qml/components/SongSelector.qml
         qml/components/MediaSourcePanel.qml
         qml/components/BroadcastIcon.qml
+        qml/components/DockPanel.qml
         qml/components/TimerPanel.qml
+        qml/components/BackgroundMusicPanel.qml
         qml/assets/cam_placeholder.png
         qml/assets/meeting_placeholder.png
         qml/assets/video_placeholder.png
@@ -82,6 +89,7 @@ target_link_libraries(mediaflow PRIVATE
     Qt6::Sql
     Qt6::Multimedia
     Qt6::Concurrent
+    Qt6::OpenGL
 )
 
 if(WIN32)
