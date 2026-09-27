@@ -1,7 +1,6 @@
 #include "BroadcastController.h"
 #include "MediaExtractor.h"
 #include "MediaThumbnailManager.h"
-#include "MediaLibraryProxyModel.h"
 #include "SongSearchUtils.h"
 #include <QDir>
 #include <QFileDialog>
@@ -107,7 +106,6 @@ BroadcastController::BroadcastController(QQmlApplicationEngine *engine, QObject 
     : QObject(parent)
     , m_engine(engine)
     , m_libraryModel(new MediaLibraryModel(this))
-    , m_proxyModel(new MediaLibraryProxyModel(this))
     , m_filterProxy(new StagedMediaProxyModel(this))
     , m_meetingModel(new MeetingScheduleModel(this))
     , m_cameraModel(new CameraDeviceModel(this))
@@ -115,7 +113,6 @@ BroadcastController::BroadcastController(QQmlApplicationEngine *engine, QObject 
     , m_vcamManager(new VirtualCameraManager(this))
 {
     m_programCameraDevice = QMediaDevices::defaultVideoInput();
-    m_proxyModel->setSourceModel(m_libraryModel);
     m_filterProxy->setSourceModel(m_libraryModel);
 
     // ── Screen Monitoring ──
@@ -126,12 +123,18 @@ BroadcastController::BroadcastController(QQmlApplicationEngine *engine, QObject 
     connect(m_broadcastEngine, &BroadcastEngine::isProgramPausedChanged,
             this, &BroadcastController::isProgramPausedChanged);
 
-    // ── Sync volume to engine ──
-    connect(this, &BroadcastController::masterVolumeChanged, this, [this]() {
-        m_broadcastEngine->setProgramVolume(m_masterVolume / 100.0);
-    });
-    connect(this, &BroadcastController::mixerMutedChanged, this, [this]() {
-        m_broadcastEngine->setProgramMuted(m_mixerMuted);
+    // masterVolume/mixerMuted are consumed directly by AudienceWindow.qml
+    // (the single audio output) rather than routed through the engine.
+
+    // ── Auto-pause BGM when a program (video/audio) goes live ──
+    // Keeps audio to a single channel: opening/closing music plays only
+    // when no program video/audio is live, matching real meeting AV practice.
+    connect(m_broadcastEngine, &BroadcastEngine::programAssetChanged, this, [this]() {
+        const MediaAsset &a = m_broadcastEngine->programAsset();
+        if (!a.absolutePath.isEmpty() && (a.type == QStringLiteral("video") || a.type == QStringLiteral("audio"))) {
+            if (isPlayingBgm())
+                toggleBgmPlayback();
+        }
     });
 
     registerCameras();
@@ -271,7 +274,6 @@ void BroadcastController::setMasterVolume(int v)
 void BroadcastController::setMixerMuted(bool muted) {
     if (m_mixerMuted == muted) return;
     m_mixerMuted = muted;
-    m_broadcastEngine->setProgramMuted(muted);
     emit mixerMutedChanged();
 }
 
@@ -519,19 +521,17 @@ bool BroadcastController::openZoomWindow()
     return true;
 }
 
-bool BroadcastController::hasObsVirtualCamera() const
+bool BroadcastController::hasVirtualCameraDriver() const
 {
+    // MediaFlow feeds VirtualCameraManager's output through the UnityCapture
+    // shared-memory protocol (see UnityCaptureWriter) — its DirectShow filter
+    // registers as "UnityCapture" in the system's camera device list once installed.
     const QList<QCameraDevice> cameras = QMediaDevices::videoInputs();
     for (const QCameraDevice &camera : cameras) {
         const QString description = camera.description();
         const QString id = QString::fromUtf8(camera.id());
-        if (description.contains(QStringLiteral("OBS Virtual Camera"), Qt::CaseInsensitive)
-            || description.contains(QStringLiteral("OBS-Camera"), Qt::CaseInsensitive)
-            || description.contains(QStringLiteral("OBS Camera"), Qt::CaseInsensitive)
-            || id.contains(QStringLiteral("OBS Virtual Camera"), Qt::CaseInsensitive)
-            || id.contains(QStringLiteral("OBS-Camera"), Qt::CaseInsensitive)
-            || id.contains(QStringLiteral("OBS Camera"), Qt::CaseInsensitive)
-            || id.contains(QStringLiteral("obs"), Qt::CaseInsensitive)) {
+        if (description.contains(QStringLiteral("UnityCapture"), Qt::CaseInsensitive)
+            || id.contains(QStringLiteral("UnityCapture"), Qt::CaseInsensitive)) {
             return true;
         }
     }
@@ -546,7 +546,7 @@ void BroadcastController::toggleZoomBroadcast() {
         if (m_zoomWindow)
             m_zoomWindow->hide();
     } else {
-        if (!hasObsVirtualCamera()) {
+        if (!hasVirtualCameraDriver()) {
             qWarning() << "OBS Virtual Camera is not installed or not detected.";
         } else if (openZoomWindow() && m_zoomWindow) {
             m_vcamManager->start(m_zoomWindow.data());
@@ -688,12 +688,16 @@ void BroadcastController::loadState()
     QString path = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/app_state.json";
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {
+        // No saved state yet (first run). Still populate the default meeting
+        // schedule so the operator doesn't see an empty SEQUENCE panel.
+        if (m_meetingModel) m_meetingModel->loadMeeting(m_meetingType);
         applyLanguageCode(m_languageCode, false, false);
         return;
     }
     QJsonParseError parseError;
     QJsonObject root = QJsonDocument::fromJson(file.readAll(), &parseError).object();
     if (parseError.error != QJsonParseError::NoError) {
+        if (m_meetingModel) m_meetingModel->loadMeeting(m_meetingType);
         applyLanguageCode(m_languageCode, false, false);
         return;
     }
@@ -837,8 +841,6 @@ void BroadcastController::applyLanguageCode(const QString &languageCode, bool pe
     const bool changed = m_languageCode != normalized;
 
     m_languageCode = normalized;
-    if (m_proxyModel)
-        m_proxyModel->setLanguageCode(normalized);
     if (m_filterProxy)
         m_filterProxy->setLanguageCode(normalized);
 
@@ -865,8 +867,15 @@ QString BroadcastController::resolveSongToSegment(int songNumber, const QString 
     const int row = m_meetingModel->rowOfId(targetSegmentId);
 
     if (!result.value(QStringLiteral("found")).toBool()) {
-        if (row != -1)
+        if (row != -1) {
             m_meetingModel->setSongNumber(row, songNumber);
+            // Don't leave the previous language's file silently linked —
+            // it would otherwise still be eligible to go live.
+            m_meetingModel->setLinkedMedia(row, {});
+            if (targetSegmentId == m_selectedSegmentId)
+                selectSegment(targetSegmentId);
+            saveState();
+        }
         if (warnOnMissing) {
             emit songNotFoundInLanguage(songNumber, SongSearchUtils::languageNameForCode(code));
         }

@@ -59,6 +59,10 @@ private:
     QVideoSink *m_sink;
     bool m_processing = false;
     Request m_current;
+    // Bumped every time a new job starts; lets a stale queued timeout from a
+    // previous job recognize it's obsolete and no-op instead of cutting off
+    // whatever job is actually running now.
+    quint64 m_generation = 0;
 };
 
 class MediaThumbnailManager : public QObject

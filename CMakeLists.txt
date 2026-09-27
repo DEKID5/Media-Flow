@@ -11,8 +11,6 @@ set(MFQ_SOURCES
     src/main.cpp
     src/BroadcastController.cpp
     src/BroadcastController.h
-    src/JwLibraryWorker.cpp
-    src/JwLibraryWorker.h
     src/MediaExtractor.cpp
     src/MediaExtractor.h
     src/MediaLibraryModel.cpp
@@ -21,28 +19,20 @@ set(MFQ_SOURCES
     src/MeetingScheduleModel.h
     src/CameraDeviceModel.cpp
     src/CameraDeviceModel.h
-    src/FfmpegUdpBridge.cpp
-    src/FfmpegUdpBridge.h
     src/MediaAsset.h
     src/BroadcastEngine.cpp
     src/BroadcastEngine.h
     src/MediaThumbnailManager.cpp
     src/StagedMediaProxyModel.cpp
     src/StagedMediaProxyModel.h
-    src/SongManager.cpp
-    src/SongManager.h
     src/SongSearchUtils.cpp
     src/SongSearchUtils.h
     src/TimerController.cpp
     src/TimerController.h
-    src/MediaLibraryProxyModel.cpp
-    src/MediaLibraryProxyModel.h
-    src/MediaScanWorker.cpp
-    src/MediaScanWorker.h
     src/VirtualCameraManager.cpp
     src/VirtualCameraManager.h
-    src/SharedMemoryWriter.cpp
-    src/SharedMemoryWriter.h
+    src/UnityCaptureWriter.cpp
+    src/UnityCaptureWriter.h
 )
 
 if(WIN32)
@@ -64,7 +54,6 @@ qt_add_qml_module(mediaflow
         qml/components/PillButton.qml
         qml/components/MonitorView.qml
         qml/components/SongSelectorPopup.qml
-        qml/components/SongSelector.qml
         qml/components/MediaSourcePanel.qml
         qml/components/BroadcastIcon.qml
         qml/components/DockPanel.qml

@@ -47,10 +47,10 @@ Item {
         if (!MediaFlowBackend)
             return
 
-        if (MediaFlowBackend.vcamEnabled || MediaFlowBackend.hasObsVirtualCamera()) {
+        if (MediaFlowBackend.vcamEnabled || MediaFlowBackend.hasVirtualCameraDriver()) {
             MediaFlowBackend.toggleZoomBroadcast()
         } else {
-            obsWarningDialog.open()
+            vcamWarningDialog.open()
         }
     }
 
@@ -384,7 +384,9 @@ Item {
                                 onClicked: clearDialog.open()
                             }
                             Label {
-                                text: ((MediaFlowBackend || {}).meetingSchedule ? (MediaFlowBackend || {}).meetingSchedule.rowCount() : 0) + " SEGMENTS"
+                                // Bound to the ListView's own reactive count, not rowCount() directly —
+                                // a plain method call in a JS binding never re-evaluates on model reset.
+                                text: sList.count + " SEGMENTS"
                                 font.pixelSize: 8; color: "#4DA1A1AA"; font.bold: true
                             }
                         }
@@ -398,6 +400,9 @@ Item {
                                 id: segmentDelegate
                                 width: sList.width; height: isSelected ? 160 : 110
                                 property bool isSelected: (MediaFlowBackend || {}).selectedSegmentId === model.id
+                                // Captured here because the nested Repeater below has its own
+                                // "model" (associatedMediaIds), which shadows this segment's model.id.
+                                property string segmentId: model.id
 
                                 Behavior on height { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
 
@@ -524,7 +529,7 @@ Item {
                                                         Label { text: "×"; anchors.centerIn: parent; color: "white"; font.pixelSize: 10; font.bold: true }
                                                         MouseArea {
                                                             anchors.fill: parent
-                                                            onClicked: (MediaFlowBackend || {}).removeMediaFromSequence(model.id, modelData)
+                                                            onClicked: (MediaFlowBackend || {}).removeMediaFromSequence(segmentDelegate.segmentId, modelData)
                                                         }
                                                     }
                                                 }
@@ -677,14 +682,14 @@ Item {
     }
 
     Dialog {
-        id: obsWarningDialog
-        title: "OBS Camera Not Found"
+        id: vcamWarningDialog
+        title: "Virtual Camera Driver Not Found"
         modal: true
         anchors.centerIn: Overlay.overlay
         standardButtons: Dialog.Ok
         background: Rectangle { color: "#1a1a1e"; radius: 12; border.color: "#333" }
         contentItem: Label {
-            text: "Install or enable OBS-Camera, then try Broadcast to Zoom again."
+            text: "Install the UnityCapture virtual camera driver (see BUILD.md), then try Broadcast to Zoom again."
             color: "white"
             font.pixelSize: 12
             wrapMode: Text.WordWrap

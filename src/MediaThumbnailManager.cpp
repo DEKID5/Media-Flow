@@ -162,14 +162,17 @@ void NativeThumbnailGenerator::processNext() {
     if (m_queue.isEmpty()) { m_processing = false; return; }
     m_processing = true;
     m_current = m_queue.takeFirst();
-    
+    const quint64 generation = ++m_generation;
+
     qDebug() << "NativeThumbnailGenerator: Processing" << m_current.path;
     m_player->setSource(QUrl::fromLocalFile(m_current.path));
-    m_player->play(); 
-    
-    // Safety timeout
-    QTimer::singleShot(8000, this, [this](){
-        if (m_processing) {
+    m_player->play();
+
+    // Safety timeout. Guarded by generation so a timeout left over from a
+    // previous (already-finished-or-abandoned) job can't stop whatever job
+    // is running by the time it fires.
+    QTimer::singleShot(8000, this, [this, generation](){
+        if (m_processing && generation == m_generation) {
             qWarning() << "NativeThumbnailGenerator: Timeout/Failed for" << m_current.path;
             m_processing = false;
             m_player->stop();
@@ -180,10 +183,15 @@ void NativeThumbnailGenerator::processNext() {
 
 void NativeThumbnailGenerator::onFrameChanged(const QVideoFrame &frame) {
     if (!m_processing) return;
-    
-    // Only accept frames once we've reached at least 115 seconds
-    if (m_player->position() < 115000) {
-        return; 
+
+    // Grab a frame a little into playback (not frame 0, which is often black/blank),
+    // scaled to the clip's own length so short clips (many real meeting videos
+    // are well under 2 minutes) don't get starved waiting for a position they'll
+    // never reach.
+    const qint64 duration = m_player->duration();
+    const qint64 targetPosition = duration > 0 ? qMin<qint64>(2000, duration / 10) : 500;
+    if (m_player->position() < targetPosition) {
+        return;
     }
 
     if (frame.isValid()) {
@@ -204,6 +212,8 @@ void NativeThumbnailGenerator::onFrameChanged(const QVideoFrame &frame) {
 
 void NativeThumbnailGenerator::onStatusChanged(QMediaPlayer::MediaStatus status) {
     if (status == QMediaPlayer::LoadedMedia) {
-        m_player->setPosition(120000); // 120 seconds in
+        const qint64 duration = m_player->duration();
+        const qint64 targetPosition = duration > 0 ? qMin<qint64>(2000, duration / 10) : 500;
+        m_player->setPosition(targetPosition);
     }
 }

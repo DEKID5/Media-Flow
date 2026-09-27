@@ -8,9 +8,7 @@
 
 #include "BroadcastController.h"
 #include "MediaLibraryModel.h"
-#include "MediaLibraryProxyModel.h"
 #include "MeetingScheduleModel.h"
-#include "SongManager.h"
 #include "TimerController.h"
 
 #include <QFile>
@@ -44,17 +42,14 @@ int main(int argc, char *argv[])
                                                   QStringLiteral("Use MediaFlow.mediaLibrary"));
 
     BroadcastController controller(&engine);
-    SongManager songManager;
     TimerController timerController;
-    
+
     // Register the controller as a singleton instance
     qmlRegisterSingletonInstance("MediaFlow", 1, 0, "MediaFlowBackend", &controller);
-    qmlRegisterSingletonInstance("MediaFlow", 1, 0, "JWSongManager", &songManager);
     qmlRegisterSingletonInstance("MediaFlow", 1, 0, "TimerBackend", &timerController);
-    
+
     // Also keep context property as fallback
     engine.rootContext()->setContextProperty(QStringLiteral("MediaFlowBackend"), &controller);
-    engine.rootContext()->setContextProperty(QStringLiteral("JWSongManager"), &songManager);
     engine.rootContext()->setContextProperty(QStringLiteral("TimerBackend"), &timerController);
 
     QObject::connect(&engine, &QQmlApplicationEngine::quit, &app, &QCoreApplication::quit);

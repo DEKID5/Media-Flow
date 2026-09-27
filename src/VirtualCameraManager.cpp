@@ -1,9 +1,8 @@
 #include "VirtualCameraManager.h"
-#include "SharedMemoryWriter.h"
+#include "UnityCaptureWriter.h"
 #include <QtConcurrent>
 #include <QOpenGLContext>
 #include <QImage>
-#include <algorithm>
 
 VirtualCameraManager::VirtualCameraManager(QObject *parent)
     : QObject(parent), m_pbo{QOpenGLBuffer(QOpenGLBuffer::PixelPackBuffer), QOpenGLBuffer(QOpenGLBuffer::PixelPackBuffer)}
@@ -28,10 +27,8 @@ void VirtualCameraManager::start(QQuickWindow *window)
     m_isBroadcasting = true;
     m_pboIndex = 0;
     m_hasPendingRead = false;
-    
-    // Target OBS VirtualCam name and size (1920x1080 NV12)
-    size_t nv12Size = 1920 * 1080 * 3 / 2;
-    m_writer = std::make_unique<SharedMemoryWriter>(L"OBSVirtualCam_Texture1", nv12Size);
+
+    m_writer = std::make_unique<UnityCaptureWriter>();
 
     connect(m_window.data(), &QQuickWindow::afterRendering, this, &VirtualCameraManager::onAfterRendering, Qt::DirectConnection);
 }
@@ -104,49 +101,16 @@ void VirtualCameraManager::onAfterRendering()
 
 void VirtualCameraManager::processFrame(const QByteArray &rgbaData, const QSize &size)
 {
-    if (!m_writer || !m_writer->IsValid()) return;
+    if (!m_writer) return;
 
-    QImage img(reinterpret_cast<const uchar*>(rgbaData.data()), size.width(), size.height(), QImage::Format_RGBA8888);
-    QImage flipped = img.mirrored(false, true); // OpenGL is bottom-up
-    QImage resized;
+    // UnityCapture's FORMAT_UINT8 is DXGI_FORMAT_R8G8B8A8_UNORM — the exact
+    // same byte layout as QImage::Format_RGBA8888, so the captured frame can
+    // be sent as-is: no YUV/NV12 conversion, no channel reordering.
+    QImage img(reinterpret_cast<const uchar *>(rgbaData.data()), size.width(), size.height(), QImage::Format_RGBA8888);
+    QImage flipped = img.mirrored(false, true); // OpenGL readback is bottom-up
 
-    if (flipped.width() != 1920 || flipped.height() != 1080) {
-        resized = flipped.scaled(1920, 1080, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-    } else {
-        resized = flipped;
-    }
-
-    // Convert to NV12
-    int targetW = 1920;
-    int targetH = 1080;
-    size_t nv12Size = targetW * targetH * 3 / 2;
-    QByteArray nv12Data(nv12Size, 0);
-
-    uint8_t* yPlane = (uint8_t*)nv12Data.data();
-    uint8_t* uvPlane = yPlane + (targetW * targetH);
-
-    for (int j = 0; j < targetH; ++j) {
-        const QRgb* scanLine = (const QRgb*)resized.constScanLine(j);
-        for (int i = 0; i < targetW; ++i) {
-            QRgb pixel = scanLine[i];
-            int r = qRed(pixel);
-            int g = qGreen(pixel);
-            int b = qBlue(pixel);
-
-            int y = ((66 * r + 129 * g + 25 * b + 128) >> 8) + 16;
-            yPlane[j * targetW + i] = (uint8_t)std::clamp(y, 0, 255);
-
-            if (j % 2 == 0 && i % 2 == 0) {
-                int u = ((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128;
-                int v = ((112 * r - 94 * g - 18 * b + 128) >> 8) + 128;
-
-                int uvIdx = (j / 2) * targetW + i;
-                uvPlane[uvIdx] = (uint8_t)std::clamp(u, 0, 255);
-                uvPlane[uvIdx + 1] = (uint8_t)std::clamp(v, 0, 255);
-            }
-        }
-    }
-
-    // Write buffer straight to shared memory IPC
-    m_writer->Write(nv12Data.constData(), nv12Size);
+    // Format_RGBA8888 is always 4 bytes/pixel, so Qt never pads rows for it —
+    // constBits() is safe to treat as tightly packed (bytesPerLine == width*4),
+    // matching the tightly-packed layout sendFrame() expects.
+    m_writer->sendFrame(flipped.width(), flipped.height(), flipped.constBits());
 }

@@ -149,8 +149,14 @@ Window {
 
         function onTakeExecuted() {
             let a = MediaFlowBackend.broadcastEngine.programAsset
-            if (a && a.absolutePath && (a.type === "video" || a.type === "audio"))
+            if (a && a.absolutePath && (a.type === "video" || a.type === "audio")) {
                 executeTake("file:///" + a.absolutePath, a.type)
+            } else {
+                playerA.stop()
+                playerA.source = ""
+                playerB.stop()
+                playerB.source = ""
+            }
         }
 
         function onIsProgramPausedChanged() {
