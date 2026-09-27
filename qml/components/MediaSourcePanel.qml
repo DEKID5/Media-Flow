@@ -32,6 +32,13 @@ Item {
         currentView = "pins"
     }
 
+    property string pendingDeletePinId: ""
+    function confirmDeletePin(folderId, folderName) {
+        pendingDeletePinId = folderId
+        deletePinDialog.folderName = folderName
+        deletePinDialog.open()
+    }
+
     // Header
     Rectangle {
         id: header
@@ -39,7 +46,8 @@ Item {
         RowLayout {
             anchors.fill: parent; anchors.margins: 15; spacing: 12
 
-            // View Toggle
+            // View Toggle — pins are a QUICK FETCH sub-view, so that tab stays
+            // highlighted while browsing inside a pin folder too.
             Row {
                 spacing: 8
                 Repeater {
@@ -48,19 +56,26 @@ Item {
                         { id: "library", label: "QUICK FETCH", icon: "folder" }
                     ]
                     Rectangle {
+                        readonly property bool isActive: root.currentView === modelData.id || (modelData.id === "library" && root.currentView === "pins")
                         width: 110; height: 32; radius: 16
-                        color: root.currentView === modelData.id ? "#1AFFFFFF" : "transparent"
-                        border.width: 1; border.color: root.currentView === modelData.id ? "#33FFFFFF" : "transparent"
+                        color: isActive ? "#1AFFFFFF" : "transparent"
+                        border.width: 1; border.color: isActive ? "#33FFFFFF" : "transparent"
 
                         RowLayout {
                             anchors.centerIn: parent; spacing: 6
-                            BroadcastIcon { name: modelData.icon; iconSize: 12; opacity: root.currentView === modelData.id ? 1 : 0.5 }
+                            BroadcastIcon { name: modelData.icon; iconSize: 12; opacity: parent.parent.isActive ? 1 : 0.5 }
                             Label {
-                                text: modelData.label; color: root.currentView === modelData.id ? "white" : "#6b7280"
+                                text: modelData.label; color: parent.parent.isActive ? "white" : "#6b7280"
                                 font.bold: true; font.pixelSize: 10; font.letterSpacing: 0.5
                             }
                         }
-                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.currentView = modelData.id }
+                        MouseArea {
+                            anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                root.currentView = modelData.id
+                                root.selectedPinFolderId = ""
+                            }
+                        }
                     }
                 }
             }
@@ -93,7 +108,14 @@ Item {
     Rectangle {
         id: pinStrip
         anchors.top: header.bottom
-        width: parent.width; height: 64; color: "transparent"
+        width: parent.width
+        // Pins live only in QUICK FETCH (and while browsing inside one) --
+        // collapsed to 0 height (not just invisible) so ACTIVE MEDIA's layout
+        // closes the gap instead of leaving an empty strip.
+        height: visible ? 64 : 0
+        visible: root.currentView === "library" || root.currentView === "pins"
+        clip: true
+        color: "transparent"
 
         ListView {
             id: pinList
@@ -132,19 +154,18 @@ Item {
                     }
                 }
 
-                // Delete pin (hover to reveal)
+                // Delete pin — always visible (not hover-only) so it's discoverable,
+                // brightens further on hover; asks for confirmation before deleting.
                 Rectangle {
                     anchors.top: parent.top; anchors.right: parent.right; anchors.margins: -4
                     width: 16; height: 16; radius: 8; color: Theme.accentRed
-                    opacity: pinChipMa.containsMouse ? 1.0 : 0.0
+                    opacity: deletePinMa.containsMouse ? 1.0 : 0.7
                     Behavior on opacity { NumberAnimation { duration: Theme.durationFast } }
                     Label { text: "×"; anchors.centerIn: parent; color: "white"; font.pixelSize: 10; font.bold: true }
                     MouseArea {
-                        anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (root.selectedPinFolderId === model.id) { root.selectedPinFolderId = ""; root.currentView = "segment" }
-                            MediaFlowBackend.deletePinnedFolder(model.id)
-                        }
+                        id: deletePinMa
+                        anchors.fill: parent; anchors.margins: -3; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                        onClicked: root.confirmDeletePin(model.id, model.name)
                     }
                 }
 
@@ -223,6 +244,24 @@ Item {
         }
     }
 
+    Dialog {
+        id: deletePinDialog
+        property string folderName: ""
+        title: "Delete Pin Folder"
+        modal: true; anchors.centerIn: Overlay.overlay
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        background: Rectangle { color: "#1a1a1e"; radius: 12; border.color: "#333" }
+        contentItem: Label {
+            text: "Delete “" + deletePinDialog.folderName + "”? This only removes the pin folder — the media files themselves aren’t deleted."
+            color: "white"; font.pixelSize: 12; wrapMode: Text.WordWrap; width: 280
+        }
+        onAccepted: {
+            if (root.selectedPinFolderId === root.pendingDeletePinId) { root.selectedPinFolderId = ""; root.currentView = "segment" }
+            if (MediaFlowBackend) MediaFlowBackend.deletePinnedFolder(root.pendingDeletePinId)
+            root.pendingDeletePinId = ""
+        }
+    }
+
     // Secondary Header / Categories (Only in Library View)
     Rectangle {
         id: subHeader
@@ -271,6 +310,17 @@ Item {
                 text: "ADD FILES"; iconName: "plus"; accentColor: Theme.accentBlue
                 implicitHeight: 24; implicitWidth: 96; font.pixelSize: 8
                 onClicked: MediaFlowBackend.browseAndAddFilesToPinnedFolder(root.selectedPinFolderId)
+            }
+            Rectangle {
+                width: 24; height: 24; radius: 6
+                color: deleteHeaderMa.containsMouse ? "#33EF4444" : "#1AEF4444"
+                BroadcastIcon { anchors.centerIn: parent; name: "trash"; color: Theme.accentRed; iconSize: 12 }
+                MouseArea {
+                    id: deleteHeaderMa
+                    anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                    onClicked: root.confirmDeletePin(root.selectedPinFolderId,
+                        MediaFlowBackend && MediaFlowBackend.pinnedFolders ? MediaFlowBackend.pinnedFolders.nameForFolder(root.selectedPinFolderId) : "")
+                }
             }
         }
     }
@@ -417,10 +467,11 @@ Item {
                     onClicked: {
                         if (root.currentView === "segment") {
                             MediaFlowBackend.stageMedia(model.id)
-                        } else if (root.currentView === "pins") {
-                            MediaFlowBackend.stageMedia(model.id)
                         } else {
-                            // In Library view, clicking binds to active segment
+                            // Library and Pins both behave the same: clicking links
+                            // the item into the selected segment (so it then shows
+                            // up under ACTIVE MEDIA), or just previews it if no
+                            // segment is selected yet.
                             if (MediaFlowBackend.selectedSegmentId) {
                                 MediaFlowBackend.bindMediaToSequence(model.id)
                             } else {
