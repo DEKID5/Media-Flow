@@ -244,16 +244,15 @@ Item {
         }
     }
 
-    Dialog {
+    ThemedDialog {
         id: deletePinDialog
         property string folderName: ""
         title: "Delete Pin Folder"
-        modal: true; anchors.centerIn: Overlay.overlay
-        standardButtons: Dialog.Ok | Dialog.Cancel
-        background: Rectangle { color: "#1a1a1e"; radius: 12; border.color: "#333" }
+        acceptText: "DELETE"; acceptColor: Theme.accentRed
         contentItem: Label {
             text: "Delete “" + deletePinDialog.folderName + "”? This only removes the pin folder — the media files themselves aren’t deleted."
             color: "white"; font.pixelSize: 12; wrapMode: Text.WordWrap; width: 280
+            leftPadding: 20; rightPadding: 20; topPadding: 4; bottomPadding: 12
         }
         onAccepted: {
             if (root.selectedPinFolderId === root.pendingDeletePinId) { root.selectedPinFolderId = ""; root.currentView = "segment" }

@@ -28,7 +28,7 @@ Set **`CMAKE_PREFIX_PATH`** to your Qt installation’s kit root (the folder tha
 
 1. Download the latest release from the [UnityCapture releases page](https://github.com/schellingb/UnityCapture/releases) into `drivers/unitycapture.zip` (git-ignored — this repo doesn't vendor the binary).
 2. Extract it and run `Install.bat` as Administrator (registers the DirectShow filter via `regsvr32`).
-3. It then appears as a normal webcam named **UnityCapture** in Zoom's camera picker, and to `BroadcastController::hasVirtualCameraDriver()`.
+3. It then appears as a normal webcam named **Unity Video Capture** in Zoom's camera picker, and to `BroadcastController::hasVirtualCameraDriver()`.
 
 Without it installed, **Broadcast to Zoom** shows a warning dialog and does nothing destructive — no crash, no silent failure.
 

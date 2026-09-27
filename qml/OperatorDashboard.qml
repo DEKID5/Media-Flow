@@ -567,15 +567,14 @@ Item {
                     }
 
                     // Clear All Confirmation Dialog
-                    Dialog {
+                    ThemedDialog {
                         id: clearDialog
                         title: "Clear All Media"
-                        modal: true; anchors.centerIn: Overlay.overlay
-                        standardButtons: Dialog.Ok | Dialog.Cancel
-                        background: Rectangle { color: "#1a1a1e"; radius: Theme.radiusLg; border.color: "#333" }
+                        acceptText: "CLEAR"; acceptColor: Theme.accentRed
                         contentItem: Label {
                             text: "Remove all linked media from both the midweek and weekend schedules?"
                             color: Theme.textPrimary; font.pixelSize: Theme.textMd; wrapMode: Text.WordWrap
+                            leftPadding: 20; rightPadding: 20; topPadding: 4; bottomPadding: 12
                         }
                         onAccepted: {
                             if (MediaFlowBackend && MediaFlowBackend.meetingSchedule)
@@ -647,19 +646,17 @@ Item {
         }
     }
 
-    Dialog {
+    ThemedDialog {
         id: vcamWarningDialog
         title: "Virtual Camera Driver Not Found"
-        modal: true
-        anchors.centerIn: Overlay.overlay
-        standardButtons: Dialog.Ok
-        background: Rectangle { color: "#1a1a1e"; radius: Theme.radiusLg; border.color: "#333" }
+        showCancel: false
         contentItem: Label {
             text: "Install the UnityCapture virtual camera driver (see BUILD.md), then try Broadcast to Zoom again."
             color: Theme.textPrimary
             font.pixelSize: Theme.textMd
             wrapMode: Text.WordWrap
             width: 320
+            leftPadding: 20; rightPadding: 20; topPadding: 4; bottomPadding: 12
         }
     }
 

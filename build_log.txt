@@ -11,16 +11,8 @@ operable program or batch file.
 ** Copyright (c) 2025 Microsoft Corporation
 **********************************************************************
 [vcvarsall.bat] Environment initialized for: 'x64'
-[1/13] Copying qml/AudienceWindow.qml to C:/Users/sethi/Desktop/Media-Flow-main/build/MediaFlow/qml/AudienceWindow.qml
-[2/13] Copying qml/VirtualCameraWindow.qml to C:/Users/sethi/Desktop/Media-Flow-main/build/MediaFlow/qml/VirtualCameraWindow.qml
-[3/13] Copying qml/components/MonitorView.qml to C:/Users/sethi/Desktop/Media-Flow-main/build/MediaFlow/qml/components/MonitorView.qml
-[4/13] Running qmlimportscanner for mediaflow
-[5/13] Generating .rcc/qmlcache/mediaflow_qml/VirtualCameraWindow_qml.cpp, .rcc/qmlcache/mediaflow_qml/VirtualCameraWindow_qml.cpp.aotstats
-[6/13] Generating .rcc/qmlcache/mediaflow_qml/AudienceWindow_qml.cpp, .rcc/qmlcache/mediaflow_qml/AudienceWindow_qml.cpp.aotstats
-[7/13] Running rcc for resource mediaflow_raw_qml_0
-[8/13] Generating .rcc/qmlcache/mediaflow_qml/components/MonitorView_qml.cpp, .rcc/qmlcache/mediaflow_qml/components/MonitorView_qml.cpp.aotstats
-[9/13] Building CXX object CMakeFiles\mediaflow.dir\build\.qt\rcc\qrc_mediaflow_raw_qml_0.cpp.obj
-[10/13] Building CXX object CMakeFiles\mediaflow.dir\build\.rcc\qmlcache\mediaflow_qml\VirtualCameraWindow_qml.cpp.obj
-[11/13] Building CXX object CMakeFiles\mediaflow.dir\build\.rcc\qmlcache\mediaflow_qml\AudienceWindow_qml.cpp.obj
-[12/13] Building CXX object CMakeFiles\mediaflow.dir\build\.rcc\qmlcache\mediaflow_qml\components\MonitorView_qml.cpp.obj
-[13/13] Linking CXX executable MediaFlow.exe
+[1/36] Automatic MOC for target mediaflow
+[2/35] Running AUTOMOC file extraction for target mediaflow
+[3/35] Running moc --collect-json for target mediaflow
+[4/5] Building CXX object CMakeFiles\mediaflow.dir\src\BroadcastController.cpp.obj
+[5/5] Linking CXX executable MediaFlow.exe
