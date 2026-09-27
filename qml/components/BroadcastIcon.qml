@@ -116,6 +116,22 @@ Item {
                 ctx.beginPath(); ctx.moveTo(w*0.3, h*0.7); ctx.lineTo(w*0.7, h*0.7); ctx.stroke();
                 ctx.beginPath(); ctx.moveTo(w*0.5, h*0.7); ctx.lineTo(w*0.5, h*0.85); ctx.stroke();
                 ctx.beginPath(); ctx.moveTo(w*0.35, h*0.85); ctx.lineTo(w*0.65, h*0.85); ctx.stroke();
+            } else if (name === "shuffle") {
+                ctx.beginPath(); ctx.moveTo(w*0.1, h*0.25); ctx.lineTo(w*0.35, h*0.25); ctx.lineTo(w*0.9, h*0.8); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(w*0.68, h*0.8); ctx.lineTo(w*0.9, h*0.8); ctx.lineTo(w*0.9, h*0.58); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(w*0.1, h*0.75); ctx.lineTo(w*0.35, h*0.75); ctx.lineTo(w*0.55, h*0.55); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(w*0.68, h*0.25); ctx.lineTo(w*0.9, h*0.25); ctx.lineTo(w*0.9, h*0.47); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(w*0.58, h*0.42); ctx.lineTo(w*0.9, h*0.25); ctx.stroke();
+            } else if (name === "pin") {
+                ctx.beginPath(); ctx.arc(w*0.5, h*0.35, w*0.28, 0, 2*Math.PI); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(w*0.5, h*0.6); ctx.lineTo(w*0.5, h*0.92); ctx.stroke();
+                ctx.beginPath(); ctx.arc(w*0.5, h*0.35, w*0.1, 0, 2*Math.PI); ctx.fill();
+            } else if (name === "plus") {
+                ctx.beginPath(); ctx.moveTo(w*0.5, h*0.15); ctx.lineTo(w*0.5, h*0.85); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(w*0.15, h*0.5); ctx.lineTo(w*0.85, h*0.5); ctx.stroke();
+            } else if (name === "close") {
+                ctx.beginPath(); ctx.moveTo(w*0.2, h*0.2); ctx.lineTo(w*0.8, h*0.8); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(w*0.8, h*0.2); ctx.lineTo(w*0.2, h*0.8); ctx.stroke();
             }
         }
     }

@@ -19,6 +19,7 @@
 #include "StagedMediaProxyModel.h"
 #include "MediaAsset.h"
 #include "VirtualCameraManager.h"
+#include "PinnedFolderModel.h"
 
 class MediaExtractor;
 class MediaThumbnailManager;
@@ -61,7 +62,11 @@ class BroadcastController final : public QObject
     Q_PROPERTY(bool isPlayingBgm READ isPlayingBgm NOTIFY bgmChanged)
     Q_PROPERTY(QString bgmTrackName READ bgmTrackName NOTIFY bgmChanged)
     Q_PROPERTY(int bgmCount READ bgmCount NOTIFY bgmChanged)
+    Q_PROPERTY(bool bgmShuffle READ bgmShuffle WRITE setBgmShuffle NOTIFY bgmShuffleChanged)
+    Q_PROPERTY(int bgmPositionMs READ bgmPositionMs NOTIFY bgmPositionChanged)
+    Q_PROPERTY(int bgmDurationMs READ bgmDurationMs NOTIFY bgmDurationChanged)
     Q_PROPERTY(QSortFilterProxyModel* stagedMediaProxy READ stagedMediaProxy CONSTANT)
+    Q_PROPERTY(PinnedFolderModel* pinnedFolders READ pinnedFolders CONSTANT)
 
 public:
     explicit BroadcastController(QQmlApplicationEngine *engine, QObject *parent = nullptr);
@@ -73,6 +78,7 @@ public:
     CameraDeviceModel *cameraDevices() const { return m_cameraModel; }
     BroadcastEngine *broadcastEngine() const { return m_broadcastEngine; }
     QSortFilterProxyModel *stagedMediaProxy() const { return m_filterProxy; }
+    PinnedFolderModel *pinnedFolders() const { return m_pinnedFolders; }
     QCameraDevice programCameraDevice() const { return m_programCameraDevice; }
 
     QString selectedSegmentId() const { return m_selectedSegmentId; }
@@ -96,6 +102,10 @@ public:
     bool isPlayingBgm() const;
     QString bgmTrackName() const;
     int bgmCount() const { return m_bgmPlaylist.count(); }
+    bool bgmShuffle() const { return m_bgmShuffle; }
+    void setBgmShuffle(bool enabled);
+    int bgmPositionMs() const;
+    int bgmDurationMs() const;
 
     // --- Sequence/Media API ---
     Q_INVOKABLE void selectSegment(const QString &id);
@@ -138,6 +148,19 @@ public:
     Q_INVOKABLE void backBgm();
     Q_INVOKABLE void stopBgm();
     Q_INVOKABLE void scanBgmFolder();
+    Q_INVOKABLE void toggleBgmShuffle() { setBgmShuffle(!m_bgmShuffle); }
+    Q_INVOKABLE void seekBgm(int ms);
+
+    // --- Pinned Folders ---
+    Q_INVOKABLE QString createPinnedFolder(const QString &name);
+    Q_INVOKABLE void renamePinnedFolder(const QString &folderId, const QString &newName);
+    Q_INVOKABLE void deletePinnedFolder(const QString &folderId);
+    Q_INVOKABLE void pinMediaToFolder(const QString &folderId, const QString &mediaId);
+    Q_INVOKABLE void unpinMediaFromFolder(const QString &folderId, const QString &mediaId);
+    // Multi-select file picker -> imports each file and links it into the folder.
+    Q_INVOKABLE void browseAndAddFilesToPinnedFolder(const QString &folderId);
+    // For OS drag-and-drop: paths may be local paths or file:// URLs.
+    Q_INVOKABLE void importFilesToPinnedFolder(const QString &folderId, const QStringList &pathsOrUrls);
 
 signals:
     void selectedSegmentIdChanged();
@@ -155,6 +178,9 @@ signals:
     void songNotFoundInLanguage(int songNumber, const QString &languageName);
     void isProgramPausedChanged();
     void bgmChanged();
+    void bgmShuffleChanged();
+    void bgmPositionChanged();
+    void bgmDurationChanged();
     void feedExtendedChanged();
 
 private slots:
@@ -176,6 +202,11 @@ private:
     QString languageName(const QString &languageCode) const;
     QString resolveSongToSegment(int songNumber, const QString &languageCode, const QString &targetSegmentId, bool warnOnMissing);
     void reResolveSongSegmentsForCurrentLanguage();
+    // Builds a MediaAsset entry for one file, adds it to the library + index,
+    // enqueues its thumbnail, and returns its new id. Shared by every
+    // multi-file import path (browse dialogs and OS drag-and-drop).
+    QString importOneFile(const QString &absolutePath, const QString &category);
+    static QString normalizeDroppedPath(const QString &pathOrUrl);
 
     QQmlApplicationEngine *m_engine;
     MediaLibraryModel *m_libraryModel = nullptr;
@@ -184,6 +215,7 @@ private:
     CameraDeviceModel *m_cameraModel;
     BroadcastEngine *m_broadcastEngine;
     VirtualCameraManager *m_vcamManager;
+    PinnedFolderModel *m_pinnedFolders = nullptr;
 
     QString m_selectedSegmentId;
     QString m_meetingType = "midweek";
@@ -202,6 +234,8 @@ private:
     QStringList m_bgmPlaylist;
     QString m_bgmCoverArt;
     int m_bgmIndex = 0;
+    bool m_bgmShuffle = false;
+    QList<int> m_bgmShuffleHistory; // indices played this shuffle session, for "back"
 
     // Thumbnail extractor
     MediaThumbnailManager *m_thumbManager = nullptr;

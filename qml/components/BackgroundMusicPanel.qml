@@ -20,6 +20,14 @@ DockPanel {
         verticalAlignment: Text.AlignVCenter
     }
 
+    function fmtMs(ms) {
+        if (!ms || ms <= 0) return "0:00"
+        let totalSec = Math.floor(ms / 1000)
+        let m = Math.floor(totalSec / 60)
+        let s = totalSec % 60
+        return m + ":" + (s < 10 ? "0" : "") + s
+    }
+
     content: Item {
         anchors.fill: parent
         clip: true
@@ -77,15 +85,93 @@ DockPanel {
             elide: Text.ElideRight
         }
 
+        // ── Progress scrubber ──
+        Item {
+            id: progressRow
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: timeRow.top
+            anchors.bottomMargin: 4
+            height: 16
+
+            readonly property real ratio: {
+                let d = (MediaFlowBackend || {}).bgmDurationMs || 0
+                let p = (MediaFlowBackend || {}).bgmPositionMs || 0
+                return d > 0 ? Math.max(0, Math.min(1, p / d)) : 0
+            }
+
+            Rectangle {
+                id: progressTrack
+                anchors.verticalCenter: parent.verticalCenter
+                width: parent.width; height: 4; radius: 2
+                color: "#242429"
+
+                Rectangle {
+                    id: progressFill
+                    height: parent.height; radius: parent.radius
+                    color: Theme.accentEmerald
+                    width: parent.width * progressRow.ratio
+                    // Animates smoothly between position updates instead of
+                    // jumping in fixed increments -- a real progress motion.
+                    Behavior on width { NumberAnimation { duration: 220; easing.type: Easing.OutQuad } }
+                }
+
+                Rectangle {
+                    visible: scrubMa.containsMouse || scrubMa.pressed
+                    width: 10; height: 10; radius: 5; color: "white"
+                    anchors.verticalCenter: parent.verticalCenter
+                    x: Math.max(0, Math.min(parent.width - width, progressFill.width - width / 2))
+                }
+            }
+
+            MouseArea {
+                id: scrubMa
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: (mouse) => {
+                    let d = (MediaFlowBackend || {}).bgmDurationMs || 0
+                    if (d <= 0) return
+                    let ratio = Math.max(0, Math.min(1, mouse.x / width))
+                    MediaFlowBackend.seekBgm(Math.round(ratio * d))
+                }
+            }
+        }
+
         RowLayout {
+            id: timeRow
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: transportRow.top
+            anchors.bottomMargin: 8
+            Label {
+                text: fmtMs((MediaFlowBackend || {}).bgmPositionMs || 0)
+                color: "#6b7280"; font.family: "JetBrains Mono"; font.pixelSize: Theme.textXs
+            }
+            Item { Layout.fillWidth: true }
+            Label {
+                text: fmtMs((MediaFlowBackend || {}).bgmDurationMs || 0)
+                color: "#6b7280"; font.family: "JetBrains Mono"; font.pixelSize: Theme.textXs
+            }
+        }
+
+        RowLayout {
+            id: transportRow
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            height: 44
-            spacing: 10
+            height: 40
+            spacing: 8
 
             BgmButton {
-                Layout.preferredWidth: 44
+                Layout.preferredWidth: 36
+                iconName: "shuffle"
+                active: (MediaFlowBackend || {}).bgmShuffle
+                onClicked: (MediaFlowBackend || {}).toggleBgmShuffle()
+            }
+
+            BgmButton {
+                Layout.preferredWidth: 40
                 iconName: "skip-back"
                 onClicked: (MediaFlowBackend || {}).backBgm()
             }
@@ -93,7 +179,7 @@ DockPanel {
             Button {
                 id: playButton
                 Layout.fillWidth: true
-                Layout.preferredHeight: 44
+                Layout.preferredHeight: 40
                 text: (MediaFlowBackend || {}).isPlayingBgm ? "PAUSE" : "PLAY"
                 onClicked: (MediaFlowBackend || {}).toggleBgmPlayback()
 
@@ -120,13 +206,13 @@ DockPanel {
             }
 
             BgmButton {
-                Layout.preferredWidth: 44
+                Layout.preferredWidth: 40
                 iconName: "skip-forward"
                 onClicked: (MediaFlowBackend || {}).nextBgm()
             }
 
             BgmButton {
-                Layout.preferredWidth: 54
+                Layout.preferredWidth: 50
                 label: "STOP"
                 onClicked: (MediaFlowBackend || {}).stopBgm()
             }
@@ -137,16 +223,18 @@ DockPanel {
         id: control
         property string iconName: ""
         property string label: ""
+        property bool active: false
         signal clicked()
 
-        Layout.preferredHeight: 44
+        Layout.preferredHeight: 40
         hoverEnabled: true
 
         background: Rectangle {
             radius: 8
-            color: control.hovered ? "#202027" : "#1a1a1f"
-            border.color: "#2a2a30"
+            color: control.active ? "#1a3B82F6" : (control.hovered ? "#202027" : "#1a1a1f")
+            border.color: control.active ? Theme.accentBlue : "#2a2a30"
             border.width: 1
+            Behavior on color { ColorAnimation { duration: Theme.durationFast } }
         }
 
         contentItem: Item {
@@ -155,7 +243,7 @@ DockPanel {
                 anchors.centerIn: parent
                 name: control.iconName
                 iconSize: 16
-                color: "#9ca3af"
+                color: control.active ? Theme.accentBlue : "#9ca3af"
             }
             Label {
                 visible: control.label !== ""

@@ -84,6 +84,13 @@ bool StagedMediaProxyModel::filterAcceptsRow(int source_row, const QModelIndex &
         return m_stagedIds.contains(assetUuid);
     }
 
+    if (m_filterType == "pinned") {
+        // Reuses stagedIds (set to the selected pin folder's mediaIds) -- no
+        // selectedSegmentId guard, since pin folders aren't tied to a segment.
+        QString assetUuid = sourceModel()->data(idx, MediaLibraryModel::IdRole).toString();
+        return m_stagedIds.contains(assetUuid);
+    }
+
     if (m_filterType == "imported") {
         return sourceModel()->data(idx, MediaLibraryModel::ImportedRole).toBool();
     }
