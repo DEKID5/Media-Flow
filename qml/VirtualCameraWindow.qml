@@ -97,6 +97,17 @@ Window {
         prev.source = ""
     }
 
+    // Same gap as AudienceWindow: if media is already live when Zoom
+    // broadcasting is turned on, start playing it immediately instead of
+    // showing black until the next Cut/Take.
+    function syncToCurrentProgram() {
+        let a = (MediaFlowBackend || {}).broadcastEngine ? MediaFlowBackend.broadcastEngine.programAsset : null
+        if (a && a.absolutePath && (a.type === "video" || a.type === "audio")) {
+            executeCut("file:///" + a.absolutePath, a.type)
+        }
+    }
+    onVisibleChanged: if (visible) syncToCurrentProgram()
+
     function executeTake(url, type) {
         let next = activeIsA ? playerB : playerA
         if (type === "video" || type === "audio") {

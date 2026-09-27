@@ -87,6 +87,20 @@ Window {
         prev.source = ""
     }
 
+    // If a video/audio is already live when this window is (re-)shown --
+    // e.g. the operator took media live before ever clicking "Extend Feed",
+    // or after re-opening it -- start playing immediately instead of
+    // sitting black/silent until the next Cut/Take. (Starts from the
+    // beginning rather than the operator monitor's exact position, which
+    // isn't currently tracked centrally -- close enough to avoid dead air.)
+    function syncToCurrentProgram() {
+        let a = (MediaFlowBackend || {}).broadcastEngine ? MediaFlowBackend.broadcastEngine.programAsset : null
+        if (a && a.absolutePath && (a.type === "video" || a.type === "audio")) {
+            executeCut("file:///" + a.absolutePath, a.type)
+        }
+    }
+    onVisibleChanged: if (visible) syncToCurrentProgram()
+
     // =====================================================================
     //  TAKE (500ms crossfade)
     // =====================================================================
