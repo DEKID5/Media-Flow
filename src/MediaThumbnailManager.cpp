@@ -95,7 +95,15 @@ bool ThumbnailJob::scaleImage(const QString &input, const QString &output) {
 bool ThumbnailJob::extractAudioArt(const QString &input, const QString &output) {
     QProcess ffmpeg;
     QStringList args;
-    args << "-i" << input << "-an" << "-vcodec" << "copy" << "-y" << output;
+    // Embedded ID3/cover art comes in whatever size and aspect ratio the
+    // publisher shipped (square, portrait, odd sizes are all common) --
+    // "-vcodec copy" preserved that as-is, which left it looking tiny/
+    // off-center in the fixed 16:9 thumbnail chips. Scale-to-cover then
+    // crop to 320x180 here, matching the video frame path exactly, so
+    // every thumbnail (video or song cover art) fills its chip the same way.
+    args << "-i" << input << "-an"
+         << "-vf" << "scale=320:180:force_original_aspect_ratio=increase,crop=320:180"
+         << "-y" << output;
     ffmpeg.start("ffmpeg", args);
     if (!ffmpeg.waitForFinished(3000)) { ffmpeg.kill(); return false; }
     return ffmpeg.exitCode() == 0 && QFile::exists(output);
