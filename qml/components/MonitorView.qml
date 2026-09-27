@@ -32,6 +32,18 @@ Rectangle {
 
     property bool activeIsA: true  // which player is currently showing
 
+    // The audience window is the preferred single audio channel, but it only
+    // exists once "Extend Feed" has actually been used to open it. Without
+    // that fallback, taking media live before ever extending the feed (no
+    // second display, or just not clicked yet) produced no audio anywhere.
+    // So: this (LIVE) monitor is the audio source whenever the audience
+    // window isn't the one carrying it -- never both, to keep it to one channel.
+    readonly property bool isAudioSource: isLive && !((MediaFlowBackend || {}).feedExtended)
+    readonly property real roomVolume: {
+        let mf = MediaFlowBackend || {}
+        return (mf.mixerMuted ? 0 : 1) * ((mf.masterVolume !== undefined ? mf.masterVolume : 100) / 100.0)
+    }
+
     // ── Camera Background ──
     CaptureSession {
         id: monitorCameraSession
@@ -54,9 +66,10 @@ Rectangle {
     MediaPlayer {
         id: playerA
         videoOutput: videoOutA
-        // Operator monitors are video confidence only — the audience window is the
-        // sole audio output, so exactly one channel ever plays out of the PC.
-        audioOutput: AudioOutput { id: audioA; volume: 0; muted: true }
+        // Normally video-confidence-only (audience window carries the audio);
+        // becomes the audio source itself when the audience window isn't active,
+        // so program audio is never silently lost. See isAudioSource above.
+        audioOutput: AudioOutput { id: audioA; volume: monitor.isAudioSource ? monitor.roomVolume : 0; muted: !monitor.isAudioSource }
         onMediaStatusChanged: {
             if (isLive && activeIsA && mediaStatus === MediaPlayer.EndOfMedia) {
                 if (MediaFlowBackend && MediaFlowBackend.broadcastEngine)
@@ -77,7 +90,7 @@ Rectangle {
     MediaPlayer {
         id: playerB
         videoOutput: videoOutB
-        audioOutput: AudioOutput { id: audioB; volume: 0; muted: true }
+        audioOutput: AudioOutput { id: audioB; volume: monitor.isAudioSource ? monitor.roomVolume : 0; muted: !monitor.isAudioSource }
         onMediaStatusChanged: {
             if (isLive && !activeIsA && mediaStatus === MediaPlayer.EndOfMedia) {
                 if (MediaFlowBackend && MediaFlowBackend.broadcastEngine)
