@@ -9,7 +9,7 @@
 #include <QSize>
 #include <memory>
 
-class SharedMemoryWriter;
+class UnityCaptureWriter;
 
 class VirtualCameraManager : public QObject, protected QOpenGLFunctions
 {
@@ -40,6 +40,6 @@ private:
     bool m_hasPendingRead = false;
     QSize m_lastSize;
     
-    std::unique_ptr<SharedMemoryWriter> m_writer;
+    std::unique_ptr<UnityCaptureWriter> m_writer;
     QFuture<void> m_processFuture;
 };

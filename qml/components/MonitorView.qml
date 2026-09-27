@@ -53,7 +53,9 @@ Rectangle {
     MediaPlayer {
         id: playerA
         videoOutput: videoOutA
-        audioOutput: AudioOutput { id: audioA; volume: isLive ? 1.0 : 0; muted: !isLive }
+        // Operator monitors are video confidence only — the audience window is the
+        // sole audio output, so exactly one channel ever plays out of the PC.
+        audioOutput: AudioOutput { id: audioA; volume: 0; muted: true }
         onMediaStatusChanged: {
             if (isLive && activeIsA && mediaStatus === MediaPlayer.EndOfMedia) {
                 if (MediaFlowBackend && MediaFlowBackend.broadcastEngine)
@@ -74,7 +76,7 @@ Rectangle {
     MediaPlayer {
         id: playerB
         videoOutput: videoOutB
-        audioOutput: AudioOutput { id: audioB; volume: isLive ? 1.0 : 0; muted: !isLive }
+        audioOutput: AudioOutput { id: audioB; volume: 0; muted: true }
         onMediaStatusChanged: {
             if (isLive && !activeIsA && mediaStatus === MediaPlayer.EndOfMedia) {
                 if (MediaFlowBackend && MediaFlowBackend.broadcastEngine)

@@ -17,11 +17,19 @@ Window {
 
     property bool activeIsA: true
 
+    // Audience window is the single authoritative audio output for the whole
+    // app — the operator's monitors are always muted (see MonitorView.qml) —
+    // so room volume/mute are wired in here.
+    readonly property real roomVolume: {
+        let mf = MediaFlowBackend || {}
+        return (mf.mixerMuted ? 0 : 1) * ((mf.masterVolume !== undefined ? mf.masterVolume : 100) / 100.0)
+    }
+
     // ── Player A ──
     MediaPlayer {
         id: playerA
         videoOutput: videoOutA
-        audioOutput: AudioOutput { id: audioA; volume: 1.0 }
+        audioOutput: AudioOutput { id: audioA; volume: audienceRoot.roomVolume }
     }
     VideoOutput {
         id: videoOutA; anchors.fill: parent
@@ -34,7 +42,7 @@ Window {
     MediaPlayer {
         id: playerB
         videoOutput: videoOutB
-        audioOutput: AudioOutput { id: audioB; volume: 1.0 }
+        audioOutput: AudioOutput { id: audioB; volume: audienceRoot.roomVolume }
     }
     VideoOutput {
         id: videoOutB; anchors.fill: parent
@@ -126,8 +134,14 @@ Window {
 
         function onTakeExecuted() {
             let a = MediaFlowBackend.broadcastEngine.programAsset
-            if (a && a.absolutePath && (a.type === "video" || a.type === "audio"))
+            if (a && a.absolutePath && (a.type === "video" || a.type === "audio")) {
                 executeTake("file:///" + a.absolutePath, a.type)
+            } else {
+                // Taking live to an image (or camera input) — stop any video/audio
+                // that was previously live so its sound doesn't keep playing under it.
+                playerA.stop(); playerA.source = ""
+                playerB.stop(); playerB.source = ""
+            }
         }
 
         function onIsProgramPausedChanged() {

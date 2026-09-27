@@ -13,7 +13,6 @@
 #include <QMediaPlayer>
 
 #include "MediaLibraryModel.h"
-#include "MediaLibraryProxyModel.h"
 #include "MeetingScheduleModel.h"
 #include "CameraDeviceModel.h"
 #include "BroadcastEngine.h"
@@ -36,7 +35,6 @@ class BroadcastController final : public QObject
 
     // --- Models ---
     Q_PROPERTY(MediaLibraryModel *mediaLibrary READ mediaLibrary CONSTANT)
-    Q_PROPERTY(MediaLibraryProxyModel *filterableMedia READ filterableMedia CONSTANT)
     Q_PROPERTY(MeetingScheduleModel *meetingSchedule READ meetingSchedule CONSTANT)
     Q_PROPERTY(CameraDeviceModel *cameraDevices READ cameraDevices CONSTANT)
     Q_PROPERTY(BroadcastEngine *broadcastEngine READ broadcastEngine CONSTANT)
@@ -71,7 +69,6 @@ public:
 
     // Getters
     MediaLibraryModel *mediaLibrary() const { return m_libraryModel; }
-    MediaLibraryProxyModel *filterableMedia() const { return m_proxyModel; }
     MeetingScheduleModel *meetingSchedule() const { return m_meetingModel; }
     CameraDeviceModel *cameraDevices() const { return m_cameraModel; }
     BroadcastEngine *broadcastEngine() const { return m_broadcastEngine; }
@@ -129,7 +126,7 @@ public:
     Q_INVOKABLE void closeAudienceWindow();
     Q_INVOKABLE void toggleAudienceWindow();
     Q_INVOKABLE void toggleZoomBroadcast();
-    Q_INVOKABLE bool hasObsVirtualCamera() const;
+    Q_INVOKABLE bool hasVirtualCameraDriver() const;
 
     Q_INVOKABLE QVariantList getSupportedLanguages() const;
     Q_INVOKABLE QVariantMap getLanguageMap() const;
@@ -182,7 +179,6 @@ private:
 
     QQmlApplicationEngine *m_engine;
     MediaLibraryModel *m_libraryModel = nullptr;
-    MediaLibraryProxyModel *m_proxyModel = nullptr;
     StagedMediaProxyModel *m_filterProxy;
     MeetingScheduleModel *m_meetingModel = nullptr;
     CameraDeviceModel *m_cameraModel;
