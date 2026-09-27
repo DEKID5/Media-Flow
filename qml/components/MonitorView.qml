@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtMultimedia
+import MediaFlow 1.0
 
 Rectangle {
     id: monitor
@@ -287,14 +288,14 @@ Rectangle {
     Label {
         anchors.top: parent.top; anchors.right: parent.right; anchors.margins: 12; z: 20
         text: isLive ? "PROGRAM OUTPUT" : "PREVIEW BUS"
-        color: "#A1A1AA"; font.pixelSize: 7; font.bold: true; font.letterSpacing: 1.5
+        color: Theme.textSecondary; font.pixelSize: Theme.textXs; font.bold: true; font.letterSpacing: 1.2
     }
 
     // Controls
     Row {
         id: controlRow
         anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter; anchors.margins: 12
-        spacing: 8; z: 20
+        spacing: Theme.space2; z: 20
 
         // Play/Pause
         Rectangle {
@@ -302,7 +303,9 @@ Rectangle {
             width: 36; height: 36; radius: 18
             color: ppMa.containsMouse ? "#80000000" : "#50000000"
             border.color: ppMa.containsMouse ? "#55FFFFFF" : "#33FFFFFF"
-            Behavior on color { ColorAnimation { duration: 150 } }
+            Behavior on color { ColorAnimation { duration: Theme.durationFast } }
+            scale: ppMa.pressed ? 0.92 : 1.0
+            Behavior on scale { SpringAnimation { spring: 5; damping: 0.5 } }
             BroadcastIcon {
                 anchors.centerIn: parent; iconSize: 14
                 name: (activeIsA ? playerA : playerB).playbackState === MediaPlayer.PlayingState ? "eye" : "video"
@@ -325,14 +328,16 @@ Rectangle {
         // CUT LIVE
         Rectangle {
             visible: showTransitions && asset && asset.absolutePath
-            width: 90; height: 36; radius: 10
+            width: 90; height: 36; radius: Theme.radius
             color: cutMa.containsMouse ? "#33EF4444" : "transparent"
-            border.color: cutMa.containsMouse ? "#EF4444" : "#80EF4444"; border.width: 1.5
-            Behavior on color { ColorAnimation { duration: 150 } }
+            border.color: cutMa.containsMouse ? Theme.accentRed : "#80EF4444"; border.width: 1.5
+            Behavior on color { ColorAnimation { duration: Theme.durationFast } }
+            scale: cutMa.pressed ? 0.95 : 1.0
+            Behavior on scale { SpringAnimation { spring: 5; damping: 0.5 } }
             Row {
-                anchors.centerIn: parent; spacing: 6
-                BroadcastIcon { anchors.verticalCenter: parent.verticalCenter; name: "bolt"; iconSize: 10; color: "#EF4444" }
-                Label { text: "CUT LIVE"; color: "#EF4444"; font.pixelSize: 9; font.bold: true }
+                anchors.centerIn: parent; spacing: Theme.space2
+                BroadcastIcon { anchors.verticalCenter: parent.verticalCenter; name: "bolt"; iconSize: 11; color: Theme.accentRed }
+                Label { text: "CUT LIVE"; color: Theme.accentRed; font.pixelSize: Theme.textXs; font.bold: true }
             }
             MouseArea { id: cutMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: monitor.cutClicked() }
         }
@@ -340,11 +345,13 @@ Rectangle {
         // TAKE LIVE
         Rectangle {
             visible: showTransitions && asset && asset.absolutePath
-            width: 90; height: 36; radius: 10
-            color: takeMa.containsMouse ? "#33FFFFFF" : "#1AFFFFFF"
-            border.color: takeMa.containsMouse ? "#55FFFFFF" : "#1AFFFFFF"; border.width: 1
-            Behavior on color { ColorAnimation { duration: 150 } }
-            Label { anchors.centerIn: parent; text: "TAKE LIVE"; color: "white"; font.pixelSize: 9; font.bold: true }
+            width: 90; height: 36; radius: Theme.radius
+            color: takeMa.containsMouse ? "#33FFFFFF" : Theme.surfaceRaised
+            border.color: takeMa.containsMouse ? "#55FFFFFF" : Theme.panelBorder; border.width: 1
+            Behavior on color { ColorAnimation { duration: Theme.durationFast } }
+            scale: takeMa.pressed ? 0.95 : 1.0
+            Behavior on scale { SpringAnimation { spring: 5; damping: 0.5 } }
+            Label { anchors.centerIn: parent; text: "TAKE LIVE"; color: "white"; font.pixelSize: Theme.textXs; font.bold: true }
             MouseArea { id: takeMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: monitor.takeClicked() }
         }
     }

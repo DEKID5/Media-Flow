@@ -7,14 +7,14 @@ DockPanel {
     id: bgmRoot
     Layout.fillHeight: true
     Layout.minimumHeight: 180
-    accentColor: "#10B981"
+    accentColor: Theme.accentEmerald
     title: "BACKGROUND MUSIC"
 
     headerTrailing: Label {
         text: ((MediaFlowBackend || {}).bgmCount || 0) + " TRACKS"
-        color: "#3B82F6"
+        color: Theme.accentBlue
         font.family: "Inter"
-        font.pixelSize: 9
+        font.pixelSize: Theme.textXs
         font.bold: true
         font.letterSpacing: 0.5
         verticalAlignment: Text.AlignVCenter
@@ -114,6 +114,9 @@ DockPanel {
                     border.color: "#3B82F6"
                     border.width: 1
                 }
+
+                scale: playButton.pressed ? 0.97 : 1.0
+                Behavior on scale { SpringAnimation { spring: 5; damping: 0.5 } }
             }
 
             BgmButton {
@@ -160,13 +163,17 @@ DockPanel {
                 text: control.label
                 color: "#9ca3af"
                 font.family: "Inter"
-                font.pixelSize: 9
+                font.pixelSize: Theme.textXs
                 font.bold: true
                 font.letterSpacing: 0.6
             }
         }
 
+        scale: bgmMa.pressed ? 0.92 : 1.0
+        Behavior on scale { SpringAnimation { spring: 6; damping: 0.5 } }
+
         MouseArea {
+            id: bgmMa
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
             onClicked: control.clicked()
