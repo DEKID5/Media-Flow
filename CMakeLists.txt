@@ -67,6 +67,7 @@ qt_add_qml_module(mediaflow
         qml/components/MediaSourcePanel.qml
         qml/components/BroadcastIcon.qml
         qml/components/DockPanel.qml
+        qml/components/ThemedDialog.qml
         qml/components/TimerPanel.qml
         qml/components/BackgroundMusicPanel.qml
         qml/assets/cam_placeholder.png

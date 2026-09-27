@@ -27,6 +27,7 @@
 #include <QFile>
 #include <QSaveFile>
 #include <QRandomGenerator>
+#include <QSettings>
 
 namespace {
 
@@ -572,16 +573,22 @@ bool BroadcastController::openZoomWindow()
 bool BroadcastController::hasVirtualCameraDriver() const
 {
     // MediaFlow feeds VirtualCameraManager's output through the UnityCapture
-    // shared-memory protocol (see UnityCaptureWriter) — its DirectShow filter
-    // registers as "UnityCapture" in the system's camera device list once installed.
-    const QList<QCameraDevice> cameras = QMediaDevices::videoInputs();
-    for (const QCameraDevice &camera : cameras) {
-        const QString description = camera.description();
-        const QString id = QString::fromUtf8(camera.id());
-        if (description.contains(QStringLiteral("UnityCapture"), Qt::CaseInsensitive)
-            || id.contains(QStringLiteral("UnityCapture"), Qt::CaseInsensitive)) {
+    // shared-memory protocol (see UnityCaptureWriter), whose DirectShow filter
+    // registers as "Unity Video Capture". Qt6's QMediaDevices enumerates
+    // cameras via Windows Media Foundation, which does not reliably surface a
+    // classic DirectShow-only capture filter -- confirmed live: even with the
+    // driver correctly registered (verified in the registry), it never
+    // appeared in QMediaDevices::videoInputs(). So check what the question is
+    // actually asking -- "is the driver installed" -- directly against the
+    // registry's DirectShow video capture sources category, which is
+    // authoritative regardless of what any particular app's camera picker shows.
+    QSettings reg(QStringLiteral("HKEY_LOCAL_MACHINE\\SOFTWARE\\Classes\\CLSID\\{860BB310-5D01-11d0-BD3B-00A0C911CE86}\\Instance"),
+                  QSettings::NativeFormat);
+    const QStringList instances = reg.childGroups();
+    for (const QString &instance : instances) {
+        const QString friendlyName = reg.value(instance + QStringLiteral("/FriendlyName")).toString();
+        if (friendlyName.contains(QStringLiteral("Unity"), Qt::CaseInsensitive))
             return true;
-        }
     }
 
     return false;
