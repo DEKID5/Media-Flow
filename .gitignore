@@ -1,0 +1,15 @@
+
+.env
+*.log
+drivers/unitycapture.zip
+drivers/temp
+.DS_Store
+
+# CMake / Qt
+build/
+cmake-build*/
+CMakeUserPresets.json
+*.user
+
+# Legacy embeddable Python (delete manually if Windows locks DLLs)
+resources/python/
