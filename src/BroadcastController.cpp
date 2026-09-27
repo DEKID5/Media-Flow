@@ -26,6 +26,7 @@
 #include <QJsonArray>
 #include <QFile>
 #include <QSaveFile>
+#include <QRandomGenerator>
 
 namespace {
 
@@ -111,6 +112,7 @@ BroadcastController::BroadcastController(QQmlApplicationEngine *engine, QObject 
     , m_cameraModel(new CameraDeviceModel(this))
     , m_broadcastEngine(new BroadcastEngine(this))
     , m_vcamManager(new VirtualCameraManager(this))
+    , m_pinnedFolders(new PinnedFolderModel(this))
 {
     m_programCameraDevice = QMediaDevices::defaultVideoInput();
     m_filterProxy->setSourceModel(m_libraryModel);
@@ -146,6 +148,8 @@ BroadcastController::BroadcastController(QQmlApplicationEngine *engine, QObject 
     m_bgmPlayer->setAudioOutput(m_bgmAudio);
     connect(m_bgmPlayer, &QMediaPlayer::mediaStatusChanged,
             this, &BroadcastController::onBgmStatusChanged);
+    connect(m_bgmPlayer, &QMediaPlayer::positionChanged, this, &BroadcastController::bgmPositionChanged);
+    connect(m_bgmPlayer, &QMediaPlayer::durationChanged, this, &BroadcastController::bgmDurationChanged);
 
     // ── Media Thumbnail Manager (Async/Hash-cached) ──
     m_thumbManager = new MediaThumbnailManager(this);
@@ -337,20 +341,64 @@ void BroadcastController::toggleBgmPlayback()
 void BroadcastController::nextBgm()
 {
     if (m_bgmPlaylist.isEmpty()) return;
-    int next = (m_bgmIndex + 1) % m_bgmPlaylist.count();
-    loadBgmTrack(next);
+
+    if (m_bgmShuffle && m_bgmPlaylist.count() > 1) {
+        m_bgmShuffleHistory.append(m_bgmIndex);
+        int next = m_bgmIndex;
+        while (next == m_bgmIndex)
+            next = QRandomGenerator::global()->bounded(m_bgmPlaylist.count());
+        loadBgmTrack(next);
+    } else {
+        int next = (m_bgmIndex + 1) % m_bgmPlaylist.count();
+        loadBgmTrack(next);
+    }
     m_bgmPlayer->play();
 }
 
 void BroadcastController::backBgm()
 {
     if (m_bgmPlaylist.isEmpty()) return;
-    int prev = (m_bgmIndex - 1 + m_bgmPlaylist.count()) % m_bgmPlaylist.count();
-    loadBgmTrack(prev);
+
+    if (m_bgmShuffle && !m_bgmShuffleHistory.isEmpty()) {
+        int prev = m_bgmShuffleHistory.takeLast();
+        loadBgmTrack(prev);
+    } else if (m_bgmShuffle && m_bgmPlaylist.count() > 1) {
+        int prev = m_bgmIndex;
+        while (prev == m_bgmIndex)
+            prev = QRandomGenerator::global()->bounded(m_bgmPlaylist.count());
+        loadBgmTrack(prev);
+    } else {
+        int prev = (m_bgmIndex - 1 + m_bgmPlaylist.count()) % m_bgmPlaylist.count();
+        loadBgmTrack(prev);
+    }
     m_bgmPlayer->play();
 }
 
 void BroadcastController::stopBgm() { m_bgmPlayer->stop(); emit bgmChanged(); }
+
+void BroadcastController::setBgmShuffle(bool enabled)
+{
+    if (m_bgmShuffle == enabled) return;
+    m_bgmShuffle = enabled;
+    m_bgmShuffleHistory.clear();
+    emit bgmShuffleChanged();
+}
+
+int BroadcastController::bgmPositionMs() const
+{
+    return m_bgmPlayer ? static_cast<int>(m_bgmPlayer->position()) : 0;
+}
+
+int BroadcastController::bgmDurationMs() const
+{
+    return m_bgmPlayer ? static_cast<int>(m_bgmPlayer->duration()) : 0;
+}
+
+void BroadcastController::seekBgm(int ms)
+{
+    if (!m_bgmPlayer || m_bgmPlaylist.isEmpty()) return;
+    m_bgmPlayer->setPosition(qBound(0, ms, static_cast<int>(m_bgmPlayer->duration())));
+}
 
 QString BroadcastController::bgmPath() const {
     if (m_bgmPlaylist.isEmpty() || m_bgmIndex >= m_bgmPlaylist.count()) return "";
@@ -675,6 +723,7 @@ void BroadcastController::saveState()
         if (m["isImported"].toBool()) importedItems << m;
     }
     root["importedMedia"] = QJsonArray::fromVariantList(importedItems);
+    root["pinnedFolders"] = QJsonArray::fromVariantList(m_pinnedFolders->getFullState());
     root["meetingType"] = m_meetingType;
     const QString code = SongSearchUtils::normalizeLanguageCode(m_languageCode);
     root["currentLanguageCode"] = code;
@@ -705,6 +754,7 @@ void BroadcastController::loadState()
     m_libraryModel->appendFromVariantList(importedMedia);
     for (const QVariant &item : importedMedia)
         indexMediaAsset(item.toMap());
+    m_pinnedFolders->setFullState(root["pinnedFolders"].toArray().toVariantList());
     m_meetingModel->setFullState("midweek", root["midweek"].toArray().toVariantList());
     m_meetingModel->setFullState("weekend", root["weekend"].toArray().toVariantList());
     m_meetingType = root["meetingType"].toString("midweek");
@@ -724,26 +774,43 @@ void BroadcastController::ensureExtractor() { if (!m_extractor) { m_extractor = 
 
 
 // Media Actions
-void BroadcastController::browseAndAddMedia(const QString &seqId, const QString &mediaType) {
-    QString filter = (mediaType == "video") ? "Videos (*.mp4 *.m4v *.mov *.mkv)" : "Images (*.jpg *.png *.jpeg *.webp)";
-    QString file = QFileDialog::getOpenFileName(nullptr, tr("Select Media"), "", filter);
-    if (file.isEmpty()) return;
-    
+QString BroadcastController::importOneFile(const QString &absolutePath, const QString &category)
+{
+    const QFileInfo fi(absolutePath);
+    const QString ext = fi.suffix().toLower();
+    QString type;
+    if (ext == "mp3" || ext == "m4a" || ext == "wav") type = QStringLiteral("audio");
+    else if (ext == "jpg" || ext == "jpeg" || ext == "png" || ext == "webp") type = QStringLiteral("image");
+    else type = QStringLiteral("video");
+
+    const QString id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     QVariantMap m;
-    QString id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     m.insert("id", id);
-    m.insert("name", QFileInfo(file).completeBaseName());
-    m.insert("type", mediaType);
-    m.insert("absolutePath", file);
-    m.insert("category", "Imported");
+    m.insert("name", fi.completeBaseName());
+    m.insert("type", type);
+    m.insert("absolutePath", absolutePath);
+    m.insert("category", category);
     m.insert("isImported", true);
-    m.insert("thumbnailPath", (mediaType == "image") ? QUrl::fromLocalFile(file).toString() : "");
+    m.insert("thumbnailPath", (type == QStringLiteral("image")) ? QUrl::fromLocalFile(absolutePath).toString() : "");
+
     m_libraryModel->appendFromVariantList({m});
     indexMediaAsset(m);
-    
-    if (m_thumbManager) m_thumbManager->enqueue(id, file, mediaType);
-    
-    if (!seqId.isEmpty()) bindMediaToSequence(id);
+    if (m_thumbManager) m_thumbManager->enqueue(id, absolutePath, type);
+    return id;
+}
+
+void BroadcastController::browseAndAddMedia(const QString &seqId, const QString &mediaType) {
+    QString filter = (mediaType == "video") ? "Videos (*.mp4 *.m4v *.mov *.mkv)" : "Images (*.jpg *.png *.jpeg *.webp)";
+    // Multi-select: an operator adding B-roll or a set of slides typically wants
+    // several files in one pass rather than repeating this dialog per file.
+    QStringList files = QFileDialog::getOpenFileNames(nullptr, tr("Select Media"), "", filter);
+    if (files.isEmpty()) return;
+
+    for (const QString &file : files) {
+        const QString id = importOneFile(file, QStringLiteral("Imported"));
+        if (!seqId.isEmpty()) bindMediaToSequence(id);
+    }
+    saveState();
 }
 
 void BroadcastController::previewMediaByPath(const QString &path) {
@@ -758,20 +825,11 @@ void BroadcastController::importMediaToFileSystem(const QString &category) {
     QString jwVideos = QDir::homePath() + "/Videos/JWLibrary";
     QString startDir = QDir(jwVideos).exists() ? jwVideos : QStandardPaths::writableLocation(QStandardPaths::MoviesLocation);
 
-    QString file = QFileDialog::getOpenFileName(nullptr, tr("Import Media"), startDir, "Media Files (*.mp4 *.m4v *.mov *.mkv *.jpg *.png *.jpeg *.webp *.mp3 *.m4a)");
-    if (file.isEmpty()) return;
-    
-    QVariantMap m;
-    QString id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    m.insert("id", id);
-    m.insert("name", QFileInfo(file).completeBaseName());
-    m.insert("type", file.endsWith(".mp3") || file.endsWith(".m4a") ? "audio" : (file.endsWith(".jpg") || file.endsWith(".png") ? "image" : "video"));
-    m.insert("absolutePath", file);
-    m.insert("category", category);
-    m.insert("isImported", true);
-    m_libraryModel->appendFromVariantList({m});
-    indexMediaAsset(m);
-    if (m_thumbManager) m_thumbManager->enqueue(id, file, m["type"].toString());
+    QStringList files = QFileDialog::getOpenFileNames(nullptr, tr("Import Media"), startDir, "Media Files (*.mp4 *.m4v *.mov *.mkv *.jpg *.png *.jpeg *.webp *.mp3 *.m4a)");
+    if (files.isEmpty()) return;
+
+    for (const QString &file : files)
+        importOneFile(file, category);
     saveState();
 }
 
@@ -779,7 +837,7 @@ QVariantMap BroadcastController::addMediaToSegment(const QString &segmentId, con
 {
     QString startDir;
     QString filter;
-    
+
     // User-requested paths
     QString jwVideos = QDir::homePath() + "/Videos/JWLibrary";
     QString jwImages = QDir::homePath() + "/AppData/Local/Packages/WatchtowerBibleandTractSo.45909CDBADF3C_5rz59y55nfz3e/LocalState/Publications";
@@ -792,34 +850,23 @@ QVariantMap BroadcastController::addMediaToSegment(const QString &segmentId, con
         filter = "Videos (*.mp4 *.m4v *.mov *.avi *.mkv)";
     }
 
-    QString file = QFileDialog::getOpenFileName(nullptr, tr("Select Media"), startDir, filter);
-    if (file.isEmpty()) return {};
+    // Multi-select: linking several videos/images to one segment in one go.
+    QStringList files = QFileDialog::getOpenFileNames(nullptr, tr("Select Media"), startDir, filter);
+    if (files.isEmpty()) return {};
 
-    QString id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    QString name = QFileInfo(file).completeBaseName();
-
-    QVariantMap result;
-    result.insert("id", id);
-    result.insert("name", name);
-    result.insert("type", mediaType);
-    result.insert("absolutePath", file);
-    result.insert("isImported", true);
-    result.insert("category", "Meeting");
-
-    m_libraryModel->appendFromVariantList({result});
-    indexMediaAsset(result);
-    
-    // Thumbnail generation
-    if (m_thumbManager) m_thumbManager->enqueue(id, file, mediaType);
-
-    // Bind to segment
-    int row = m_meetingModel->rowOfId(segmentId);
-    if (row != -1) {
-        m_meetingModel->addLinkedMedia(row, id);
-        saveState();
+    const int row = m_meetingModel->rowOfId(segmentId);
+    QVariantMap firstResult;
+    for (const QString &file : files) {
+        const QString id = importOneFile(file, QStringLiteral("Meeting"));
+        if (row != -1)
+            m_meetingModel->addLinkedMedia(row, id);
+        if (firstResult.isEmpty())
+            firstResult = m_libraryModel->getRowById(id);
     }
+    if (row != -1)
+        saveState();
 
-    return result;
+    return firstResult;
 }
 
 QVariantList BroadcastController::getSupportedLanguages() const {
@@ -917,4 +964,87 @@ void BroadcastController::reResolveSongSegmentsForCurrentLanguage()
         const QString segmentId = m_meetingModel->data(idx, MeetingScheduleModel::IdRole).toString();
         resolveSongToSegment(songNumber, m_languageCode, segmentId, true);
     }
+}
+
+// ──────────────────────────────────────────────────────────────────
+//  Pinned Folders
+// ──────────────────────────────────────────────────────────────────
+
+QString BroadcastController::normalizeDroppedPath(const QString &pathOrUrl)
+{
+    // OS drag-and-drop delivers file:// URLs; a plain local path is also
+    // accepted so QML can pass either without caring which.
+    const QUrl url(pathOrUrl);
+    if (url.isLocalFile())
+        return url.toLocalFile();
+    return pathOrUrl;
+}
+
+QString BroadcastController::createPinnedFolder(const QString &name)
+{
+    const QString id = m_pinnedFolders->createFolder(name);
+    saveState();
+    return id;
+}
+
+void BroadcastController::renamePinnedFolder(const QString &folderId, const QString &newName)
+{
+    m_pinnedFolders->renameFolder(folderId, newName);
+    saveState();
+}
+
+void BroadcastController::deletePinnedFolder(const QString &folderId)
+{
+    m_pinnedFolders->deleteFolder(folderId);
+    saveState();
+}
+
+void BroadcastController::pinMediaToFolder(const QString &folderId, const QString &mediaId)
+{
+    m_pinnedFolders->addMedia(folderId, mediaId);
+    saveState();
+}
+
+void BroadcastController::unpinMediaFromFolder(const QString &folderId, const QString &mediaId)
+{
+    m_pinnedFolders->removeMedia(folderId, mediaId);
+    saveState();
+}
+
+void BroadcastController::browseAndAddFilesToPinnedFolder(const QString &folderId)
+{
+    QString jwVideos = QDir::homePath() + "/Videos/JWLibrary";
+    QString startDir = QDir(jwVideos).exists() ? jwVideos : QStandardPaths::writableLocation(QStandardPaths::MoviesLocation);
+
+    QStringList files = QFileDialog::getOpenFileNames(nullptr, tr("Add Files to Pin"), startDir,
+        "Media Files (*.mp4 *.m4v *.mov *.mkv *.jpg *.png *.jpeg *.webp *.mp3 *.m4a)");
+    if (files.isEmpty()) return;
+
+    const QString folderName = m_pinnedFolders->nameForFolder(folderId);
+    for (const QString &file : files) {
+        const QString id = importOneFile(file, folderName.isEmpty() ? QStringLiteral("Pinned") : folderName);
+        m_pinnedFolders->addMedia(folderId, id);
+    }
+    saveState();
+}
+
+void BroadcastController::importFilesToPinnedFolder(const QString &folderId, const QStringList &pathsOrUrls)
+{
+    if (pathsOrUrls.isEmpty()) return;
+    const QString folderName = m_pinnedFolders->nameForFolder(folderId);
+
+    for (const QString &raw : pathsOrUrls) {
+        const QString path = normalizeDroppedPath(raw);
+        if (path.isEmpty() || !QFileInfo::exists(path) || QFileInfo(path).isDir())
+            continue;
+
+        // Dropping a file MediaFlow already knows about just pins the existing
+        // asset instead of duplicating it in the library.
+        const QString existingId = m_libraryModel->idOfPath(path);
+        const QString id = existingId.isEmpty()
+            ? importOneFile(path, folderName.isEmpty() ? QStringLiteral("Pinned") : folderName)
+            : existingId;
+        m_pinnedFolders->addMedia(folderId, id);
+    }
+    saveState();
 }

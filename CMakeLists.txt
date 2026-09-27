@@ -25,6 +25,8 @@ set(MFQ_SOURCES
     src/MediaThumbnailManager.cpp
     src/StagedMediaProxyModel.cpp
     src/StagedMediaProxyModel.h
+    src/PinnedFolderModel.cpp
+    src/PinnedFolderModel.h
     src/SongSearchUtils.cpp
     src/SongSearchUtils.h
     src/TimerController.cpp
