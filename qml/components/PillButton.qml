@@ -63,6 +63,9 @@ Button {
         }
     }
 
+    // Feedback fires on press (down), not on release — and settles with a
+    // critically-damped spring rather than a fixed-duration curve, so a
+    // rapid re-press/re-hover redirects smoothly instead of restarting.
     scale: control.pressed ? 0.96 : (control.hovered ? 1.02 : 1.0)
-    Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutQuad } }
+    Behavior on scale { SpringAnimation { spring: 4; damping: 0.5 } }
 }

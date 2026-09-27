@@ -7,7 +7,7 @@ DockPanel {
     id: timerRoot
     Layout.preferredHeight: 196
     Layout.minimumHeight: 188
-    accentColor: "#3B82F6"
+    accentColor: Theme.accentBlue
     title: "MEETING TIMER"
 
     headerTrailing: Rectangle {
@@ -74,6 +74,9 @@ DockPanel {
                 font.pixelSize: 56
                 font.bold: true
                 font.features: { "tnum": 1 }
+                // Large display numerals want negative tracking — at this size the
+                // digits' natural spacing reads as too loose otherwise.
+                font.letterSpacing: -1.5
 
                 Behavior on color { ColorAnimation { duration: 180 } }
             }
@@ -120,6 +123,9 @@ DockPanel {
                     border.color: "#22c58f"
                     border.width: 1
                 }
+
+                scale: startButton.pressed ? 0.97 : 1.0
+                Behavior on scale { SpringAnimation { spring: 5; damping: 0.5 } }
             }
 
             SquareIconButton {
@@ -160,7 +166,11 @@ DockPanel {
             }
         }
 
+        scale: roundMa.pressed ? 0.9 : 1.0
+        Behavior on scale { SpringAnimation { spring: 6; damping: 0.5 } }
+
         MouseArea {
+            id: roundMa
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
             onClicked: control.clicked()
@@ -193,7 +203,11 @@ DockPanel {
             }
         }
 
+        scale: squareMa.pressed ? 0.92 : 1.0
+        Behavior on scale { SpringAnimation { spring: 6; damping: 0.5 } }
+
         MouseArea {
+            id: squareMa
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
             onClicked: control.clicked()

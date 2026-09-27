@@ -42,6 +42,14 @@ endif()
 qt_add_executable(mediaflow ${MFQ_SOURCES})
 set_target_properties(mediaflow PROPERTIES OUTPUT_NAME "MediaFlow")
 
+# Must be set BEFORE qt_add_qml_module() -- Qt's qmldir generator reads this
+# property when the module is declared, not retroactively. Setting it after
+# (as this file previously did) silently produces a qmldir entry missing the
+# "singleton" keyword, which makes every Theme.<property> access in QML
+# resolve to undefined instead of erroring -- the actual root cause behind
+# this codebase's old defensive `typeof Theme !== "undefined"` fallback.
+set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+
 qt_add_qml_module(mediaflow
     URI MediaFlow
     VERSION 1.0
@@ -64,7 +72,6 @@ qt_add_qml_module(mediaflow
         qml/assets/video_placeholder.png
         qml/assets/logo.png
 )
-set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 target_include_directories(mediaflow PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
