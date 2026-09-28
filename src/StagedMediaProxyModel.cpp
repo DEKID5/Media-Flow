@@ -9,6 +9,10 @@ StagedMediaProxyModel::StagedMediaProxyModel(QObject *parent)
     : QSortFilterProxyModel(parent)
 {
     setRecursiveFilteringEnabled(true);
+    // Matches the default m_filterType ("segment") -- setFilterType() only
+    // calls sort() on an actual change, which a QML binding whose first
+    // evaluated value equals the C++ default won't trigger.
+    sort(0);
 }
 
 void StagedMediaProxyModel::setSelectedSegmentId(const QString &id)
@@ -24,7 +28,10 @@ void StagedMediaProxyModel::setStagedIds(const QStringList &ids)
 {
     if (m_stagedIds != ids) {
         m_stagedIds = ids;
-        invalidateFilter();
+        // Full invalidate (not just invalidateFilter): the *order* encoded
+        // in m_stagedIds can change (a reorder) without any row's pass/fail
+        // filter result changing, and only invalidate() re-runs lessThan().
+        invalidate();
         emit stagedIdsChanged();
     }
 }
@@ -34,6 +41,10 @@ void StagedMediaProxyModel::setFilterType(const QString &t)
     if (m_filterType != t) {
         m_filterType = t;
         invalidateFilter();
+        // Sorting only makes sense (and is only implemented) for the
+        // link-ordered views; everything else keeps the previous "no
+        // sorting, natural source order" behavior (sortColumn -1).
+        sort((t == "segment" || t == "pinned") ? 0 : -1);
         emit filterChanged();
     }
 }
@@ -111,4 +122,16 @@ bool StagedMediaProxyModel::filterAcceptsRow(int source_row, const QModelIndex &
     }
 
     return true;
+}
+
+bool StagedMediaProxyModel::lessThan(const QModelIndex &left, const QModelIndex &right) const
+{
+    if (m_filterType != "segment" && m_filterType != "pinned")
+        return QSortFilterProxyModel::lessThan(left, right);
+
+    const QString leftId = sourceModel()->data(left, MediaLibraryModel::IdRole).toString();
+    const QString rightId = sourceModel()->data(right, MediaLibraryModel::IdRole).toString();
+    const int leftPos = m_stagedIds.indexOf(leftId);
+    const int rightPos = m_stagedIds.indexOf(rightId);
+    return leftPos < rightPos;
 }

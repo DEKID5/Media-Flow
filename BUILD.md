@@ -22,15 +22,16 @@ Set **`CMAKE_PREFIX_PATH`** to your Qt installation’s kit root (the folder tha
 
 `MediaThumbnailManager` uses `ffmpeg` to extract video thumbnails when it's available (falling back to a native `QMediaPlayer`-based grab otherwise). Install [ffmpeg](https://ffmpeg.org) and ensure `ffmpeg.exe` is on `PATH`, or drop it next to `MediaFlow.exe`.
 
-## Optional: Zoom virtual camera (UnityCapture)
+## Optional: Zoom virtual camera (OBS Virtual Camera)
 
-**Broadcast to Zoom** feeds the program output into a virtual webcam using [UnityCapture](https://github.com/schellingb/UnityCapture) — a small, MIT-licensed DirectShow virtual camera driver built for exactly this ("feed frames from my app into a virtual webcam"). MediaFlow talks to it directly (`src/UnityCaptureWriter.*`); the driver itself is a separate one-time install, same as any other webcam driver:
+**Broadcast to Zoom** feeds the program output directly into OBS Studio's own virtual-camera device, by implementing its shared-memory producer protocol directly (`src/ObsVirtualCamWriter.*`, ported field-for-field from `plugins/win-dshow/shared-memory-queue.c` in the real [obs-studio](https://github.com/obsproject/obs-studio) source). **OBS Studio itself never needs to run** — installing it once is enough, since that's what registers the "OBS Virtual Camera" DirectShow driver on the system (same as installing any webcam driver); MediaFlow acts as its own producer from then on, the same role OBS's own "Start Virtual Camera" button plays internally.
 
-1. Download the latest release from the [UnityCapture releases page](https://github.com/schellingb/UnityCapture/releases) into `drivers/unitycapture.zip` (git-ignored — this repo doesn't vendor the binary).
-2. Extract it and run `Install.bat` as Administrator (registers the DirectShow filter via `regsvr32`).
-3. It then appears as a normal webcam named **Unity Video Capture** in Zoom's camera picker, and to `BroadcastController::hasVirtualCameraDriver()`.
+1. Install [OBS Studio](https://obsproject.com/) (free). No configuration needed — just installing it registers the driver.
+2. Click **Broadcast to Zoom** in MediaFlow. It appears as **OBS Virtual Camera** in Zoom's (or any other app's) camera picker.
 
-Without it installed, **Broadcast to Zoom** shows a warning dialog and does nothing destructive — no crash, no silent failure.
+Only one producer can hold the shared memory at a time — if OBS Studio's own "Start Virtual Camera" is running at the same time, MediaFlow's will fail to start (surfaced as a warning, not a crash or silent failure). Don't run both at once.
+
+Without the driver installed at all, **Broadcast to Zoom** shows a warning dialog and does nothing destructive.
 
 ## Optional: remove locked `resources/python`
 

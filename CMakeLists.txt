@@ -33,8 +33,8 @@ set(MFQ_SOURCES
     src/TimerController.h
     src/VirtualCameraManager.cpp
     src/VirtualCameraManager.h
-    src/UnityCaptureWriter.cpp
-    src/UnityCaptureWriter.h
+    src/ObsVirtualCamWriter.cpp
+    src/ObsVirtualCamWriter.h
 )
 
 if(WIN32)
@@ -61,6 +61,8 @@ qt_add_qml_module(mediaflow
         qml/OperatorDashboard.qml
         qml/AudienceWindow.qml
         qml/VirtualCameraWindow.qml
+        qml/SettingsWindow.qml
+        qml/TimerWindow.qml
         qml/components/PillButton.qml
         qml/components/MonitorView.qml
         qml/components/SongSelectorPopup.qml
@@ -92,7 +94,7 @@ target_link_libraries(mediaflow PRIVATE
 )
 
 if(WIN32)
-    target_link_libraries(mediaflow PRIVATE user32)
+    target_link_libraries(mediaflow PRIVATE user32 Shell32 Ole32)
 endif()
 
 include(GNUInstallDirs)

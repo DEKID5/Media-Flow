@@ -132,6 +132,12 @@ Item {
             } else if (name === "close") {
                 ctx.beginPath(); ctx.moveTo(w*0.2, h*0.2); ctx.lineTo(w*0.8, h*0.8); ctx.stroke();
                 ctx.beginPath(); ctx.moveTo(w*0.8, h*0.2); ctx.lineTo(w*0.2, h*0.8); ctx.stroke();
+            } else if (name === "expand") {
+                // Four corner brackets pointing outward -- "expand to full screen".
+                ctx.beginPath(); ctx.moveTo(w*0.35, h*0.15); ctx.lineTo(w*0.15, h*0.15); ctx.lineTo(w*0.15, h*0.35); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(w*0.65, h*0.15); ctx.lineTo(w*0.85, h*0.15); ctx.lineTo(w*0.85, h*0.35); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(w*0.15, h*0.65); ctx.lineTo(w*0.15, h*0.85); ctx.lineTo(w*0.35, h*0.85); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(w*0.85, h*0.65); ctx.lineTo(w*0.85, h*0.85); ctx.lineTo(w*0.65, h*0.85); ctx.stroke();
             }
         }
     }

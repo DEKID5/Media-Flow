@@ -103,6 +103,17 @@ void MeetingScheduleModel::removeLinkedMedia(int row, const QString &mediaId)
     emit dataChanged(index(row), index(row), {AssociatedMediaIdsRole});
 }
 
+void MeetingScheduleModel::moveLinkedMedia(int row, int fromIndex, int toIndex)
+{
+    auto &rows = activeRows();
+    if (row < 0 || row >= rows.size()) return;
+    QStringList &ids = rows[row].linkedMediaIds;
+    if (fromIndex < 0 || fromIndex >= ids.size() || toIndex < 0 || toIndex >= ids.size() || fromIndex == toIndex)
+        return;
+    ids.move(fromIndex, toIndex);
+    emit dataChanged(index(row), index(row), {AssociatedMediaIdsRole});
+}
+
 void MeetingScheduleModel::clearAllMedia()
 {
     beginResetModel();

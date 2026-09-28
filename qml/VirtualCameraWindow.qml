@@ -10,9 +10,27 @@ Window {
     visible: false
     title: qsTr("MediaFlow - Zoom Virtual Camera")
     color: "black"
-    flags: Qt.FramelessWindowHint | Qt.Tool
+    // WindowStaysOnBottomHint keeps this window rendering (Qt Quick does not
+    // fire afterRendering for a window positioned entirely outside every
+    // monitor's bounds -- confirmed live: moving it off-screen at
+    // (-10000,-10000) left afterRendering never firing at all, so no frame
+    // was ever captured) while keeping it out of the way behind every other
+    // window on screen, since it must stay on-screen to actually render.
+    flags: Qt.FramelessWindowHint | Qt.Tool | Qt.WindowStaysOnBottomHint | Qt.WindowDoesNotAcceptFocus
 
     property bool activeIsA: true
+
+    // Qt Quick only repaints a window when something in it is actually
+    // animating. The live camera feed keeps doing that on its own, but a
+    // static program asset (an image, or simply nothing changing between
+    // transitions) can let the render loop go idle -- and with it, the
+    // VirtualCameraManager's afterRendering-driven capture, freezing Zoom on
+    // a stale frame instead of switching to what's actually live. Forcing a
+    // steady repaint keeps capture flowing regardless of content.
+    Timer {
+        interval: 33; running: zoomRoot.visible; repeat: true
+        onTriggered: zoomRoot.update()
+    }
 
     CaptureSession {
         id: cameraSession

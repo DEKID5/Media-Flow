@@ -11,8 +11,46 @@ operable program or batch file.
 ** Copyright (c) 2025 Microsoft Corporation
 **********************************************************************
 [vcvarsall.bat] Environment initialized for: 'x64'
-[1/36] Automatic MOC for target mediaflow
-[2/35] Running AUTOMOC file extraction for target mediaflow
-[3/35] Running moc --collect-json for target mediaflow
-[4/5] Building CXX object CMakeFiles\mediaflow.dir\src\BroadcastController.cpp.obj
-[5/5] Linking CXX executable MediaFlow.exe
+[1/43] Copying qml/AudienceWindow.qml to C:/Users/sethi/Desktop/Media-Flow-main/build/MediaFlow/qml/AudienceWindow.qml
+[2/43] Copying qml/VirtualCameraWindow.qml to C:/Users/sethi/Desktop/Media-Flow-main/build/MediaFlow/qml/VirtualCameraWindow.qml
+[3/43] Copying qml/components/MonitorView.qml to C:/Users/sethi/Desktop/Media-Flow-main/build/MediaFlow/qml/components/MonitorView.qml
+[4/43] Running qmlimportscanner for mediaflow
+[5/43] Automatic MOC for target mediaflow
+[6/43] Running AUTOMOC file extraction for target mediaflow
+[7/43] Running moc --collect-json for target mediaflow
+[8/43] Running rcc for resource mediaflow_raw_qml_0
+[9/43] Automatic QML type registration for target mediaflow
+[10/43] Generating .rcc/qmlcache/mediaflow_qml/Theme_qml.cpp, .rcc/qmlcache/mediaflow_qml/Theme_qml.cpp.aotstats
+[11/43] Generating .rcc/qmlcache/mediaflow_qml/AudienceWindow_qml.cpp, .rcc/qmlcache/mediaflow_qml/AudienceWindow_qml.cpp.aotstats
+[12/43] Generating .rcc/qmlcache/mediaflow_qml/VirtualCameraWindow_qml.cpp, .rcc/qmlcache/mediaflow_qml/VirtualCameraWindow_qml.cpp.aotstats
+[13/43] Generating .rcc/qmlcache/mediaflow_qml/components/PillButton_qml.cpp, .rcc/qmlcache/mediaflow_qml/components/PillButton_qml.cpp.aotstats
+[14/43] Generating .rcc/qmlcache/mediaflow_qml/components/SongSelectorPopup_qml.cpp, .rcc/qmlcache/mediaflow_qml/components/SongSelectorPopup_qml.cpp.aotstats
+[15/43] Generating .rcc/qmlcache/mediaflow_qml/components/DockPanel_qml.cpp, .rcc/qmlcache/mediaflow_qml/components/DockPanel_qml.cpp.aotstats
+[16/43] Generating .rcc/qmlcache/mediaflow_qml/components/ThemedDialog_qml.cpp, .rcc/qmlcache/mediaflow_qml/components/ThemedDialog_qml.cpp.aotstats
+[17/43] Generating .rcc/qmlcache/mediaflow_qml/components/BroadcastIcon_qml.cpp, .rcc/qmlcache/mediaflow_qml/components/BroadcastIcon_qml.cpp.aotstats
+[18/43] Generating .rcc/qmlcache/mediaflow_qml/components/MonitorView_qml.cpp, .rcc/qmlcache/mediaflow_qml/components/MonitorView_qml.cpp.aotstats
+[19/43] Generating .rcc/qmlcache/mediaflow_qml/components/TimerPanel_qml.cpp, .rcc/qmlcache/mediaflow_qml/components/TimerPanel_qml.cpp.aotstats
+[20/43] Generating .rcc/qmlcache/mediaflow_qml/components/BackgroundMusicPanel_qml.cpp, .rcc/qmlcache/mediaflow_qml/components/BackgroundMusicPanel_qml.cpp.aotstats
+[21/43] Generating .rcc/qmlcache/mediaflow_qml/Main_qml.cpp, .rcc/qmlcache/mediaflow_qml/Main_qml.cpp.aotstats
+[22/43] Generating .rcc/qmlcache/mediaflow_qml/components/MediaSourcePanel_qml.cpp, .rcc/qmlcache/mediaflow_qml/components/MediaSourcePanel_qml.cpp.aotstats
+[23/43] Generating .rcc/qmlcache/mediaflow_qml/OperatorDashboard_qml.cpp, .rcc/qmlcache/mediaflow_qml/OperatorDashboard_qml.cpp.aotstats
+[24/43] Building CXX object CMakeFiles\mediaflow.dir\mediaflow_qmltyperegistrations.cpp.obj
+[25/43] Building CXX object CMakeFiles\mediaflow.dir\build\.rcc\qmlcache\mediaflow_qml\VirtualCameraWindow_qml.cpp.obj
+[26/43] Building CXX object CMakeFiles\mediaflow.dir\build\.rcc\qmlcache\mediaflow_qml\Main_qml.cpp.obj
+[27/43] Building CXX object CMakeFiles\mediaflow.dir\build\.rcc\qmlcache\mediaflow_qml\components\PillButton_qml.cpp.obj
+[28/43] Building CXX object CMakeFiles\mediaflow.dir\build\.rcc\qmlcache\mediaflow_qml\components\BroadcastIcon_qml.cpp.obj
+[29/43] Building CXX object CMakeFiles\mediaflow.dir\build\.rcc\qmlcache\mediaflow_qml\Theme_qml.cpp.obj
+[30/43] Building CXX object CMakeFiles\mediaflow.dir\build\.rcc\qmlcache\mediaflow_qml\components\SongSelectorPopup_qml.cpp.obj
+[31/43] Building CXX object CMakeFiles\mediaflow.dir\build\.rcc\qmlcache\mediaflow_qml\components\MonitorView_qml.cpp.obj
+[32/43] Building CXX object CMakeFiles\mediaflow.dir\build\.rcc\qmlcache\mediaflow_qml\AudienceWindow_qml.cpp.obj
+[33/43] Building CXX object CMakeFiles\mediaflow.dir\build\.rcc\qmlcache\mediaflow_qml\components\MediaSourcePanel_qml.cpp.obj
+[34/43] Building CXX object CMakeFiles\mediaflow.dir\build\.rcc\qmlcache\mediaflow_qml\OperatorDashboard_qml.cpp.obj
+[35/43] Building CXX object CMakeFiles\mediaflow.dir\build\.qt\rcc\qrc_mediaflow_raw_qml_0.cpp.obj
+[36/43] Building CXX object CMakeFiles\mediaflow.dir\src\main.cpp.obj
+[37/43] Building CXX object CMakeFiles\mediaflow.dir\build\.rcc\qmlcache\mediaflow_qml\components\DockPanel_qml.cpp.obj
+[38/43] Building CXX object CMakeFiles\mediaflow.dir\src\BroadcastController.cpp.obj
+[39/43] Building CXX object CMakeFiles\mediaflow.dir\build\.rcc\qmlcache\mediaflow_qml\components\ThemedDialog_qml.cpp.obj
+[40/43] Building CXX object CMakeFiles\mediaflow.dir\mediaflow_autogen\mocs_compilation.cpp.obj
+[41/43] Building CXX object CMakeFiles\mediaflow.dir\build\.rcc\qmlcache\mediaflow_qml\components\TimerPanel_qml.cpp.obj
+[42/43] Building CXX object CMakeFiles\mediaflow.dir\build\.rcc\qmlcache\mediaflow_qml\components\BackgroundMusicPanel_qml.cpp.obj
+[43/43] Linking CXX executable MediaFlow.exe

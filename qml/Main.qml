@@ -8,6 +8,12 @@ ApplicationWindow {
     id: operatorRoot
     width: 1400
     height: 900
+    // No floor previously existed, so the dashboard's fixed-width toolbar
+    // controls and side panels would clip/overflow uncontrollably below
+    // ~1400px -- this plus the panel/toolbar changes in OperatorDashboard.qml
+    // let the window actually be resized smaller without breaking the layout.
+    minimumWidth: 1300
+    minimumHeight: 700
     visible: true
     title: qsTr("MediaFlow — Broadcast Suite")
     color: "#050505"
@@ -19,6 +25,15 @@ ApplicationWindow {
 
     OperatorDashboard {
         anchors.fill: parent
+        onSettingsRequested: {
+            settingsWindow.show()
+            settingsWindow.raise()
+            settingsWindow.requestActivate()
+        }
+    }
+
+    SettingsWindow {
+        id: settingsWindow
     }
 
     footer: Rectangle {

@@ -59,26 +59,87 @@ DockPanel {
                 onClicked: TimerBackend.adjustDuration(-1)
             }
 
-            Label {
-                text: TimerBackend.displayTime
+            Item {
                 Layout.fillWidth: true
                 Layout.alignment: Qt.AlignVCenter
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-                color: {
-                    if (TimerBackend.state === TimerBackend.Overtime) return "#EF4444"
-                    if (TimerBackend.state === TimerBackend.Paused) return "#F59E0B"
-                    return "#ffffff"
-                }
-                font.family: "JetBrains Mono"
-                font.pixelSize: 56
-                font.bold: true
-                font.features: { "tnum": 1 }
-                // Large display numerals want negative tracking — at this size the
-                // digits' natural spacing reads as too loose otherwise.
-                font.letterSpacing: -1.5
+                Layout.preferredHeight: timeLabel.implicitHeight
 
-                Behavior on color { ColorAnimation { duration: 180 } }
+                Label {
+                    id: timeLabel
+                    anchors.fill: parent
+                    text: TimerBackend.displayTime
+                    visible: !timeEdit.visible
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    color: {
+                        if (TimerBackend.state === TimerBackend.Overtime) return "#EF4444"
+                        if (TimerBackend.state === TimerBackend.Paused) return "#F59E0B"
+                        return "#ffffff"
+                    }
+                    font.family: "JetBrains Mono"
+                    font.pixelSize: 56
+                    font.bold: true
+                    font.features: { "tnum": 1 }
+                    // Large display numerals want negative tracking — at this size the
+                    // digits' natural spacing reads as too loose otherwise.
+                    font.letterSpacing: -1.5
+
+                    Behavior on color { ColorAnimation { duration: 180 } }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.IBeamCursor
+                        onClicked: {
+                            // Seed the field with just the target duration (MM:SS),
+                            // not the possibly-negative overtime display, since
+                            // typing a duration is what adjustDuration/chevrons do too.
+                            let total = TimerBackend.targetDurationSeconds
+                            let mm = Math.floor(total / 60)
+                            let ss = total % 60
+                            timeEdit.text = mm + ":" + (ss < 10 ? "0" + ss : ss)
+                            timeEdit.visible = true
+                            timeEdit.forceActiveFocus()
+                            timeEdit.selectAll()
+                        }
+                    }
+                }
+
+                TextField {
+                    id: timeEdit
+                    anchors.fill: parent
+                    visible: false
+                    horizontalAlignment: Text.AlignHCenter
+                    font.family: "JetBrains Mono"
+                    font.pixelSize: 56
+                    font.bold: true
+                    font.letterSpacing: -1.5
+                    color: "#ffffff"
+                    background: Rectangle { color: "transparent" }
+                    // Accepts "MM:SS", "M", or plain seconds/minutes -- kept
+                    // forgiving since this is a quick operator entry field,
+                    // not a strict form. Invalid input just cancels the edit.
+                    validator: RegularExpressionValidator { regularExpression: /^[0-9]{0,4}(:[0-9]{0,2})?$/ }
+
+                    function commit() {
+                        let raw = text.trim()
+                        let seconds = -1
+                        if (raw.indexOf(":") !== -1) {
+                            let parts = raw.split(":")
+                            let mm = parseInt(parts[0] || "0", 10)
+                            let ss = parseInt(parts[1] || "0", 10)
+                            if (!isNaN(mm) && !isNaN(ss)) seconds = mm * 60 + ss
+                        } else if (raw.length > 0) {
+                            let mm = parseInt(raw, 10)
+                            if (!isNaN(mm)) seconds = mm * 60
+                        }
+                        if (seconds >= 0) TimerBackend.targetDurationSeconds = Math.min(seconds, 359999)
+                        visible = false
+                    }
+
+                    onAccepted: commit()
+                    onActiveFocusChanged: if (!activeFocus) commit()
+                    Keys.onEscapePressed: visible = false
+                }
             }
 
             RoundIconButton {
@@ -137,6 +198,46 @@ DockPanel {
                 iconName: "screen"
                 checked: TimerBackend.isStaged
                 onClicked: TimerBackend.stage()
+                ToolTip.visible: hovered
+                ToolTip.delay: 500
+                ToolTip.text: "Stage — small timer overlay on top of live content"
+            }
+
+            SquareIconButton {
+                iconName: "expand"
+                checked: TimerBackend.fullScreenTimer
+                // Turning it ON takes over a whole monitor instantly, and
+                // automatic screen selection can land on the operator's own
+                // display if no dedicated second screen is configured -- so
+                // this always confirms first rather than extending the
+                // instant the button is pressed. Turning it back OFF needs
+                // no confirmation, since that's never surprising.
+                onClicked: {
+                    if (TimerBackend.fullScreenTimer) TimerBackend.toggleFullScreenTimer()
+                    else fullScreenConfirmDialog.open()
+                }
+                ToolTip.visible: hovered
+                ToolTip.delay: 500
+                ToolTip.text: "Full-screen timer — opens on its own dedicated window/screen"
+            }
+
+            ThemedDialog {
+                id: fullScreenConfirmDialog
+                title: "Show Full-Screen Timer"
+                acceptText: "SHOW"; acceptColor: Theme.accentBlue
+                contentItem: Label {
+                    text: {
+                        let idx = (MediaFlowBackend || {}).timerScreenIndex
+                        if (idx === undefined || idx === -1) return "This will open the timer full-screen on the automatically-chosen display. Continue?"
+                        let screens = (MediaFlowBackend || {}).availableScreens ? MediaFlowBackend.availableScreens() : []
+                        let match = screens.find(s => s.index === idx)
+                        return "This will open the timer full-screen on " + (match ? match.name : ("display " + (idx + 1))) + ". Continue?"
+                    }
+                    color: Theme.textPrimary; font.pixelSize: Theme.textMd; wrapMode: Text.WordWrap
+                    width: 300
+                    leftPadding: 20; rightPadding: 20; topPadding: 4; bottomPadding: 12
+                }
+                onAccepted: TimerBackend.toggleFullScreenTimer()
             }
         }
     }
