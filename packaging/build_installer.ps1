@@ -29,8 +29,37 @@ if (-not (Test-Path $windeployqt)) {
     throw "windeployqt.exe not found under $QtBin -- pass -QtBin pointing at your Qt kit's bin folder."
 }
 
-& $windeployqt --qmldir "$PSScriptRoot\..\qml" --release (Join-Path $distDir "MediaFlow.exe")
-if ($LASTEXITCODE -ne 0) { throw "windeployqt failed with exit code $LASTEXITCODE" }
+# windeployqt writes a harmless "Cannot find any version of dxcompiler.dll"
+# warning to stderr; PowerShell 5.1 treats that as a terminating error under
+# $ErrorActionPreference = "Stop" even though the exit code is 0, aborting
+# the rest of this script -- so it runs under its own tolerant scope.
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+& $windeployqt --qmldir "$PSScriptRoot\..\qml" --release (Join-Path $distDir "MediaFlow.exe") 2>&1 | Out-String | Write-Host
+$deployExit = $LASTEXITCODE
+$ErrorActionPreference = $prevEap
+if ($deployExit -ne 0) { throw "windeployqt failed with exit code $deployExit" }
+
+# qt_add_qml_module's own build step generates a "<URI>" folder next to the
+# exe (build/MediaFlow/ -- qmldir + a loose copy of our .qml files) as
+# internal scratch output for the qmlcache/resource build. It isn't a
+# normal windeployqt output, but the app needs it present at runtime
+# anyway: with QtQuick.Controls' own loose style files deployed alongside
+# (above) but this sibling module folder missing, Qt's engine fails to
+# reconcile our qrc-embedded "MediaFlow" module against its now-active
+# loose-file QML import path, and every Theme.<property> access in QML
+# throws "Theme was a singleton at compile time, but is not a singleton
+# anymore" -- confirmed live: present in the source build/ directory
+# (where the app runs fine) but silently dropped whenever only
+# MediaFlow.exe itself was copied out into a separate deployable folder.
+$buildDir = Split-Path $BuildExe -Parent
+$moduleDir = Join-Path $buildDir "MediaFlow"
+if (Test-Path $moduleDir) {
+    Copy-Item $moduleDir -Destination (Join-Path $distDir "MediaFlow") -Recurse -Force
+    Write-Host "Bundled the MediaFlow QML module folder from $moduleDir"
+} else {
+    Write-Warning "MediaFlow module folder not found at $moduleDir -- installed app may show unstyled QML (missing Theme singleton). Rebuild the project first."
+}
 
 # Optional: ffmpeg.exe next to the app for video thumbnails (see BUILD.md) --
 # staged only if the machine building the installer happens to have it on
