@@ -9,6 +9,7 @@ Item {
     // Internal State
     property string currentView: "segment" // "segment" | "library" | "pins"
     property string selectedCategory: ""
+    property string selectedTypeFilter: "all" // "all" | "video" | "image"
     property string selectedPinFolderId: ""
     property var selectedPinMediaIds: []
 
@@ -131,68 +132,100 @@ Item {
             spacing: 10
             model: (MediaFlowBackend || {}).pinnedFolders || null
 
-            delegate: Rectangle {
-                id: pinChip
-                width: 116; height: 52; radius: 10
-                color: root.selectedPinFolderId === model.id
-                    ? "#1A3B82F6"
-                    : (pinDropArea.containsDrag ? "#1A10B981" : (pinChipMa.containsMouse ? "#1AFFFFFF" : "#0DFFFFFF"))
-                border.width: 1
-                border.color: pinDropArea.containsDrag ? Theme.accentEmerald
-                    : (root.selectedPinFolderId === model.id ? Theme.accentBlue : "#1AFFFFFF")
-                Behavior on color { ColorAnimation { duration: Theme.durationFast } }
-                Behavior on border.color { ColorAnimation { duration: Theme.durationFast } }
+            // pinSlot stays put in the ListView's layout (so the strip
+            // doesn't reflow while a chip is mid-drag); pinChip is the part
+            // that actually detaches and follows the pointer, mirroring the
+            // GridView asset cards' drag idiom below.
+            delegate: Item {
+                id: pinSlot
+                width: 116; height: 52
 
-                ColumnLayout {
-                    anchors.fill: parent; anchors.margins: 8; spacing: 2
-                    RowLayout {
-                        spacing: 4
-                        BroadcastIcon { name: "pin"; iconSize: 11; color: root.selectedPinFolderId === model.id ? Theme.accentBlue : "#9ca3af" }
+                Rectangle {
+                    id: pinChip
+                    anchors.fill: !pinChipMa.drag.active ? parent : undefined
+                    width: 116; height: 52; radius: 10
+                    color: root.selectedPinFolderId === model.id
+                        ? "#1A3B82F6"
+                        : (pinDropArea.containsDrag ? "#1A10B981" : (pinChipMa.containsMouse ? "#1AFFFFFF" : "#0DFFFFFF"))
+                    border.width: 1
+                    border.color: pinDropArea.containsDrag ? Theme.accentEmerald
+                        : (root.selectedPinFolderId === model.id ? Theme.accentBlue : "#1AFFFFFF")
+                    Behavior on color { ColorAnimation { duration: Theme.durationFast } }
+                    Behavior on border.color { ColorAnimation { duration: Theme.durationFast } }
+
+                    // Detaches to float above everything while dragging (e.g.
+                    // onto the Preview monitor to start folder playback), then
+                    // snaps back into its slot on release via the reverted anchor.
+                    states: State {
+                        when: pinChipMa.drag.active
+                        ParentChange { target: pinChip; parent: root }
+                    }
+                    Drag.active: pinChipMa.drag.active
+                    Drag.hotSpot.x: width / 2
+                    Drag.hotSpot.y: height / 2
+                    Drag.mimeData: { "application/x-mediaflow-pinfolder": model.id }
+                    Drag.dragType: Drag.Automatic
+
+                    ColumnLayout {
+                        anchors.fill: parent; anchors.margins: 8; spacing: 2
+                        RowLayout {
+                            spacing: 4
+                            BroadcastIcon { name: "pin"; iconSize: 11; color: root.selectedPinFolderId === model.id ? Theme.accentBlue : "#9ca3af" }
+                            Label {
+                                text: model.name.toUpperCase()
+                                Layout.fillWidth: true
+                                color: "white"; font.bold: true; font.pixelSize: 9; elide: Text.ElideRight
+                            }
+                        }
                         Label {
-                            text: model.name.toUpperCase()
-                            Layout.fillWidth: true
-                            color: "white"; font.bold: true; font.pixelSize: 9; elide: Text.ElideRight
+                            text: model.count + (model.count === 1 ? " ITEM" : " ITEMS")
+                            color: "#6b7280"; font.pixelSize: 8; font.bold: true
                         }
                     }
-                    Label {
-                        text: model.count + (model.count === 1 ? " ITEM" : " ITEMS")
-                        color: "#6b7280"; font.pixelSize: 8; font.bold: true
-                    }
-                }
 
-                // Delete pin — always visible (not hover-only) so it's discoverable,
-                // brightens further on hover; asks for confirmation before deleting.
-                Rectangle {
-                    anchors.top: parent.top; anchors.right: parent.right; anchors.margins: -4
-                    width: 16; height: 16; radius: 8; color: Theme.accentRed
-                    opacity: deletePinMa.containsMouse ? 1.0 : 0.7
-                    Behavior on opacity { NumberAnimation { duration: Theme.durationFast } }
-                    Label { text: "×"; anchors.centerIn: parent; color: "white"; font.pixelSize: 10; font.bold: true }
+                    // Delete pin — always visible (not hover-only) so it's discoverable,
+                    // brightens further on hover; asks for confirmation before deleting.
+                    Rectangle {
+                        anchors.top: parent.top; anchors.right: parent.right; anchors.margins: -4
+                        width: 16; height: 16; radius: 8; color: Theme.accentRed
+                        opacity: deletePinMa.containsMouse ? 1.0 : 0.7
+                        Behavior on opacity { NumberAnimation { duration: Theme.durationFast } }
+                        Label { text: "×"; anchors.centerIn: parent; color: "white"; font.pixelSize: 10; font.bold: true }
+                        MouseArea {
+                            id: deletePinMa
+                            anchors.fill: parent; anchors.margins: -3; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                            onClicked: root.confirmDeletePin(model.id, model.name)
+                        }
+                    }
+
+                    // Small drag hint, discoverable on hover.
+                    BroadcastIcon {
+                        anchors.bottom: parent.bottom; anchors.right: parent.right; anchors.margins: 6
+                        name: "expand"; iconSize: 9; color: "white"
+                        opacity: pinChipMa.containsMouse && !pinChipMa.drag.active ? 0.45 : 0.0
+                        Behavior on opacity { NumberAnimation { duration: 150 } }
+                    }
+
                     MouseArea {
-                        id: deletePinMa
-                        anchors.fill: parent; anchors.margins: -3; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                        onClicked: root.confirmDeletePin(model.id, model.name)
+                        id: pinChipMa
+                        anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                        drag.target: pinChip
+                        onClicked: root.openPinFolder(model.id)
                     }
-                }
 
-                MouseArea {
-                    id: pinChipMa
-                    anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                    onClicked: root.openPinFolder(model.id)
-                }
-
-                // Accepts both an in-app dragged card (text/plain = media id)
-                // and files dropped from Windows Explorer (urls).
-                DropArea {
-                    id: pinDropArea
-                    anchors.fill: parent
-                    onDropped: (drop) => {
-                        if (drop.hasUrls) {
-                            let paths = []
-                            for (let i = 0; i < drop.urls.length; i++) paths.push(drop.urls[i].toString())
-                            MediaFlowBackend.importFilesToPinnedFolder(model.id, paths)
-                        } else if (drop.hasText && drop.text !== "") {
-                            MediaFlowBackend.pinMediaToFolder(model.id, drop.text)
+                    // Accepts both an in-app dragged card (text/plain = media id)
+                    // and files dropped from Windows Explorer (urls).
+                    DropArea {
+                        id: pinDropArea
+                        anchors.fill: parent
+                        onDropped: (drop) => {
+                            if (drop.hasUrls) {
+                                let paths = []
+                                for (let i = 0; i < drop.urls.length; i++) paths.push(drop.urls[i].toString())
+                                MediaFlowBackend.importFilesToPinnedFolder(model.id, paths)
+                            } else if (drop.hasText && drop.text !== "") {
+                                MediaFlowBackend.pinMediaToFolder(model.id, drop.text)
+                            }
                         }
                     }
                 }
@@ -267,10 +300,47 @@ Item {
         }
     }
 
+    // Type filter (Quick Fetch + Pins) — narrows whichever view is showing
+    // down to just videos or just images, composed with the category/pin
+    // filter already in effect (see StagedMediaProxyModel::typeFilter).
+    Rectangle {
+        id: typeFilterRow
+        anchors.top: pinStrip.bottom; width: parent.width
+        height: visible ? 34 : 0
+        visible: root.currentView === "library" || root.currentView === "pins"
+        color: "transparent"
+
+        Row {
+            anchors.left: parent.left; anchors.leftMargin: 15; anchors.verticalCenter: parent.verticalCenter
+            spacing: 8
+            Repeater {
+                model: [
+                    { id: "all", label: "ALL" },
+                    { id: "video", label: "VIDEO" },
+                    { id: "image", label: "IMAGE" }
+                ]
+                Rectangle {
+                    readonly property bool isActive: root.selectedTypeFilter === modelData.id
+                    width: typeLabel.contentWidth + 24; height: 24; radius: 12
+                    color: isActive ? Theme.accentBlue : (typeMa.containsMouse ? "#1AFFFFFF" : "#0DFFFFFF")
+                    Behavior on color { ColorAnimation { duration: Theme.durationFast } }
+                    Label {
+                        id: typeLabel; anchors.centerIn: parent; text: modelData.label
+                        color: "white"; font.bold: true; font.pixelSize: 9; font.letterSpacing: 0.5
+                    }
+                    MouseArea {
+                        id: typeMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                        onClicked: root.selectedTypeFilter = modelData.id
+                    }
+                }
+            }
+        }
+    }
+
     // Secondary Header / Categories (Only in Library View)
     Rectangle {
         id: subHeader
-        anchors.top: pinStrip.bottom; width: parent.width; height: 40; color: "transparent"
+        anchors.top: typeFilterRow.bottom; width: parent.width; height: 40; color: "transparent"
         visible: root.currentView === "library"
 
         ListView {
@@ -296,7 +366,7 @@ Item {
     // Pin folder content header (breadcrumb + add files)
     Rectangle {
         id: pinContentHeader
-        anchors.top: pinStrip.bottom; width: parent.width; height: 34; color: "transparent"
+        anchors.top: typeFilterRow.bottom; width: parent.width; height: 34; color: "transparent"
         visible: root.currentView === "pins" && root.selectedPinFolderId !== ""
 
         RowLayout {
@@ -358,6 +428,15 @@ Item {
             target: (MediaFlowBackend && MediaFlowBackend.stagedMediaProxy) ? MediaFlowBackend.stagedMediaProxy : null
             property: "categoryFilter"
             value: root.selectedCategory
+            when: MediaFlowBackend && MediaFlowBackend.stagedMediaProxy
+        }
+        // Only applied in Quick Fetch/Pins (the only views with the type
+        // filter row) -- Active Media always shows everything linked to the
+        // segment regardless of whatever type was last picked there.
+        Binding {
+            target: (MediaFlowBackend && MediaFlowBackend.stagedMediaProxy) ? MediaFlowBackend.stagedMediaProxy : null
+            property: "typeFilter"
+            value: root.currentView === "segment" ? "all" : root.selectedTypeFilter
             when: MediaFlowBackend && MediaFlowBackend.stagedMediaProxy
         }
         // Only drives stagedIds while browsing a pin folder -- C++ (selectSegment)
@@ -486,6 +565,10 @@ Item {
                     anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                     drag.target: assetCard
                     onClicked: {
+                        // A manual pick always wins over an unattended folder
+                        // playlist -- otherwise the next auto-advance would
+                        // silently hijack the preview back to the folder.
+                        if (MediaFlowBackend.previewPlaylistActive) MediaFlowBackend.stopPreviewPlaylist()
                         if (root.currentView === "segment") {
                             MediaFlowBackend.stageMedia(model.id)
                         } else {

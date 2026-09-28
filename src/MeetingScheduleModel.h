@@ -25,6 +25,13 @@ public:
         bool isLive = false;
         int songNumber = 0;
         QStringList linkedMediaIds;
+        // Default segment length in minutes (e.g. Public Talk = 30,
+        // Watchtower Study = 60) -- derived from this segment's own
+        // scheduled start time and the next segment's, so it's always
+        // internally consistent with the schedule shown. 0 for songs, which
+        // don't need a countdown. Clicking the segment loads this into
+        // TimerBackend so the dedicated full-screen timer reflects it.
+        int durationMinutes = 0;
     };
 
     enum Roles {
@@ -35,7 +42,8 @@ public:
         IsSongRole,
         IsLiveRole,
         AssociatedMediaIdsRole,
-        SongNumberRole
+        SongNumberRole,
+        DurationMinutesRole
     };
 
     explicit MeetingScheduleModel(QObject *parent = nullptr);
@@ -50,11 +58,21 @@ public:
     void loadMeeting(const QString &meetingType);
     void setLinkedMedia(int row, const QStringList &mediaIds);
     void addLinkedMedia(int row, const QString &mediaId);
+    // Cross-tab-safe variants, matching setSongNumberForId's rationale.
+    void addLinkedMediaForId(const QString &id, const QString &mediaId);
+    void setLinkedMediaForId(const QString &id, const QStringList &mediaIds);
     Q_INVOKABLE void removeLinkedMedia(int row, const QString &mediaId);
     Q_INVOKABLE void moveLinkedMedia(int row, int fromIndex, int toIndex);
     Q_INVOKABLE void clearAllMedia();
     Q_INVOKABLE void updateSegmentTitle(const QString &id, const QString &newTitle);
     void setSongNumber(int row, int songNum);
+    // Unlike setSongNumber(row, ...), which only ever touches activeRows()
+    // (whichever tab the operator currently has open), this looks the row
+    // up by id across *both* midweek and weekend lists directly -- same
+    // pattern updateSegmentTitle already uses -- so automated workbook data
+    // can be applied to the tab that isn't currently on screen without
+    // needing to switch tabs first.
+    void setSongNumberForId(const QString &id, int songNum);
     void setIsLive(int row, bool live);
     void setActiveRow(int row);
 

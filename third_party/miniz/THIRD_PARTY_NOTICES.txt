@@ -1,0 +1,8 @@
+miniz (https://github.com/richgel999/miniz)
+============================================
+
+Vendored here unmodified for ZIP/deflate reading, used by src/WorkbookManager
+to extract the EPUB files (which are plain ZIP archives) downloaded from
+JW.org's public pub-media API.
+
+MIT License. See LICENSE in this folder for the full text.

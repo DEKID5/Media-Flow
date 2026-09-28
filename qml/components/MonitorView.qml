@@ -13,6 +13,9 @@ Rectangle {
     property string mediaType: asset ? (asset.type || "") : ""
     property var cameraDevice: null
     property bool showTransitions: false
+    // Only the Preview monitor sets this -- lets a pinned folder be dropped
+    // on it to start continuous playback through its videos/images.
+    property bool acceptsFolderDrop: false
 
     signal takeClicked()
     signal cutClicked()
@@ -74,6 +77,9 @@ Rectangle {
             if (isLive && activeIsA && mediaStatus === MediaPlayer.EndOfMedia) {
                 if (MediaFlowBackend && MediaFlowBackend.broadcastEngine)
                     MediaFlowBackend.broadcastEngine.clearLive()
+            } else if (!isLive && activeIsA && mediaStatus === MediaPlayer.EndOfMedia
+                       && monitor.acceptsFolderDrop && (MediaFlowBackend || {}).previewPlaylistActive) {
+                MediaFlowBackend.advancePreviewPlaylist()
             }
         }
     }
@@ -95,6 +101,9 @@ Rectangle {
             if (isLive && !activeIsA && mediaStatus === MediaPlayer.EndOfMedia) {
                 if (MediaFlowBackend && MediaFlowBackend.broadcastEngine)
                     MediaFlowBackend.broadcastEngine.clearLive()
+            } else if (!isLive && !activeIsA && mediaStatus === MediaPlayer.EndOfMedia
+                       && monitor.acceptsFolderDrop && (MediaFlowBackend || {}).previewPlaylistActive) {
+                MediaFlowBackend.advancePreviewPlaylist()
             }
         }
     }
@@ -134,22 +143,49 @@ Rectangle {
     property var activePlayer: activeIsA ? playerA : playerB
     property var inactivePlayer: activeIsA ? playerB : playerA
 
-    // ── Preview: load asset but DON'T play ──
+    // ── Preview: load asset but DON'T play -- unless a folder playlist is
+    //    actively driving this monitor, in which case it should actually
+    //    play through unattended (see acceptsFolderDrop). ──
+    readonly property bool playlistDriving: acceptsFolderDrop && (MediaFlowBackend || {}).previewPlaylistActive
     onAssetChanged: {
         if (isLive) return  // Live is handled by cut/take signals
 
-        if (!asset || !asset.absolutePath || asset.type === "input" || asset.type === "image") {
+        if (!asset || !asset.absolutePath || asset.type === "input") {
             playerA.stop(); playerA.source = ""
             playerB.stop(); playerB.source = ""
+            imageDwellTimer.stop()
             return
         }
 
+        if (asset.type === "image") {
+            playerA.stop(); playerA.source = ""
+            playerB.stop(); playerB.source = ""
+            if (playlistDriving) imageDwellTimer.restart()
+            else imageDwellTimer.stop()
+            return
+        }
+
+        imageDwellTimer.stop()
         let url = "file:///" + asset.absolutePath
         let ap = activeIsA ? playerA : playerB
         if (ap.source != url) {
             ap.source = url
-            ap.pause()
-            ap.setPosition(0)
+            if (playlistDriving) {
+                ap.play()
+            } else {
+                ap.pause()
+                ap.setPosition(0)
+            }
+        }
+    }
+
+    // Images have no "end of media" signal, so a folder playlist advances
+    // past one on a fixed timer instead.
+    Timer {
+        id: imageDwellTimer
+        interval: 6000; repeat: false
+        onTriggered: {
+            if (monitor.playlistDriving) MediaFlowBackend.advancePreviewPlaylist()
         }
     }
 
@@ -266,6 +302,57 @@ Rectangle {
             let ap = activeIsA ? playerA : playerB
             if (MediaFlowBackend.broadcastEngine.programPaused) ap.pause()
             else ap.play()
+        }
+    }
+
+    // =====================================================================
+    //  FOLDER DRAG-AND-DROP (Preview only, see acceptsFolderDrop)
+    // =====================================================================
+    DropArea {
+        id: folderDropArea
+        anchors.fill: parent
+        enabled: monitor.acceptsFolderDrop
+        keys: ["application/x-mediaflow-pinfolder"]
+        z: 25
+        onDropped: (drop) => {
+            const folderId = drop.getDataAsString("application/x-mediaflow-pinfolder")
+            if (folderId && MediaFlowBackend) MediaFlowBackend.playPinnedFolderInPreview(folderId)
+        }
+    }
+
+    Rectangle {
+        anchors.fill: parent; radius: parent.radius; z: 24
+        visible: folderDropArea.containsDrag
+        color: "#3310B981"
+        border.color: Theme.accentEmerald; border.width: 2
+        Label {
+            anchors.centerIn: parent
+            text: "DROP TO PLAY FOLDER"
+            color: "white"; font.bold: true; font.pixelSize: 13; font.letterSpacing: 1
+        }
+    }
+
+    // Playlist status + stop control
+    Rectangle {
+        anchors.top: parent.top; anchors.horizontalCenter: parent.horizontalCenter; anchors.margins: 16; z: 20
+        visible: monitor.playlistDriving
+        width: playlistRow.width + 20; height: 26; radius: 13
+        color: "#CC000000"; border.color: Theme.accentEmerald; border.width: 1
+        Row {
+            id: playlistRow
+            anchors.centerIn: parent; spacing: 8
+            Label {
+                text: "PLAYING: " + ((MediaFlowBackend || {}).previewPlaylistFolderName || "").toUpperCase()
+                color: "white"; font.bold: true; font.pixelSize: 9; font.letterSpacing: 0.5
+            }
+            Rectangle {
+                width: stopLbl.width + 12; height: 18; radius: 9; color: Theme.accentRed
+                Label { id: stopLbl; anchors.centerIn: parent; text: "STOP"; color: "white"; font.bold: true; font.pixelSize: 8 }
+                MouseArea {
+                    anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                    onClicked: MediaFlowBackend.stopPreviewPlaylist()
+                }
+            }
         }
     }
 

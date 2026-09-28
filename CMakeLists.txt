@@ -1,11 +1,11 @@
 cmake_minimum_required(VERSION 3.21)
-project(MediaFlow VERSION 1.0.0 LANGUAGES CXX)
+project(MediaFlow VERSION 1.0.0 LANGUAGES CXX C) # C needed for vendored third_party/miniz
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Qml Quick QuickControls2 Sql Multimedia Concurrent)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Qml Quick QuickControls2 Sql Multimedia Concurrent Network)
 
 set(MFQ_SOURCES
     src/main.cpp
@@ -35,6 +35,14 @@ set(MFQ_SOURCES
     src/VirtualCameraManager.h
     src/ObsVirtualCamWriter.cpp
     src/ObsVirtualCamWriter.h
+    src/WorkbookManager.cpp
+    src/WorkbookManager.h
+    src/JwLibraryPaths.cpp
+    src/JwLibraryPaths.h
+    third_party/miniz/miniz.c
+    third_party/miniz/miniz_tdef.c
+    third_party/miniz/miniz_tinfl.c
+    third_party/miniz/miniz_zip.c
 )
 
 if(WIN32)
@@ -78,7 +86,10 @@ qt_add_qml_module(mediaflow
         qml/assets/logo.png
 )
 
-target_include_directories(mediaflow PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_include_directories(mediaflow PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/miniz
+)
 
 target_link_libraries(mediaflow PRIVATE
     Qt6::Core
@@ -91,6 +102,7 @@ target_link_libraries(mediaflow PRIVATE
     Qt6::Multimedia
     Qt6::Concurrent
     Qt6::OpenGL
+    Qt6::Network
 )
 
 if(WIN32)

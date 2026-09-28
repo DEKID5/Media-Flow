@@ -26,6 +26,7 @@ class MediaExtractor;
 class MediaThumbnailManager;
 enum class MediaType;
 class QQuickWindow;
+class WorkbookManager;
 
 /**
  * @brief The BroadcastController class acts as the central bridge between C++ and QML.
@@ -78,6 +79,9 @@ class BroadcastController final : public QObject
     // chosen file's extension at browse time.
     Q_PROPERTY(QString extendedFeedBackgroundPath READ extendedFeedBackgroundPath NOTIFY extendedFeedBackgroundChanged)
     Q_PROPERTY(QString extendedFeedBackgroundType READ extendedFeedBackgroundType NOTIFY extendedFeedBackgroundChanged)
+    Q_PROPERTY(QString workbookStatus READ workbookStatus NOTIFY workbookStatusChanged)
+    Q_PROPERTY(bool previewPlaylistActive READ previewPlaylistActive NOTIFY previewPlaylistChanged)
+    Q_PROPERTY(QString previewPlaylistFolderName READ previewPlaylistFolderName NOTIFY previewPlaylistChanged)
 
     // --- Legacy Timer System Removed ---
 
@@ -139,6 +143,19 @@ public:
     Q_INVOKABLE void browseExtendedFeedBackground();
     Q_INVOKABLE void clearExtendedFeedBackground();
 
+    QString workbookStatus() const;
+    Q_INVOKABLE void refreshWorkbook();
+
+    bool previewPlaylistActive() const { return !m_previewPlaylistIds.isEmpty(); }
+    QString previewPlaylistFolderName() const { return m_previewPlaylistFolderName; }
+    // Weeks found across every locally downloaded mwb/w publication, for the
+    // week-picker dropdown; each entry is {"label", "iso"}.
+    Q_INVOKABLE QVariantList availableWorkbookWeeks() const;
+    // Pins the workbook to that week (an ISO date string from
+    // availableWorkbookWeeks) instead of always matching today; an empty
+    // string goes back to automatic (today-based) matching.
+    Q_INVOKABLE void selectWorkbookWeek(const QString &isoDate);
+
     // --- Legacy Timer Getters Removed ---
 
     QString bgmPath() const;
@@ -171,10 +188,41 @@ public:
     Q_INVOKABLE QVariantMap findSong(int num, const QString &lang, bool prefVideo, const QString &track);
     Q_INVOKABLE QVariantMap getSong(int number, const QString &langCode) const;
     Q_INVOKABLE void stageMedia(const QString &assetId);
+    // Continuous folder playback in Preview -- dragging a pinned folder onto
+    // the Preview monitor stages its first video/image, then MonitorView
+    // calls advancePreviewPlaylist() each time that item finishes (video
+    // EndOfMedia, or a dwell timer for images), wrapping back to the start
+    // so it keeps going until stopPreviewPlaylist() is called.
+    Q_INVOKABLE void playPinnedFolderInPreview(const QString &folderId);
+    Q_INVOKABLE void stopPreviewPlaylist();
+    Q_INVOKABLE void advancePreviewPlaylist();
     Q_INVOKABLE void previewMediaByPath(const QString &path);
     Q_INVOKABLE void importMediaToFileSystem(const QString &category);
     Q_INVOKABLE QVariantMap addMediaToSegment(const QString &segmentId, const QString &mediaType);
     Q_INVOKABLE void findAndStageSong(int songNumber, const QString &languageCode, const QString &targetSegmentId);
+    // Same resolve+link logic as findAndStageSong, minus the user-facing
+    // "song not found" signal -- used by the automated weekly workbook
+    // fetch (WorkbookManager), where a not-yet-imported video for an
+    // upcoming week is expected/normal, not something to pop a warning
+    // about every time it runs in the background.
+    QString resolveWeeklySong(int songNumber, const QString &languageCode, const QString &targetSegmentId) {
+        return resolveSongToSegment(songNumber, languageCode, targetSegmentId, false);
+    }
+    // resolveWeeklySong persists via saveState() internally (through
+    // resolveSongToSegment); WorkbookManager's other writes -- segment
+    // title, linked article images -- go straight through
+    // MeetingScheduleModel/MediaLibraryModel and need this to actually be
+    // remembered across a restart.
+    void persistWorkbookChanges() { saveState(); }
+    // Lets WorkbookManager tell us which on-disk folder holds the current
+    // week's matched publication (mwb, w, or the standalone Congregation
+    // Bible Study book), so addMediaToSegment can default the file picker
+    // straight into it instead of the whole Publications root.
+    void setWorkbookPublicationFolder(const QString &pubType, const QString &folderPath) {
+        if (pubType == QStringLiteral("mwb")) m_mwbPublicationFolder = folderPath;
+        else if (pubType == QStringLiteral("w")) m_watchtowerPublicationFolder = folderPath;
+        else if (pubType == QStringLiteral("cbs")) m_cbsPublicationFolder = folderPath;
+    }
     Q_INVOKABLE void renameCategory(const QString &oldName, const QString &newName);
     Q_INVOKABLE void removeMedia(const QString &id);
     Q_INVOKABLE void openAudienceWindow();
@@ -224,6 +272,8 @@ signals:
     void timerScreenIndexChanged();
     void bgmSettingsChanged();
     void extendedFeedBackgroundChanged();
+    void workbookStatusChanged();
+    void previewPlaylistChanged();
     void languagesChanged();
     void songNotFound(int songNumber);
     void songNotFoundInLanguage(int songNumber, const QString &languageName);
@@ -285,6 +335,14 @@ private:
     QString m_bgmCustomFolder;
     QString m_extendedFeedBackgroundPath;
     QString m_extendedFeedBackgroundType;
+    WorkbookManager *m_workbookManager = nullptr;
+    bool m_workbookAutoRefreshStarted = false;
+    QStringList m_previewPlaylistIds;
+    int m_previewPlaylistIndex = -1;
+    QString m_previewPlaylistFolderName;
+    QString m_mwbPublicationFolder;
+    QString m_watchtowerPublicationFolder;
+    QString m_cbsPublicationFolder;
     QVariantList m_customLanguages;
     QAudioDevice m_roomAudioOutputDevice;
 

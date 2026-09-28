@@ -14,6 +14,10 @@ class StagedMediaProxyModel : public QSortFilterProxyModel
     Q_PROPERTY(QString selectedSegmentId READ selectedSegmentId WRITE setSelectedSegmentId NOTIFY selectedSegmentIdChanged)
     Q_PROPERTY(QString filterType READ filterType WRITE setFilterType NOTIFY filterChanged)
     Q_PROPERTY(QString categoryFilter READ categoryFilter WRITE setCategoryFilter NOTIFY filterChanged)
+    // Composes with filterType/categoryFilter (an extra AND condition), not
+    // a mode of its own -- "all"/"video"/"image" lets Quick Fetch and Pins
+    // narrow whatever view they're already showing down to one media kind.
+    Q_PROPERTY(QString typeFilter READ typeFilter WRITE setTypeFilter NOTIFY filterChanged)
     Q_PROPERTY(QString languageCode READ languageCode WRITE setLanguageCode NOTIFY languageCodeChanged)
     Q_PROPERTY(QStringList stagedIds READ stagedIds WRITE setStagedIds NOTIFY stagedIdsChanged)
 
@@ -28,6 +32,9 @@ public:
 
     QString categoryFilter() const { return m_categoryFilter; }
     void setCategoryFilter(const QString &c);
+
+    QString typeFilter() const { return m_typeFilter; }
+    void setTypeFilter(const QString &t);
 
     QString languageCode() const { return m_languageCode; }
     void setLanguageCode(const QString &code);
@@ -55,6 +62,7 @@ private:
     QString m_selectedSegmentId;
     QString m_filterType = "segment";
     QString m_categoryFilter;
+    QString m_typeFilter = "all";
     QString m_languageCode = "E";
     QStringList m_stagedIds;
 };

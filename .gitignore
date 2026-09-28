@@ -11,5 +11,9 @@ cmake-build*/
 CMakeUserPresets.json
 *.user
 
+# Installer build output (packaging/build_installer.ps1)
+packaging/dist/
+packaging/installer_output/
+
 # Legacy embeddable Python (delete manually if Windows locks DLLs)
 resources/python/
