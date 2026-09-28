@@ -206,19 +206,33 @@ DockPanel {
             SquareIconButton {
                 iconName: "expand"
                 checked: TimerBackend.fullScreenTimer
-                // Turning it ON takes over a whole monitor instantly, and
-                // automatic screen selection can land on the operator's own
-                // display if no dedicated second screen is configured -- so
-                // this always confirms first rather than extending the
-                // instant the button is pressed. Turning it back OFF needs
-                // no confirmation, since that's never surprising.
+                // Turning it ON takes over a whole monitor instantly, so this
+                // always confirms first rather than extending the instant the
+                // button is pressed. Turning it back OFF needs no
+                // confirmation, since that's never surprising. No dedicated
+                // screen picked yet in Settings -> explain instead of
+                // guessing one (see BroadcastController::setTimerFullScreenActive).
                 onClicked: {
-                    if (TimerBackend.fullScreenTimer) TimerBackend.toggleFullScreenTimer()
+                    if (TimerBackend.fullScreenTimer) { TimerBackend.toggleFullScreenTimer(); return }
+                    let idx = (MediaFlowBackend || {}).timerScreenIndex
+                    if (idx === undefined || idx === -1) noScreenDialog.open()
                     else fullScreenConfirmDialog.open()
                 }
                 ToolTip.visible: hovered
                 ToolTip.delay: 500
                 ToolTip.text: "Full-screen timer — opens on its own dedicated window/screen"
+            }
+
+            ThemedDialog {
+                id: noScreenDialog
+                title: "No Timer Screen Selected"
+                acceptText: "OK"; showCancel: false
+                contentItem: Label {
+                    text: "The full-screen timer needs a dedicated screen to open on. Pick one in Settings → Displays → Timer, then try again."
+                    color: Theme.textPrimary; font.pixelSize: Theme.textMd; wrapMode: Text.WordWrap
+                    width: 300
+                    leftPadding: 20; rightPadding: 20; topPadding: 4; bottomPadding: 12
+                }
             }
 
             ThemedDialog {
@@ -228,7 +242,6 @@ DockPanel {
                 contentItem: Label {
                     text: {
                         let idx = (MediaFlowBackend || {}).timerScreenIndex
-                        if (idx === undefined || idx === -1) return "This will open the timer full-screen on the automatically-chosen display. Continue?"
                         let screens = (MediaFlowBackend || {}).availableScreens ? MediaFlowBackend.availableScreens() : []
                         let match = screens.find(s => s.index === idx)
                         return "This will open the timer full-screen on " + (match ? match.name : ("display " + (idx + 1))) + ". Continue?"

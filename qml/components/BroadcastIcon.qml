@@ -70,8 +70,30 @@ Item {
                     ctx.stroke();
                 }
             } else if (name === "refresh") {
-                ctx.beginPath(); ctx.arc(w*0.5, h*0.5, w*0.35, 0, 1.5*Math.PI); ctx.stroke();
-                ctx.beginPath(); ctx.moveTo(w*0.5, h*0.05); ctx.lineTo(w*0.85, h*0.15); ctx.lineTo(w*0.75, h*0.5); ctx.stroke();
+                // A ring with a gap, plus a solid arrowhead tangent to the
+                // ring at the open end -- the arrowhead is derived from the
+                // arc's own end angle so it always sits flush against the
+                // ring instead of floating off to the side.
+                var rfCx = w*0.5, rfCy = h*0.5, rfR = w*0.34;
+                var rfStart = -Math.PI*0.85, rfEnd = Math.PI*0.65;
+                ctx.beginPath();
+                ctx.arc(rfCx, rfCy, rfR, rfStart, rfEnd, false);
+                ctx.stroke();
+
+                var rfTipX = rfCx + rfR*Math.cos(rfEnd);
+                var rfTipY = rfCy + rfR*Math.sin(rfEnd);
+                var rfTangent = rfEnd + Math.PI/2;
+                var rfPerp = rfTangent + Math.PI/2;
+                var rfLen = w*0.26, rfWidth = w*0.17;
+                var rfBackX = rfTipX - rfLen*Math.cos(rfTangent);
+                var rfBackY = rfTipY - rfLen*Math.sin(rfTangent);
+
+                ctx.beginPath();
+                ctx.moveTo(rfTipX, rfTipY);
+                ctx.lineTo(rfBackX + rfWidth*Math.cos(rfPerp), rfBackY + rfWidth*Math.sin(rfPerp));
+                ctx.lineTo(rfBackX - rfWidth*Math.cos(rfPerp), rfBackY - rfWidth*Math.sin(rfPerp));
+                ctx.closePath();
+                ctx.fill();
             } else if (name === "reset") {
                 ctx.lineWidth = 1.7;
                 ctx.beginPath();

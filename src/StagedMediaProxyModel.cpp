@@ -58,6 +58,15 @@ void StagedMediaProxyModel::setCategoryFilter(const QString &c)
     }
 }
 
+void StagedMediaProxyModel::setTypeFilter(const QString &t)
+{
+    if (m_typeFilter != t) {
+        m_typeFilter = t;
+        invalidateFilter();
+        emit filterChanged();
+    }
+}
+
 void StagedMediaProxyModel::setLanguageCode(const QString &code)
 {
     const QString normalized = SongSearchUtils::normalizeLanguageCode(code);
@@ -87,8 +96,10 @@ bool StagedMediaProxyModel::filterAcceptsRow(int source_row, const QModelIndex &
         }
     }
 
+    if (m_typeFilter != "all" && type != m_typeFilter) return false;
+
     if (m_filterType == "all") return true;
-    
+
     if (m_filterType == "segment") {
         if (m_selectedSegmentId.isEmpty()) return false;
         QString assetUuid = sourceModel()->data(idx, MediaLibraryModel::IdRole).toString();

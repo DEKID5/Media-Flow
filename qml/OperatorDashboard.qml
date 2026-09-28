@@ -90,6 +90,65 @@ Item {
                     ToolTip.text: "Settings — displays, background music folder, languages"
                 }
 
+                // 1c. REFRESH WORKBOOK
+                Rectangle {
+                    Layout.preferredHeight: 36; Layout.preferredWidth: 36; radius: Theme.radius
+                    color: refreshMa.containsMouse ? Theme.surfaceHover : Theme.surfaceRaised
+                    border.color: Theme.panelBorder
+                    BroadcastIcon { anchors.centerIn: parent; name: "refresh"; iconSize: 15; color: Theme.textPrimary }
+                    MouseArea {
+                        id: refreshMa
+                        anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                        onClicked: (MediaFlowBackend || {}).refreshWorkbook()
+                    }
+                    ToolTip.visible: refreshMa.containsMouse
+                    ToolTip.delay: 500
+                    ToolTip.text: "Refresh weekly workbook — " + ((MediaFlowBackend || {}).workbookStatus || "not checked yet")
+                }
+
+                // 1d. MEETING WEEK PICKER
+                Rectangle {
+                    Layout.preferredHeight: 36; Layout.preferredWidth: 180; Layout.minimumWidth: 150; radius: Theme.radius; color: Theme.surfaceRaised; border.color: Theme.panelBorder
+                    RowLayout {
+                        anchors.fill: parent; anchors.margins: 4; spacing: 4
+                        ComboBox {
+                            id: weekCombo
+                            Layout.fillWidth: true
+                            flat: true
+                            textRole: "label"
+                            model: ListModel { id: weekModel }
+
+                            function reload() {
+                                weekModel.clear()
+                                weekModel.append({label: "Current Week (Auto)", iso: ""})
+                                const weeks = (MediaFlowBackend || {}).availableWorkbookWeeks ? MediaFlowBackend.availableWorkbookWeeks() : []
+                                for (let i = 0; i < weeks.length; i++)
+                                    weekModel.append(weeks[i])
+                                currentIndex = 0
+                            }
+
+                            Component.onCompleted: reload()
+
+                            onActivated: (index) => {
+                                if (MediaFlowBackend) MediaFlowBackend.selectWorkbookWeek(weekModel.get(index).iso)
+                            }
+
+                            contentItem: Label {
+                                text: weekCombo.currentText
+                                font.pixelSize: Theme.textXs; font.bold: true; color: Theme.textPrimary
+                                verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignLeft
+                                elide: Text.ElideRight
+                                leftPadding: 8
+                            }
+                            background: Rectangle { color: "transparent" }
+                        }
+                    }
+                    ToolTip.visible: weekMa.containsMouse
+                    ToolTip.delay: 500
+                    ToolTip.text: "Switch which week's meeting media is loaded"
+                    MouseArea { id: weekMa; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
+                }
+
                 // 2. MEETING TYPE SELECTOR
                 Rectangle {
                     Layout.preferredHeight: 36; Layout.preferredWidth: 190; Layout.minimumWidth: 160; radius: Theme.radius; color: Theme.surfaceRaised; border.color: Theme.panelBorder
@@ -328,6 +387,7 @@ Item {
                 Layout.fillHeight: true
                 title: "PREVIEW"
                 showTransitions: true
+                acceptsFolderDrop: true
                 asset: (MediaFlowBackend || {}).broadcastEngine ? MediaFlowBackend.broadcastEngine.previewAsset : null
                 onTakeClicked: { if (MediaFlowBackend && MediaFlowBackend.broadcastEngine) MediaFlowBackend.broadcastEngine.takeLive() }
                 onCutClicked: { if (MediaFlowBackend && MediaFlowBackend.broadcastEngine) MediaFlowBackend.broadcastEngine.cutLive() }
@@ -433,6 +493,11 @@ Item {
                                             text: model.time
                                             color: isSelected ? Qt.lighter(segmentDelegate.accent, 1.3) : Theme.textFaint
                                             font.pixelSize: Theme.textSm; font.bold: true
+                                        }
+                                        Label {
+                                            visible: model.durationMinutes > 0
+                                            text: model.durationMinutes + " MIN"
+                                            color: Theme.textDim; font.pixelSize: Theme.textXs; font.bold: true
                                         }
                                         Item { Layout.fillWidth: true }
                                         BroadcastIcon {
@@ -599,6 +664,12 @@ Item {
                                     anchors.fill: parent; z: -1
                                     onClicked: {
                                         if (MediaFlowBackend) MediaFlowBackend.selectSegment(model.id)
+                                        // Loads this segment's default length into the timer (e.g.
+                                        // Public Talk -> 30:00, Watchtower Study -> 60:00) so the
+                                        // dedicated full-screen timer reflects it immediately --
+                                        // skipped for songs, which have no duration set.
+                                        if (TimerBackend && model.durationMinutes > 0)
+                                            TimerBackend.targetDurationSeconds = model.durationMinutes * 60
                                     }
                                 }
                             }

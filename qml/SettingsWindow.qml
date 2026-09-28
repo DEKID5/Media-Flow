@@ -55,7 +55,12 @@ Window {
                 }
 
                 Label { text: "Timer (full-screen mode)"; color: Theme.textPrimary; font.pixelSize: Theme.textSm; Layout.topMargin: Theme.space2 }
+                Label {
+                    text: "No automatic guessing here -- pick the exact screen the full-screen timer should always use."
+                    color: Theme.textDim; font.pixelSize: Theme.textXs; wrapMode: Text.WordWrap; Layout.fillWidth: true
+                }
                 ScreenPicker {
+                    allowAutomatic: false
                     currentValue: (MediaFlowBackend || {}).timerScreenIndex
                     onValueChosen: (index) => { MediaFlowBackend.timerScreenIndex = index }
                 }
@@ -164,6 +169,31 @@ Window {
 
             Rectangle { Layout.fillWidth: true; height: 1; color: Theme.panelBorder }
 
+            // ── Weekly Workbook ──
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Theme.space3
+                Label { text: "WEEKLY WORKBOOK"; color: Theme.textSecondary; font.bold: true; font.pixelSize: Theme.textSm; font.letterSpacing: 1 }
+                Label {
+                    text: "Automatically fetches this week's song numbers, Watchtower Study article title, and links the matching local videos -- checked on launch and periodically after that."
+                    color: Theme.textDim; font.pixelSize: Theme.textSm; wrapMode: Text.WordWrap; Layout.fillWidth: true
+                }
+                RowLayout {
+                    Layout.fillWidth: true; spacing: Theme.space3
+                    Label {
+                        Layout.fillWidth: true
+                        text: (MediaFlowBackend || {}).workbookStatus || "Not checked yet"
+                        color: Theme.textPrimary; font.pixelSize: Theme.textSm; wrapMode: Text.WordWrap
+                    }
+                    PillButton {
+                        text: "REFRESH NOW"; accentColor: Theme.accentBlue
+                        onClicked: MediaFlowBackend.refreshWorkbook()
+                    }
+                }
+            }
+
+            Rectangle { Layout.fillWidth: true; height: 1; color: Theme.panelBorder }
+
             // ── Languages ──
             ColumnLayout {
                 Layout.fillWidth: true
@@ -262,6 +292,11 @@ Window {
     component ScreenPicker: Rectangle {
         id: pickerRoot
         property int currentValue: -1
+        // Extended Feed keeps "Automatic" as a sensible default; the
+        // full-screen timer doesn't (see the Timer instance above) -- an
+        // unattended guess there can land the countdown on the wrong
+        // screen with no visual cue anything's wrong.
+        property bool allowAutomatic: true
         signal valueChosen(int index)
 
         Layout.fillWidth: true; Layout.preferredHeight: 44
@@ -273,7 +308,7 @@ Window {
             flat: true
             textRole: "label"
             model: {
-                let list = [{ index: -1, label: "Automatic (recommended)" }]
+                let list = pickerRoot.allowAutomatic ? [{ index: -1, label: "Automatic (recommended)" }] : []
                 let screens = (MediaFlowBackend || {}).availableScreens ? MediaFlowBackend.availableScreens() : []
                 for (let i = 0; i < screens.length; i++)
                     list.push({ index: screens[i].index, label: screens[i].name })
@@ -286,7 +321,7 @@ Window {
             }
             onActivated: (idx) => pickerRoot.valueChosen(model[idx].index)
             contentItem: Label {
-                text: combo.currentText || "Automatic (recommended)"
+                text: combo.currentText || (pickerRoot.allowAutomatic ? "Automatic (recommended)" : "Choose a screen…")
                 color: Theme.textPrimary; font.pixelSize: Theme.textMd
                 verticalAlignment: Text.AlignVCenter; leftPadding: 8
             }

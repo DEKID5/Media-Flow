@@ -1,4 +1,6 @@
 #include "BroadcastController.h"
+#include "WorkbookManager.h"
+#include "JwLibraryPaths.h"
 #include "MediaExtractor.h"
 #include "MediaThumbnailManager.h"
 #include "SongSearchUtils.h"
@@ -297,9 +299,21 @@ BroadcastController::BroadcastController(QQmlApplicationEngine *engine, QObject 
 
     // ── Initial Load ──
     loadState();
-    
+
     // Startup prefetch: build the media/song indexes in the background without blocking launch.
     requestScanJwMedia();
+
+    // Auto-fetch the weekly workbook once local media is indexed (so the
+    // song-number-to-local-file auto-link actually has something to find),
+    // then keep checking periodically -- see WorkbookManager::startAutoRefresh.
+    m_workbookManager = new WorkbookManager(this, this);
+    connect(m_workbookManager, &WorkbookManager::statusChanged, this, &BroadcastController::workbookStatusChanged);
+    connect(m_extractor, &MediaExtractor::scanFinished, m_workbookManager, [this]() {
+        if (!m_workbookAutoRefreshStarted) {
+            m_workbookAutoRefreshStarted = true;
+            m_workbookManager->startAutoRefresh();
+        }
+    });
 }
 
 BroadcastController::~BroadcastController()
@@ -534,6 +548,28 @@ void BroadcastController::browseExtendedFeedBackground()
     saveState();
 }
 
+QString BroadcastController::workbookStatus() const
+{
+    return m_workbookManager ? m_workbookManager->status() : QString();
+}
+
+void BroadcastController::refreshWorkbook()
+{
+    if (m_workbookManager) m_workbookManager->refreshNow();
+}
+
+QVariantList BroadcastController::availableWorkbookWeeks() const
+{
+    return m_workbookManager ? m_workbookManager->availableWeeks() : QVariantList();
+}
+
+void BroadcastController::selectWorkbookWeek(const QString &isoDate)
+{
+    if (!m_workbookManager) return;
+    const QDate date = isoDate.isEmpty() ? QDate() : QDate::fromString(isoDate, Qt::ISODate);
+    m_workbookManager->selectWeek(date);
+}
+
 void BroadcastController::clearExtendedFeedBackground()
 {
     if (m_extendedFeedBackgroundPath.isEmpty()) return;
@@ -675,6 +711,42 @@ void BroadcastController::stageMedia(const QString &assetId)
             break;
         }
     }
+}
+
+void BroadcastController::playPinnedFolderInPreview(const QString &folderId)
+{
+    if (!m_pinnedFolders) return;
+
+    QStringList playable;
+    for (const QString &id : m_pinnedFolders->mediaIdsForFolder(folderId)) {
+        const QVariantMap row = m_libraryModel->getRowById(id);
+        const QString type = row.value(QStringLiteral("type")).toString();
+        if (type == QStringLiteral("video") || type == QStringLiteral("image"))
+            playable << id;
+    }
+    if (playable.isEmpty()) return;
+
+    m_previewPlaylistIds = playable;
+    m_previewPlaylistIndex = 0;
+    m_previewPlaylistFolderName = m_pinnedFolders->nameForFolder(folderId);
+    emit previewPlaylistChanged();
+    stageMedia(m_previewPlaylistIds.first());
+}
+
+void BroadcastController::stopPreviewPlaylist()
+{
+    if (m_previewPlaylistIds.isEmpty()) return;
+    m_previewPlaylistIds.clear();
+    m_previewPlaylistIndex = -1;
+    m_previewPlaylistFolderName.clear();
+    emit previewPlaylistChanged();
+}
+
+void BroadcastController::advancePreviewPlaylist()
+{
+    if (m_previewPlaylistIds.isEmpty()) return;
+    m_previewPlaylistIndex = (m_previewPlaylistIndex + 1) % m_previewPlaylistIds.size();
+    stageMedia(m_previewPlaylistIds.at(m_previewPlaylistIndex));
 }
 
 void BroadcastController::findAndStageSong(int songNumber, const QString &languageCode, const QString &targetSegmentId)
@@ -822,8 +894,17 @@ void BroadcastController::setTimerFullScreenActive(bool active)
     QScreen *targetScreen = nullptr;
     if (m_timerScreenIndex >= 0 && m_timerScreenIndex < screens.size())
         targetScreen = screens.at(m_timerScreenIndex);
-    if (!targetScreen)
-        targetScreen = screens.size() > 1 ? screens.at(1) : QGuiApplication::primaryScreen();
+
+    if (!targetScreen) {
+        // No dedicated screen chosen (or the previously chosen one is no
+        // longer connected) -- this used to silently guess screens.at(1),
+        // which could land the countdown on the operator's own display in
+        // front of everyone. Require an explicit pick in Settings instead;
+        // TimerPanel's confirmation dialog is what normally prevents
+        // reaching this path at all.
+        qWarning() << "Full-screen timer: no dedicated screen configured (Settings > Displays > Timer).";
+        return;
+    }
 
     if (!m_timerWindow) {
         QQmlComponent component(m_engine, QUrl(QStringLiteral("qrc:/MediaFlow/qml/TimerWindow.qml")));
@@ -841,17 +922,9 @@ void BroadcastController::setTimerFullScreenActive(bool active)
     }
 
     m_timerWindow->hide();
-    if (targetScreen)
-        m_timerWindow->setScreen(targetScreen);
-    if (screens.size() > 1 && targetScreen) {
-        m_timerWindow->setGeometry(targetScreen->geometry());
-        m_timerWindow->showFullScreen();
-    } else {
-        m_timerWindow->resize(1280, 720);
-        m_timerWindow->show();
-        m_timerWindow->raise();
-        m_timerWindow->requestActivate();
-    }
+    m_timerWindow->setScreen(targetScreen);
+    m_timerWindow->setGeometry(targetScreen->geometry());
+    m_timerWindow->showFullScreen();
 }
 
 bool BroadcastController::openZoomWindow()
@@ -1190,10 +1263,28 @@ QVariantMap BroadcastController::addMediaToSegment(const QString &segmentId, con
 
     // User-requested paths
     QString jwVideos = QDir::homePath() + "/Videos/JWLibrary";
-    QString jwImages = QDir::homePath() + "/AppData/Local/Packages/WatchtowerBibleandTractSo.45909CDBADF3C_5rz59y55nfz3e/LocalState/Publications";
+    const QStringList jwPublicationsDirs = JwLibraryPaths::publicationsDirs();
+    QString jwImages = jwPublicationsDirs.isEmpty() ? QString() : jwPublicationsDirs.first();
 
     if (mediaType == "image") {
-        startDir = QDir(jwImages).exists() ? jwImages : QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
+        // Prefer this week's own matched publication folder (set by
+        // WorkbookManager once it's resolved the current mwb/Watchtower
+        // issue locally) so the operator lands directly among that week's
+        // article images instead of the whole, unsorted Publications root.
+        QString weekFolder;
+        if (segmentId == QStringLiteral("m9"))
+            weekFolder = m_cbsPublicationFolder;
+        else if (segmentId.startsWith(QStringLiteral("m")))
+            weekFolder = m_mwbPublicationFolder;
+        else if (segmentId == QStringLiteral("w4") || segmentId == QStringLiteral("w5"))
+            weekFolder = m_watchtowerPublicationFolder;
+
+        if (!weekFolder.isEmpty() && QDir(weekFolder).exists())
+            startDir = weekFolder;
+        else if (!jwImages.isEmpty() && QDir(jwImages).exists())
+            startDir = jwImages;
+        else
+            startDir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
         filter = "Images (*.jpg *.jpeg *.png *.webp)";
     } else {
         startDir = QDir(jwVideos).exists() ? jwVideos : QStandardPaths::writableLocation(QStandardPaths::MoviesLocation);
@@ -1290,8 +1381,15 @@ void BroadcastController::applyLanguageCode(const QString &languageCode, bool pe
     if (changed) {
         emit currentLanguageCodeChanged();
         emit currentLanguageChanged();
-        if (reResolveSongs)
+        if (reResolveSongs) {
             reResolveSongSegmentsForCurrentLanguage();
+            // Song numbers alone aren't language-specific, but the Watchtower
+            // title/images and the "week folder" addMediaToSegment defaults
+            // into are matched from a specific language's own local
+            // publication folder -- re-run the whole workbook lookup so all
+            // of that also moves over to the newly selected language.
+            if (m_workbookManager) m_workbookManager->refreshNow();
+        }
     }
 
     if (persist)
@@ -1307,18 +1405,23 @@ QString BroadcastController::resolveSongToSegment(int songNumber, const QString 
 {
     const QString code = SongSearchUtils::normalizeLanguageCode(languageCode);
     const QVariantMap result = getSong(songNumber, code);
-    const int row = m_meetingModel->rowOfId(targetSegmentId);
 
+    // Uses the *ForId MeetingScheduleModel methods (search both midweek and
+    // weekend lists directly by id) rather than rowOfId()+setSongNumber(row,
+    // ...)/setLinkedMedia(row, ...), which only ever touch activeRows() --
+    // the currently-selected tab. Without this, resolving a song for a
+    // segment on the tab the operator doesn't currently have open would
+    // silently do nothing (rowOfId returns -1 there). Fixes this for both
+    // the manual song-search popup and the automated workbook fetch, which
+    // both go through this one function.
     if (!result.value(QStringLiteral("found")).toBool()) {
-        if (row != -1) {
-            m_meetingModel->setSongNumber(row, songNumber);
-            // Don't leave the previous language's file silently linked —
-            // it would otherwise still be eligible to go live.
-            m_meetingModel->setLinkedMedia(row, {});
-            if (targetSegmentId == m_selectedSegmentId)
-                selectSegment(targetSegmentId);
-            saveState();
-        }
+        m_meetingModel->setSongNumberForId(targetSegmentId, songNumber);
+        // Don't leave the previous language's file silently linked —
+        // it would otherwise still be eligible to go live.
+        m_meetingModel->setLinkedMediaForId(targetSegmentId, {});
+        if (targetSegmentId == m_selectedSegmentId)
+            selectSegment(targetSegmentId);
+        saveState();
         if (warnOnMissing) {
             emit songNotFoundInLanguage(songNumber, SongSearchUtils::languageNameForCode(code));
         }
@@ -1332,13 +1435,11 @@ QString BroadcastController::resolveSongToSegment(int songNumber, const QString 
     if (id.isEmpty())
         return {};
 
-    if (row != -1) {
-        m_meetingModel->setLinkedMedia(row, QStringList{id});
-        m_meetingModel->setSongNumber(row, songNumber);
-        if (targetSegmentId == m_selectedSegmentId)
-            selectSegment(targetSegmentId);
-        saveState();
-    }
+    m_meetingModel->addLinkedMediaForId(targetSegmentId, id);
+    m_meetingModel->setSongNumberForId(targetSegmentId, songNumber);
+    if (targetSegmentId == m_selectedSegmentId)
+        selectSegment(targetSegmentId);
+    saveState();
 
     return id;
 }

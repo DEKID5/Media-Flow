@@ -1,4 +1,5 @@
 #include "MediaExtractor.h"
+#include "JwLibraryPaths.h"
 #include <QStandardPaths>
 #include <QDirIterator>
 #include <QFileInfo>
@@ -23,10 +24,15 @@ MediaExtractor::MediaExtractor(QObject *parent)
 {
     QString home = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
 
-    m_targetDirs << home + "/AppData/Local/Packages/48C9FCC0.Watchtower_xzhgwqvnvmbce/LocalState/Publications";
-    m_targetDirs << home + "/AppData/Local/Packages/48C9FCC0.Watchtower_xzhgwqvnvmbce/LocalState/Data/Media";
-    m_targetDirs << home + "/AppData/Local/Packages/WatchtowerBibleandTractSo.45909CDBADF3C_5rz59y55nfz3e/LocalState/Publications";
-    m_targetDirs << home + "/AppData/Local/Packages/WatchtowerBibleandTractSo.45909CDBADF3C_5rz59y55nfz3e/LocalState/Data/Media";
+    // Scans %LOCALAPPDATA%\Packages for JW Library's own package folder
+    // instead of hardcoding its exact name -- the package id's random hash
+    // suffix (and even its publisher id) has already changed across JW
+    // Library releases, so a fixed path silently stops working on a machine
+    // with a different install. See JwLibraryPaths.h.
+    for (const QString &root : JwLibraryPaths::packageRoots()) {
+        m_targetDirs << root + "/LocalState/Publications";
+        m_targetDirs << root + "/LocalState/Data/Media";
+    }
     m_targetDirs << home + "/Videos/JWLibrary";
     m_targetDirs << home + "/Movies/JWLibrary";
 }
