@@ -25,11 +25,48 @@ Window {
         return (mf.mixerMuted ? 0 : 1) * ((mf.masterVolume !== undefined ? mf.masterVolume : 100) / 100.0)
     }
 
+    // Nothing currently live -- the same "no program asset" condition the
+    // Image element below already keys off of, hoisted here so the
+    // standby background can share it too.
+    readonly property bool isStandby: {
+        let a = (MediaFlowBackend || {}).broadcastEngine ? MediaFlowBackend.broadcastEngine.programAsset : null
+        return !a || !a.absolutePath
+    }
+
+    // ── Standby background (image or looping video) ──
+    // z:0, behind every program-content layer below, so it's automatically
+    // covered the instant something goes live and reappears the instant
+    // things go back to standby -- no extra show/hide logic needed here.
+    Image {
+        anchors.fill: parent; z: 0
+        fillMode: Image.PreserveAspectCrop; asynchronous: true
+        visible: audienceRoot.isStandby && (MediaFlowBackend || {}).extendedFeedBackgroundType === "image"
+        source: visible ? "file:///" + (MediaFlowBackend || {}).extendedFeedBackgroundPath : ""
+    }
+    MediaPlayer {
+        id: backgroundVideoPlayer
+        loops: MediaPlayer.Infinite
+        videoOutput: backgroundVideoOut
+        audioOutput: AudioOutput { muted: true; volume: 0 } // decorative only, never audible
+        source: {
+            let bg = (MediaFlowBackend || {})
+            return (bg.extendedFeedBackgroundType === "video" && bg.extendedFeedBackgroundPath)
+                ? "file:///" + bg.extendedFeedBackgroundPath : ""
+        }
+        onSourceChanged: if (source.toString() !== "") play()
+    }
+    VideoOutput {
+        id: backgroundVideoOut
+        anchors.fill: parent; z: 0
+        fillMode: VideoOutput.PreserveAspectCrop
+        visible: audienceRoot.isStandby && (MediaFlowBackend || {}).extendedFeedBackgroundType === "video"
+    }
+
     // ── Player A ──
     MediaPlayer {
         id: playerA
         videoOutput: videoOutA
-        audioOutput: AudioOutput { id: audioA; volume: audienceRoot.roomVolume }
+        audioOutput: AudioOutput { id: audioA; volume: audienceRoot.roomVolume; device: (MediaFlowBackend || {}).roomAudioOutputDevice }
     }
     VideoOutput {
         id: videoOutA; anchors.fill: parent
@@ -42,7 +79,7 @@ Window {
     MediaPlayer {
         id: playerB
         videoOutput: videoOutB
-        audioOutput: AudioOutput { id: audioB; volume: audienceRoot.roomVolume }
+        audioOutput: AudioOutput { id: audioB; volume: audienceRoot.roomVolume; device: (MediaFlowBackend || {}).roomAudioOutputDevice }
     }
     VideoOutput {
         id: videoOutB; anchors.fill: parent
@@ -166,7 +203,10 @@ Window {
     }
 
     // =====================================================================
-    //  TIMER OVERLAY
+    //  TIMER OVERLAY (STAGE) — small corner overlay, unchanged. The
+    //  full-screen timer mode now lives in its own dedicated TimerWindow.qml
+    //  (see BroadcastController::setTimerFullScreenActive), not here, so it
+    //  can target a different monitor than this Extended Feed window.
     // =====================================================================
     Rectangle {
         id: timerOverlay

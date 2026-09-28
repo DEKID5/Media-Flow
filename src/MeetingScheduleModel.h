@@ -51,6 +51,7 @@ public:
     void setLinkedMedia(int row, const QStringList &mediaIds);
     void addLinkedMedia(int row, const QString &mediaId);
     Q_INVOKABLE void removeLinkedMedia(int row, const QString &mediaId);
+    Q_INVOKABLE void moveLinkedMedia(int row, int fromIndex, int toIndex);
     Q_INVOKABLE void clearAllMedia();
     Q_INVOKABLE void updateSegmentTitle(const QString &id, const QString &newTitle);
     void setSongNumber(int row, int songNum);

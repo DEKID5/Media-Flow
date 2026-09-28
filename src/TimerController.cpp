@@ -44,6 +44,14 @@ void TimerController::setIsStaged(bool staged)
     }
 }
 
+void TimerController::setFullScreenTimer(bool full)
+{
+    if (m_fullScreenTimer != full) {
+        m_fullScreenTimer = full;
+        emit fullScreenTimerChanged();
+    }
+}
+
 void TimerController::start()
 {
     if (m_state != Running) {

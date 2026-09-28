@@ -9,6 +9,7 @@
 #include <QUrl>
 #include <QVariant>
 #include <QAudioOutput>
+#include <QAudioDevice>
 #include <QCameraDevice>
 #include <QMediaPlayer>
 
@@ -40,6 +41,12 @@ class BroadcastController final : public QObject
     Q_PROPERTY(CameraDeviceModel *cameraDevices READ cameraDevices CONSTANT)
     Q_PROPERTY(BroadcastEngine *broadcastEngine READ broadcastEngine CONSTANT)
     Q_PROPERTY(QCameraDevice programCameraDevice READ programCameraDevice WRITE setProgramCameraDevice NOTIFY programCameraDeviceChanged)
+    // Captured once at startup rather than left to track "system default"
+    // live -- Zoom (and other communications apps) can silently change
+    // Windows' default audio device role when joining a call, which would
+    // otherwise drag the room/audience audio along with it. Room audio is
+    // deliberately independent of anything Zoom-related.
+    Q_PROPERTY(QAudioDevice roomAudioOutputDevice READ roomAudioOutputDevice CONSTANT)
 
     // --- State Properties ---
     Q_PROPERTY(QString selectedSegmentId READ selectedSegmentId WRITE selectSegment NOTIFY selectedSegmentIdChanged)
@@ -53,6 +60,24 @@ class BroadcastController final : public QObject
     Q_PROPERTY(bool feedExtended READ feedExtended NOTIFY feedExtendedChanged)
     Q_PROPERTY(bool hasSecondaryScreen READ hasSecondaryScreen NOTIFY hasSecondaryScreenChanged)
     Q_PROPERTY(QString scanStatus READ scanStatus NOTIFY scanStatusChanged)
+
+    // --- Settings ---
+    // -1 = automatic (today's screens.at(1)-or-primary behavior).
+    Q_PROPERTY(int extendedFeedScreenIndex READ extendedFeedScreenIndex WRITE setExtendedFeedScreenIndex NOTIFY extendedFeedScreenIndexChanged)
+    // Independent from extendedFeedScreenIndex -- the full-screen timer is
+    // its own dedicated window (qml/TimerWindow.qml, opened/closed via
+    // setTimerFullScreenActive) so it can target a different monitor than
+    // wherever Extended Feed/audience content is shown. -1 = automatic
+    // (same second-screen-or-primary default as Extended Feed).
+    Q_PROPERTY(int timerScreenIndex READ timerScreenIndex WRITE setTimerScreenIndex NOTIFY timerScreenIndexChanged)
+    Q_PROPERTY(bool bgmUseCustomFolder READ bgmUseCustomFolder WRITE setBgmUseCustomFolder NOTIFY bgmSettingsChanged)
+    Q_PROPERTY(QString bgmCustomFolder READ bgmCustomFolder NOTIFY bgmSettingsChanged)
+    // Shown on the Extended Feed screen whenever nothing is live (standby),
+    // instead of a plain black screen -- "" means no background configured.
+    // extendedFeedBackgroundType is "image" or "video", derived from the
+    // chosen file's extension at browse time.
+    Q_PROPERTY(QString extendedFeedBackgroundPath READ extendedFeedBackgroundPath NOTIFY extendedFeedBackgroundChanged)
+    Q_PROPERTY(QString extendedFeedBackgroundType READ extendedFeedBackgroundType NOTIFY extendedFeedBackgroundChanged)
 
     // --- Legacy Timer System Removed ---
 
@@ -80,6 +105,7 @@ public:
     QSortFilterProxyModel *stagedMediaProxy() const { return m_filterProxy; }
     PinnedFolderModel *pinnedFolders() const { return m_pinnedFolders; }
     QCameraDevice programCameraDevice() const { return m_programCameraDevice; }
+    QAudioDevice roomAudioOutputDevice() const { return m_roomAudioOutputDevice; }
 
     QString selectedSegmentId() const { return m_selectedSegmentId; }
     QString meetingType() const { return m_meetingType; }
@@ -94,6 +120,24 @@ public:
     bool feedExtended() const { return m_feedExtended; }
     bool hasSecondaryScreen() const;
     QString scanStatus() const { return m_scanStatus; }
+
+    int extendedFeedScreenIndex() const { return m_extendedFeedScreenIndex; }
+    void setExtendedFeedScreenIndex(int index);
+    int timerScreenIndex() const { return m_timerScreenIndex; }
+    void setTimerScreenIndex(int index);
+    Q_INVOKABLE void setTimerFullScreenActive(bool active);
+    bool bgmUseCustomFolder() const { return m_bgmUseCustomFolder; }
+    void setBgmUseCustomFolder(bool enabled);
+    QString bgmCustomFolder() const { return m_bgmCustomFolder; }
+    Q_INVOKABLE void browseBgmFolder();
+    Q_INVOKABLE QVariantList availableScreens() const;
+    Q_INVOKABLE void addCustomLanguage(const QString &name, const QString &code);
+    Q_INVOKABLE void removeCustomLanguage(const QString &code);
+
+    QString extendedFeedBackgroundPath() const { return m_extendedFeedBackgroundPath; }
+    QString extendedFeedBackgroundType() const { return m_extendedFeedBackgroundType; }
+    Q_INVOKABLE void browseExtendedFeedBackground();
+    Q_INVOKABLE void clearExtendedFeedBackground();
 
     // --- Legacy Timer Getters Removed ---
 
@@ -111,6 +155,7 @@ public:
     Q_INVOKABLE void selectSegment(const QString &id);
     Q_INVOKABLE void bindMediaToSequence(const QString &mediaId);
     Q_INVOKABLE void removeMediaFromSequence(const QString &seqId, const QString &mediaId);
+    Q_INVOKABLE void reorderSegmentMedia(const QString &fromMediaId, const QString &toMediaId);
     Q_INVOKABLE void browseAndAddMedia(const QString &seqId, const QString &mediaType);
 
     // --- General Actions ---
@@ -148,6 +193,7 @@ public:
     Q_INVOKABLE void backBgm();
     Q_INVOKABLE void stopBgm();
     Q_INVOKABLE void scanBgmFolder();
+    Q_INVOKABLE void addFilesToBgm(const QStringList &paths);
     Q_INVOKABLE void toggleBgmShuffle() { setBgmShuffle(!m_bgmShuffle); }
     Q_INVOKABLE void seekBgm(int ms);
 
@@ -174,6 +220,11 @@ signals:
     void programCameraDeviceChanged();
     void scanStatusChanged();
     void hasSecondaryScreenChanged();
+    void extendedFeedScreenIndexChanged();
+    void timerScreenIndexChanged();
+    void bgmSettingsChanged();
+    void extendedFeedBackgroundChanged();
+    void languagesChanged();
     void songNotFound(int songNumber);
     void songNotFoundInLanguage(int songNumber, const QString &languageName);
     void isProgramPausedChanged();
@@ -227,6 +278,15 @@ private:
     bool m_feedExtended = false;
     QString m_scanStatus;
     QCameraDevice m_programCameraDevice;
+    int m_extendedFeedScreenIndex = -1;
+    int m_timerScreenIndex = -1;
+    QPointer<QQuickWindow> m_timerWindow;
+    bool m_bgmUseCustomFolder = false;
+    QString m_bgmCustomFolder;
+    QString m_extendedFeedBackgroundPath;
+    QString m_extendedFeedBackgroundType;
+    QVariantList m_customLanguages;
+    QAudioDevice m_roomAudioOutputDevice;
 
     // BGM
     QMediaPlayer *m_bgmPlayer = nullptr;
@@ -243,6 +303,7 @@ private:
     MediaExtractor *m_extractor = nullptr;
     QPointer<QQuickWindow> m_audienceWindow;
     QPointer<QQuickWindow> m_zoomWindow;
+    QTimer *m_duckingExemptionTimer = nullptr;
     QHash<QString, QVariantMap> m_mediaIndexByPath;
     QHash<QString, QVariantMap> m_songIndex;
 };

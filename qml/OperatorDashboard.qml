@@ -10,6 +10,7 @@ Item {
     anchors.fill: parent
 
     property string manualSongSegmentId: ""
+    signal settingsRequested()
 
     function takeLive() {
         if (MediaFlowBackend && MediaFlowBackend.broadcastEngine) {
@@ -73,21 +74,37 @@ Item {
                     }
                 }
 
+                // 1b. SETTINGS
+                Rectangle {
+                    Layout.preferredHeight: 36; Layout.preferredWidth: 36; radius: Theme.radius
+                    color: settingsMa.containsMouse ? Theme.surfaceHover : Theme.surfaceRaised
+                    border.color: Theme.panelBorder
+                    BroadcastIcon { anchors.centerIn: parent; name: "settings"; iconSize: 15; color: Theme.textPrimary }
+                    MouseArea {
+                        id: settingsMa
+                        anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                        onClicked: root.settingsRequested()
+                    }
+                    ToolTip.visible: settingsMa.containsMouse
+                    ToolTip.delay: 500
+                    ToolTip.text: "Settings — displays, background music folder, languages"
+                }
+
                 // 2. MEETING TYPE SELECTOR
                 Rectangle {
-                    Layout.preferredHeight: 36; width: 190; radius: Theme.radius; color: Theme.surfaceRaised; border.color: Theme.panelBorder
+                    Layout.preferredHeight: 36; Layout.preferredWidth: 190; Layout.minimumWidth: 160; radius: Theme.radius; color: Theme.surfaceRaised; border.color: Theme.panelBorder
                     RowLayout {
                         anchors.fill: parent; anchors.margins: 4; spacing: 0
                         Rectangle {
                             Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radiusSm + 1
-                            color: (MediaFlowBackend || {}).meetingType === "midweek" ? Theme.accentBlue : "transparent"
+                            color: (MediaFlowBackend || {}).meetingType === "midweek" ? Theme.meetingAccent("midweek") : "transparent"
                             Behavior on color { ColorAnimation { duration: Theme.durationFast } }
                             Label { anchors.centerIn: parent; text: "MIDWEEK"; color: (MediaFlowBackend || {}).meetingType === "midweek" ? "white" : Theme.textSecondary; font.pixelSize: Theme.textXs; font.bold: true }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: (MediaFlowBackend || {}).setMeetingTypeStr("midweek") }
                         }
                         Rectangle {
                             Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radiusSm + 1
-                            color: (MediaFlowBackend || {}).meetingType === "weekend" ? Theme.accentBlue : "transparent"
+                            color: (MediaFlowBackend || {}).meetingType === "weekend" ? Theme.meetingAccent("weekend") : "transparent"
                             Behavior on color { ColorAnimation { duration: Theme.durationFast } }
                             Label { anchors.centerIn: parent; text: "WEEKEND"; color: (MediaFlowBackend || {}).meetingType === "weekend" ? "white" : Theme.textSecondary; font.pixelSize: Theme.textXs; font.bold: true }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: (MediaFlowBackend || {}).setMeetingTypeStr("weekend") }
@@ -97,7 +114,7 @@ Item {
 
                 // 3. LANGUAGE SELECTOR
                 Rectangle {
-                    Layout.preferredHeight: 36; width: 150; radius: Theme.radius; color: Theme.surfaceRaised; border.color: Theme.panelBorder
+                    Layout.preferredHeight: 36; Layout.preferredWidth: 150; Layout.minimumWidth: 130; radius: Theme.radius; color: Theme.surfaceRaised; border.color: Theme.panelBorder
                     RowLayout {
                         anchors.fill: parent; anchors.margins: 4; spacing: 4
                         BroadcastIcon { name: "globe"; iconSize: 13; Layout.leftMargin: 8; opacity: 0.7; color: Theme.textPrimary }
@@ -130,6 +147,18 @@ Item {
                                 }
                             }
 
+                            // getSupportedLanguages() is a plain invokable snapshot,
+                            // not a bindable property, so the model won't refresh on
+                            // its own when a custom language is added/removed in
+                            // Settings -- re-fetch explicitly on that signal instead.
+                            Connections {
+                                target: MediaFlowBackend || null
+                                function onLanguagesChanged() {
+                                    langCombo.model = MediaFlowBackend.getSupportedLanguages()
+                                    langCombo.syncFromBackend()
+                                }
+                            }
+
                             contentItem: Label {
                                 text: langCombo.currentText
                                 font.pixelSize: Theme.textXs; font.bold: true; color: Theme.textPrimary
@@ -145,7 +174,7 @@ Item {
 
                 // 4. ROOM AUDIO (the audience window's volume/mute — the single audio channel out of the PC)
                 Rectangle {
-                    Layout.preferredHeight: 36; width: 150; radius: Theme.radius; color: Theme.surfaceRaised; border.color: Theme.panelBorder
+                    Layout.preferredHeight: 36; Layout.preferredWidth: 150; Layout.minimumWidth: 130; radius: Theme.radius; color: Theme.surfaceRaised; border.color: Theme.panelBorder
                     RowLayout {
                         anchors.centerIn: parent; spacing: Theme.space2
                         BroadcastIcon {
@@ -198,7 +227,7 @@ Item {
                     spacing: Theme.space3
 
                     Rectangle {
-                        Layout.preferredHeight: 36; width: 130; radius: Theme.radius
+                        Layout.preferredHeight: 36; Layout.preferredWidth: 130; Layout.minimumWidth: 110; radius: Theme.radius
                         color: (MediaFlowBackend || {}).isMeetingLive ? "#1AEF4444" : Theme.surfaceRaised
                         border.color: (MediaFlowBackend || {}).isMeetingLive ? Theme.accentRed : Theme.panelBorder
                         Behavior on color { ColorAnimation { duration: Theme.durationFast } }
@@ -221,12 +250,17 @@ Item {
                     }
 
                     Rectangle {
-                        Layout.preferredHeight: 36; width: 190; radius: Theme.radius
+                        Layout.preferredHeight: 36; Layout.preferredWidth: 190; Layout.minimumWidth: 150; radius: Theme.radius
                         color: (MediaFlowBackend || {}).vcamEnabled ? "#1A3B82F6" : Theme.surfaceRaised
                         border.color: (MediaFlowBackend || {}).vcamEnabled ? Theme.accentBlue : Theme.panelBorder
                         Behavior on color { ColorAnimation { duration: Theme.durationFast } }
                         scale: zoomMa.pressed ? 0.97 : 1.0
                         Behavior on scale { SpringAnimation { spring: 5; damping: 0.6 } }
+                        ToolTip.visible: zoomMa.containsMouse
+                        ToolTip.delay: 500
+                        ToolTip.text: (MediaFlowBackend || {}).vcamEnabled
+                            ? "Broadcasting — click to stop sending video to Zoom."
+                            : "1. Click to start.  2. In Zoom's camera picker, choose “OBS Virtual Camera.”  3. Room audio stays on your speakers — nothing is sent to Zoom."
                         RowLayout {
                             anchors.centerIn: parent; spacing: Theme.space2
                             Rectangle {
@@ -243,13 +277,14 @@ Item {
                                 text: "BROADCAST TO ZOOM"
                                 color: (MediaFlowBackend || {}).vcamEnabled ? "white" : Theme.textSecondary
                                 font.pixelSize: Theme.textXs; font.bold: true
+                                elide: Text.ElideRight
                             }
                         }
-                        MouseArea { id: zoomMa; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: requestZoomBroadcast() }
+                        MouseArea { id: zoomMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: requestZoomBroadcast() }
                     }
 
                     Rectangle {
-                        Layout.preferredHeight: 36; width: 144; radius: Theme.radius
+                        Layout.preferredHeight: 36; Layout.preferredWidth: 144; Layout.minimumWidth: 120; radius: Theme.radius
                         color: {
                             let ext = (MediaFlowBackend || {}).feedExtended
                             if (ext) return Theme.accentBlue
@@ -326,6 +361,7 @@ Item {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     Layout.preferredWidth: 350
+                    Layout.minimumWidth: 260
                     Rectangle {
                         anchors.fill: parent; z: -1; color: Theme.panelBgDark; radius: Theme.radiusLg; border.color: Theme.panelBorder
                     }
@@ -336,7 +372,8 @@ Item {
                     id: sequencePanel
                     Layout.fillWidth: true; Layout.fillHeight: true
                     Layout.preferredWidth: 400
-                    accentColor: Theme.accentBlue
+                    Layout.minimumWidth: 280
+                    accentColor: Theme.meetingAccent((MediaFlowBackend || {}).meetingType)
                     title: "SEQUENCE"
 
                     headerTrailing: RowLayout {
@@ -365,6 +402,7 @@ Item {
                             // Captured here because the nested Repeater below has its own
                             // "model" (associatedMediaIds), which shadows this segment's model.id.
                             property string segmentId: model.id
+                            readonly property color accent: Theme.meetingAccent((MediaFlowBackend || {}).meetingType)
 
                             // Critically-damped spring, not a fixed-duration curve — clicking
                             // another segment mid-animation redirects smoothly instead of
@@ -373,14 +411,15 @@ Item {
 
                             Rectangle {
                                 anchors.fill: parent; anchors.margins: 4
-                                radius: Theme.radiusLg; color: isSelected ? "#0D3B82F6" : Theme.panelBgDark
-                                border.color: isSelected ? Theme.accentBlue : Theme.panelBorder
+                                radius: Theme.radiusLg; color: isSelected ? Qt.rgba(accent.r, accent.g, accent.b, 0.05) : Theme.panelBgDark
+                                border.color: isSelected ? accent : Theme.panelBorder
                                 border.width: isSelected ? 2 : 1
+                                Behavior on border.color { ColorAnimation { duration: Theme.durationFast } }
 
                                 // Selection Glow
                                 Rectangle {
                                     anchors.fill: parent; anchors.margins: -2
-                                    radius: Theme.radiusLg + 2; color: "transparent"; border.color: Theme.accentBlue; border.width: 1
+                                    radius: Theme.radiusLg + 2; color: "transparent"; border.color: segmentDelegate.accent; border.width: 1
                                     opacity: isSelected ? 0.3 : 0
                                 }
 
@@ -392,7 +431,7 @@ Item {
                                         Layout.fillWidth: true
                                         Label {
                                             text: model.time
-                                            color: isSelected ? "#60a5fa" : Theme.textFaint
+                                            color: isSelected ? Qt.lighter(segmentDelegate.accent, 1.3) : Theme.textFaint
                                             font.pixelSize: Theme.textSm; font.bold: true
                                         }
                                         Item { Layout.fillWidth: true }
@@ -585,7 +624,7 @@ Item {
 
                 // TIMERS & BGM
                 ColumnLayout {
-                    Layout.fillWidth: true; Layout.fillHeight: true; Layout.preferredWidth: 350; spacing: Theme.space3
+                    Layout.fillWidth: true; Layout.fillHeight: true; Layout.preferredWidth: 350; Layout.minimumWidth: 260; spacing: Theme.space3
                     TimerPanel { }
                     BackgroundMusicPanel { }
                 }
@@ -651,7 +690,7 @@ Item {
         title: "Virtual Camera Driver Not Found"
         showCancel: false
         contentItem: Label {
-            text: "Install the UnityCapture virtual camera driver (see BUILD.md), then try Broadcast to Zoom again."
+            text: "Install OBS Studio (obsproject.com) once — it registers the “OBS Virtual Camera” driver. You don't need to open OBS itself; MediaFlow feeds it directly. Then try Broadcast to Zoom again. See BUILD.md for details."
             color: Theme.textPrimary
             font.pixelSize: Theme.textMd
             wrapMode: Text.WordWrap

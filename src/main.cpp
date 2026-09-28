@@ -27,14 +27,25 @@ void myMessageHandler(QtMsgType type, const QMessageLogContext &context, const Q
 int main(int argc, char *argv[])
 {
     qInstallMessageHandler(myMessageHandler);
+
+    // Must run before QApplication is constructed -- Qt locks in the RHI
+    // backend (Direct3D11 by default on Windows) as part of QGuiApplication
+    // construction, so calling this after `QApplication app(...)` is a
+    // silent no-op that leaves the app on D3D11. VirtualCameraManager's
+    // capture path uses QOpenGLContext/glReadPixels directly, which only
+    // exists under the OpenGL RHI backend -- without this running early,
+    // QOpenGLContext::currentContext() is always null during
+    // afterRendering, so onAfterRendering() returns immediately and no
+    // frame is ever captured or sent to the OBS Virtual Camera queue.
+    QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+
     QApplication app(argc, argv);
-    
+
     qRegisterMetaType<QCameraDevice>("QCameraDevice");
     QApplication::setOrganizationName(QStringLiteral("MediaFlow"));
     QApplication::setApplicationName(QStringLiteral("MediaFlow"));
 
     QQuickStyle::setStyle(QStringLiteral("Basic"));
-    QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
 
     QQmlApplicationEngine engine;
 
@@ -53,6 +64,15 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("TimerBackend"), &timerController);
 
     QObject::connect(&engine, &QQmlApplicationEngine::quit, &app, &QCoreApplication::quit);
+
+    // The full-screen timer is its own dedicated window (opened/closed by
+    // BroadcastController, positioned per its timerScreenIndex setting) so
+    // it can target a different monitor than Extended Feed -- TimerController
+    // doesn't own a QML engine/window itself, so this wiring lives here
+    // rather than inside either class.
+    QObject::connect(&timerController, &TimerController::fullScreenTimerChanged, &controller, [&controller, &timerController]() {
+        controller.setTimerFullScreenActive(timerController.fullScreenTimer());
+    });
 
     engine.load(QUrl(QStringLiteral("qrc:/MediaFlow/qml/Main.qml")));
     if (engine.rootObjects().isEmpty())

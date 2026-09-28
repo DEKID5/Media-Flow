@@ -69,7 +69,7 @@ Rectangle {
         // Normally video-confidence-only (audience window carries the audio);
         // becomes the audio source itself when the audience window isn't active,
         // so program audio is never silently lost. See isAudioSource above.
-        audioOutput: AudioOutput { id: audioA; volume: monitor.isAudioSource ? monitor.roomVolume : 0; muted: !monitor.isAudioSource }
+        audioOutput: AudioOutput { id: audioA; volume: monitor.isAudioSource ? monitor.roomVolume : 0; muted: !monitor.isAudioSource; device: (MediaFlowBackend || {}).roomAudioOutputDevice }
         onMediaStatusChanged: {
             if (isLive && activeIsA && mediaStatus === MediaPlayer.EndOfMedia) {
                 if (MediaFlowBackend && MediaFlowBackend.broadcastEngine)
@@ -90,7 +90,7 @@ Rectangle {
     MediaPlayer {
         id: playerB
         videoOutput: videoOutB
-        audioOutput: AudioOutput { id: audioB; volume: monitor.isAudioSource ? monitor.roomVolume : 0; muted: !monitor.isAudioSource }
+        audioOutput: AudioOutput { id: audioB; volume: monitor.isAudioSource ? monitor.roomVolume : 0; muted: !monitor.isAudioSource; device: (MediaFlowBackend || {}).roomAudioOutputDevice }
         onMediaStatusChanged: {
             if (isLive && !activeIsA && mediaStatus === MediaPlayer.EndOfMedia) {
                 if (MediaFlowBackend && MediaFlowBackend.broadcastEngine)

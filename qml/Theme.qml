@@ -59,4 +59,14 @@ QtObject {
     // ── Typography ──
     readonly property string monoFont: "JetBrains Mono"
     readonly property string sansFont: "Inter"
+
+    // ── Meeting-type identity ──
+    // Midweek and Weekend meetings previously shared a single accent
+    // (accentBlue) everywhere, making it hard to tell at a glance which
+    // meeting's content you're looking at. Weekend reuses accentAmber
+    // (already defined above, previously unused anywhere in the app) rather
+    // than introducing a new color.
+    function meetingAccent(meetingType) {
+        return meetingType === "weekend" ? accentAmber : accentBlue
+    }
 }

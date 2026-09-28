@@ -43,6 +43,13 @@ signals:
 
 protected:
     bool filterAcceptsRow(int source_row, const QModelIndex &source_parent) const override;
+    // Only meaningful for filterType "segment"/"pinned": orders rows to
+    // match m_stagedIds' position, i.e. the linked-media list's own order,
+    // so drag-reordering that list (see MeetingScheduleModel::moveLinkedMedia)
+    // is actually reflected in what the grid shows. Sorting is otherwise
+    // disabled (see setFilterType), which preserves the previous "natural
+    // source order" behavior for every other view.
+    bool lessThan(const QModelIndex &left, const QModelIndex &right) const override;
 
 private:
     QString m_selectedSegmentId;

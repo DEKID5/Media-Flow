@@ -1,0 +1,17 @@
+OBS Virtual Camera driver (obs-virtualcam-module32.dll, obs-virtualcam-module64.dll)
+====================================================================================
+
+These two DLLs are the DirectShow "OBS Virtual Camera" filter, taken
+unmodified from the OBS Studio project (https://obsproject.com,
+https://github.com/obsproject/obs-studio), used here strictly as a
+virtual camera driver -- MediaFlow does not use, embed, or link against
+any other part of OBS Studio.
+
+OBS Studio is licensed under the GNU General Public License v2.0 (GPLv2).
+Full license text: https://github.com/obsproject/obs-studio/blob/master/COPYING
+Source code for these files: https://github.com/obsproject/obs-studio/tree/master/plugins/win-dshow/virtualcam-module
+
+MediaFlow registers these DLLs as a normal DirectShow video source (the
+same "regsvr32 /i /s" step OBS Studio's own installer performs) so that
+its own producer (src/ObsVirtualCamWriter.*) can feed them directly --
+OBS Studio's application/UI is never installed or required.

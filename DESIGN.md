@@ -21,7 +21,7 @@ Exactly one player is ever audible at a time: the operator's PREVIEW/LIVE monito
 
 ## Zoom virtual camera
 
-`VirtualCameraManager` captures `VirtualCameraWindow.qml`'s rendered frames (`QQuickWindow::afterRendering` → async PBO readback) and feeds them to Zoom (or any app) via `UnityCaptureWriter`, an implementation of the [UnityCapture](https://github.com/schellingb/UnityCapture) shared-memory protocol — a small MIT-licensed DirectShow virtual camera made for exactly this. See [BUILD.md](BUILD.md) for installing the driver. `VirtualCameraWindow.qml` shows the live camera feed when nothing (or a camera "input" asset) is the program, and switches to the program video/image otherwise — matching what the audience actually sees.
+`VirtualCameraManager` captures `VirtualCameraWindow.qml`'s rendered frames (`QQuickWindow::afterRendering` → async PBO readback → RGBA→NV12 conversion) and feeds them directly into OBS Studio's own virtual-camera shared-memory queue via `ObsVirtualCamWriter`, a from-source port of `obs-studio`'s `plugins/win-dshow/shared-memory-queue.c` producer protocol. Installing OBS Studio once registers its "OBS Virtual Camera" driver; OBS Studio itself never needs to run — MediaFlow is its own producer. See [BUILD.md](BUILD.md) for details. `VirtualCameraWindow.qml` shows the live camera feed when nothing (or a camera "input" asset) is the program, and switches to the program video/image otherwise — matching what the audience actually sees.
 
 ## Zoom hotkey
 

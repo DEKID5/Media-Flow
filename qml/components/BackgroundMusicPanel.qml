@@ -32,6 +32,38 @@ DockPanel {
         anchors.fill: parent
         clip: true
 
+        DropArea {
+            id: bgmDropArea
+            anchors.fill: parent
+            onDropped: (drop) => {
+                if (drop.hasUrls) {
+                    let paths = []
+                    for (let i = 0; i < drop.urls.length; i++) paths.push(drop.urls[i].toString())
+                    MediaFlowBackend.addFilesToBgm(paths)
+                }
+            }
+        }
+
+        // Drop feedback -- a dashed-style highlight border + hint text,
+        // shown only while actually dragging files over the panel.
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: 2
+            radius: 8
+            color: "#1A10B981"
+            border.color: Theme.accentEmerald
+            border.width: 2
+            visible: bgmDropArea.containsDrag
+            z: 10
+
+            Label {
+                anchors.centerIn: parent
+                text: "DROP AUDIO FILES OR A FOLDER"
+                color: Theme.accentEmerald
+                font.bold: true; font.pixelSize: Theme.textXs; font.letterSpacing: 1
+            }
+        }
+
         Rectangle {
             anchors.left: parent.left
             anchors.bottom: parent.bottom

@@ -29,6 +29,124 @@
 #include <QRandomGenerator>
 #include <QSettings>
 
+#include <mmdeviceapi.h>
+#include <audiopolicy.h>
+#include <endpointvolume.h>
+#include <wrl/client.h>
+
+namespace {
+
+// Windows ducks (lowers/mutes, per the user's "Communications" sound setting)
+// every other app's audio session automatically whenever a call becomes
+// active in an app it recognizes as a communications app -- Zoom included.
+// The room's audio output is a separate physical device/purpose from the
+// Zoom call feed and must stay at full quality regardless, so every audio
+// session belonging to this process is explicitly opted out via WASAPI's
+// per-session ducking preference (the officially supported way to exempt an
+// app, rather than relying on the user's global system-wide setting, which
+// may not retroactively apply to sessions that were already open).
+void exemptSessionsOnDevice(IMMDevice *device, DWORD myPid, bool verbose)
+{
+    using Microsoft::WRL::ComPtr;
+
+    ComPtr<IAudioSessionManager2> sessionManager;
+    HRESULT hr = device->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr,
+                                   reinterpret_cast<void **>(sessionManager.GetAddressOf()));
+    if (FAILED(hr)) {
+        if (verbose) qWarning() << "DUCKDIAG: Activate(IAudioSessionManager2) failed hr=" << Qt::hex << hr;
+        return;
+    }
+
+    ComPtr<IAudioSessionEnumerator> sessionEnumerator;
+    if (FAILED(sessionManager->GetSessionEnumerator(&sessionEnumerator))) {
+        if (verbose) qWarning() << "DUCKDIAG: GetSessionEnumerator failed";
+        return;
+    }
+
+    int count = 0;
+    sessionEnumerator->GetCount(&count);
+    for (int i = 0; i < count; ++i) {
+        ComPtr<IAudioSessionControl> session;
+        if (FAILED(sessionEnumerator->GetSession(i, &session)) || !session)
+            continue;
+        ComPtr<IAudioSessionControl2> session2;
+        if (FAILED(session.As(&session2)) || !session2)
+            continue;
+        DWORD pid = 0;
+        if (SUCCEEDED(session2->GetProcessId(&pid)) && pid == myPid) {
+            HRESULT dhr = session2->SetDuckingPreference(TRUE); // TRUE = opt out of ducking
+            if (verbose) {
+                float sessionVolume = -1.0f;
+                ComPtr<ISimpleAudioVolume> simpleVolume;
+                if (SUCCEEDED(session.As(&simpleVolume)))
+                    simpleVolume->GetMasterVolume(&sessionVolume);
+                AudioSessionState state = AudioSessionStateInactive;
+                session2->GetState(&state);
+                qWarning() << "DUCKDIAG: session matched pid, SetDuckingPreference hr=" << Qt::hex << dhr
+                           << "sessionVolume=" << sessionVolume << "state=" << (int)state;
+            }
+        }
+    }
+}
+
+// Every new media source (a Cut/Take to a different video, a fresh BGM
+// track) can tear down and recreate the underlying WASAPI audio session, and
+// a role mismatch (room audio may not land on the "eMultimedia" role
+// endpoint specifically) can also leave a session unexempted -- so this
+// enumerates every active render endpoint, not just the default one, and is
+// called repeatedly (see m_duckingExemptionTimer) rather than once, so any
+// newly created session is caught within a couple of seconds regardless of
+// when/why it was (re)created.
+void exemptProcessAudioFromDucking(bool verbose = false)
+{
+    using Microsoft::WRL::ComPtr;
+
+    const bool comInitializedHere = SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED));
+
+    ComPtr<IMMDeviceEnumerator> enumerator;
+    HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
+                                   IID_PPV_ARGS(&enumerator));
+    if (SUCCEEDED(hr)) {
+        const DWORD myPid = GetCurrentProcessId();
+        ComPtr<IMMDeviceCollection> devices;
+        if (SUCCEEDED(enumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &devices))) {
+            UINT deviceCount = 0;
+            devices->GetCount(&deviceCount);
+            if (verbose) qWarning() << "DUCKDIAG: active render devices=" << deviceCount;
+            for (UINT i = 0; i < deviceCount; ++i) {
+                ComPtr<IMMDevice> device;
+                if (SUCCEEDED(devices->Item(i, &device)) && device) {
+                    if (verbose) {
+                        wchar_t *devId = nullptr;
+                        if (SUCCEEDED(device->GetId(&devId))) {
+                            qWarning() << "DUCKDIAG: device" << i << "id=" << QString::fromWCharArray(devId);
+                            CoTaskMemFree(devId);
+                        }
+                        ComPtr<IAudioEndpointVolume> epVolume;
+                        if (SUCCEEDED(device->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr,
+                                                        reinterpret_cast<void **>(epVolume.GetAddressOf())))) {
+                            float level = -1.0f; BOOL muted = FALSE;
+                            epVolume->GetMasterVolumeLevelScalar(&level);
+                            epVolume->GetMute(&muted);
+                            qWarning() << "DUCKDIAG: device" << i << "masterVolume=" << level << "muted=" << (bool)muted;
+                        }
+                    }
+                    exemptSessionsOnDevice(device.Get(), myPid, verbose);
+                }
+            }
+        } else if (verbose) {
+            qWarning() << "DUCKDIAG: EnumAudioEndpoints failed";
+        }
+    } else if (verbose) {
+        qWarning() << "DUCKDIAG: CoCreateInstance(MMDeviceEnumerator) failed hr=" << Qt::hex << hr;
+    }
+
+    if (comInitializedHere)
+        CoUninitialize();
+}
+
+} // namespace
+
 namespace {
 
 QString normalizedMediaPath(const QString &path)
@@ -116,6 +234,7 @@ BroadcastController::BroadcastController(QQmlApplicationEngine *engine, QObject 
     , m_pinnedFolders(new PinnedFolderModel(this))
 {
     m_programCameraDevice = QMediaDevices::defaultVideoInput();
+    m_roomAudioOutputDevice = QMediaDevices::defaultAudioOutput();
     m_filterProxy->setSourceModel(m_libraryModel);
 
     // ── Screen Monitoring ──
@@ -144,6 +263,9 @@ BroadcastController::BroadcastController(QQmlApplicationEngine *engine, QObject 
 
     // ── BGM Player ──
     m_bgmAudio = new QAudioOutput(this);
+    // Same fixed device as room audio -- BGM shouldn't get dragged along by
+    // Zoom changing Windows' default device role either.
+    m_bgmAudio->setDevice(m_roomAudioOutputDevice);
     m_bgmAudio->setVolume(0.6);
     m_bgmPlayer = new QMediaPlayer(this);
     m_bgmPlayer->setAudioOutput(m_bgmAudio);
@@ -151,6 +273,11 @@ BroadcastController::BroadcastController(QQmlApplicationEngine *engine, QObject 
             this, &BroadcastController::onBgmStatusChanged);
     connect(m_bgmPlayer, &QMediaPlayer::positionChanged, this, &BroadcastController::bgmPositionChanged);
     connect(m_bgmPlayer, &QMediaPlayer::durationChanged, this, &BroadcastController::bgmDurationChanged);
+
+    exemptProcessAudioFromDucking();
+    m_duckingExemptionTimer = new QTimer(this);
+    m_duckingExemptionTimer->setInterval(2000);
+    connect(m_duckingExemptionTimer, &QTimer::timeout, this, [] { exemptProcessAudioFromDucking(); });
 
     // ── Media Thumbnail Manager (Async/Hash-cached) ──
     m_thumbManager = new MediaThumbnailManager(this);
@@ -237,6 +364,20 @@ void BroadcastController::removeMediaFromSequence(const QString &seqId, const QS
     }
 }
 
+void BroadcastController::reorderSegmentMedia(const QString &fromMediaId, const QString &toMediaId)
+{
+    if (m_selectedSegmentId.isEmpty() || fromMediaId == toMediaId) return;
+    int row = m_meetingModel->rowOfId(m_selectedSegmentId);
+    if (row == -1) return;
+    QStringList ids = m_meetingModel->data(m_meetingModel->index(row, 0), MeetingScheduleModel::AssociatedMediaIdsRole).toStringList();
+    const int fromIndex = ids.indexOf(fromMediaId);
+    const int toIndex = ids.indexOf(toMediaId);
+    if (fromIndex == -1 || toIndex == -1) return;
+    m_meetingModel->moveLinkedMedia(row, fromIndex, toIndex);
+    selectSegment(m_selectedSegmentId);
+    saveState();
+}
+
 void BroadcastController::setMeetingTypeStr(const QString &type)
 {
     if (m_meetingType != type) {
@@ -300,11 +441,18 @@ void BroadcastController::setMeetingLive(bool live)
 void BroadcastController::scanBgmFolder()
 {
     m_bgmPlaylist.clear();
-    QString home = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
     QStringList bgmDirs;
-    bgmDirs << home + "/Music/MediaFlow/BGM";
-    bgmDirs << home + "/Music";
-    bgmDirs << home + "/Videos/JWLibrary";
+    if (m_bgmUseCustomFolder && !m_bgmCustomFolder.isEmpty()) {
+        // Custom folder replaces the defaults entirely -- the setting is
+        // "use a separate folder", not "also include the defaults", so BGM
+        // stays scoped to exactly what the user pointed at.
+        bgmDirs << m_bgmCustomFolder;
+    } else {
+        QString home = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
+        bgmDirs << home + "/Music/MediaFlow/BGM";
+        bgmDirs << home + "/Music";
+        bgmDirs << home + "/Videos/JWLibrary";
+    }
 
     QStringList audioFilters = {"*.mp3", "*.m4a", "*.wav"};
 
@@ -318,6 +466,81 @@ void BroadcastController::scanBgmFolder()
 
     if (!m_bgmPlaylist.isEmpty()) loadBgmTrack(0);
     emit bgmChanged();
+}
+
+void BroadcastController::addFilesToBgm(const QStringList &paths)
+{
+    static const QStringList audioExt = {"mp3", "m4a", "wav"};
+    const bool wasEmpty = m_bgmPlaylist.isEmpty();
+
+    for (const QString &raw : paths) {
+        // QML drag-and-drop delivers file:// URLs (drop.urls[i].toString());
+        // OS files/folders dropped directly, plain local paths otherwise.
+        const QString localPath = raw.startsWith("file:") ? QUrl(raw).toLocalFile() : raw;
+        QFileInfo info(localPath);
+        if (!info.exists()) continue;
+
+        if (info.isDir()) {
+            QDirIterator it(localPath, {"*.mp3", "*.m4a", "*.wav"}, QDir::Files, QDirIterator::Subdirectories);
+            while (it.hasNext()) {
+                const QString found = it.next();
+                if (!m_bgmPlaylist.contains(found)) m_bgmPlaylist.append(found);
+            }
+        } else if (audioExt.contains(info.suffix().toLower())) {
+            const QString abs = info.absoluteFilePath();
+            if (!m_bgmPlaylist.contains(abs)) m_bgmPlaylist.append(abs);
+        }
+    }
+
+    if (wasEmpty && !m_bgmPlaylist.isEmpty()) loadBgmTrack(0);
+    emit bgmChanged();
+}
+
+void BroadcastController::setBgmUseCustomFolder(bool enabled)
+{
+    if (m_bgmUseCustomFolder == enabled) return;
+    m_bgmUseCustomFolder = enabled;
+    emit bgmSettingsChanged();
+    scanBgmFolder();
+    saveState();
+}
+
+void BroadcastController::browseBgmFolder()
+{
+    const QString startDir = m_bgmCustomFolder.isEmpty()
+        ? QStandardPaths::writableLocation(QStandardPaths::MusicLocation)
+        : m_bgmCustomFolder;
+    const QString dir = QFileDialog::getExistingDirectory(nullptr, tr("Choose Background Music Folder"), startDir);
+    if (dir.isEmpty()) return;
+    m_bgmCustomFolder = dir;
+    m_bgmUseCustomFolder = true;
+    emit bgmSettingsChanged();
+    scanBgmFolder();
+    saveState();
+}
+
+void BroadcastController::browseExtendedFeedBackground()
+{
+    const QString filter = tr("Images and Videos (*.jpg *.jpeg *.png *.webp *.mp4 *.m4v *.mov *.mkv)");
+    const QString startDir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
+    const QString file = QFileDialog::getOpenFileName(nullptr, tr("Choose Extended Feed Background"), startDir, filter);
+    if (file.isEmpty()) return;
+
+    static const QStringList imageExt = {"jpg", "jpeg", "png", "webp"};
+    const QString ext = QFileInfo(file).suffix().toLower();
+    m_extendedFeedBackgroundPath = file;
+    m_extendedFeedBackgroundType = imageExt.contains(ext) ? QStringLiteral("image") : QStringLiteral("video");
+    emit extendedFeedBackgroundChanged();
+    saveState();
+}
+
+void BroadcastController::clearExtendedFeedBackground()
+{
+    if (m_extendedFeedBackgroundPath.isEmpty()) return;
+    m_extendedFeedBackgroundPath.clear();
+    m_extendedFeedBackgroundType.clear();
+    emit extendedFeedBackgroundChanged();
+    saveState();
 }
 
 void BroadcastController::loadBgmTrack(int index)
@@ -465,6 +688,31 @@ void BroadcastController::removeMedia(const QString &id) { m_libraryModel->remov
 bool BroadcastController::hasSecondaryScreen() const { return QGuiApplication::screens().size() > 1; }
 void BroadcastController::updateScreenCount() { emit hasSecondaryScreenChanged(); if (m_feedExtended) openAudienceWindow(); }
 
+void BroadcastController::setExtendedFeedScreenIndex(int index)
+{
+    if (m_extendedFeedScreenIndex == index) return;
+    m_extendedFeedScreenIndex = index;
+    emit extendedFeedScreenIndexChanged();
+    saveState();
+    if (m_feedExtended) openAudienceWindow();
+}
+
+QVariantList BroadcastController::availableScreens() const
+{
+    QVariantList result;
+    const QList<QScreen *> screens = QGuiApplication::screens();
+    for (int i = 0; i < screens.size(); ++i) {
+        QVariantMap m;
+        m.insert("index", i);
+        QScreen *s = screens.at(i);
+        QString label = s->name();
+        if (label.isEmpty()) label = tr("Display %1").arg(i + 1);
+        m.insert("name", QStringLiteral("%1 (%2×%3)").arg(label).arg(s->geometry().width()).arg(s->geometry().height()));
+        result << m;
+    }
+    return result;
+}
+
 QVariantMap BroadcastController::findSong(int num, const QString &lang, bool prefVideo, const QString &track)
 {
     const QString type = prefVideo ? QStringLiteral("video") : QStringLiteral("audio");
@@ -503,7 +751,11 @@ QVariantMap BroadcastController::getSong(int number, const QString &langCode) co
 void BroadcastController::openAudienceWindow()
 {
     const QList<QScreen *> screens = QGuiApplication::screens();
-    QScreen *targetScreen = screens.size() > 1 ? screens.at(1) : QGuiApplication::primaryScreen();
+    QScreen *targetScreen = nullptr;
+    if (m_extendedFeedScreenIndex >= 0 && m_extendedFeedScreenIndex < screens.size())
+        targetScreen = screens.at(m_extendedFeedScreenIndex);
+    if (!targetScreen)
+        targetScreen = screens.size() > 1 ? screens.at(1) : QGuiApplication::primaryScreen();
 
     if (!m_audienceWindow) {
         QQmlComponent component(m_engine, QUrl(QStringLiteral("qrc:/MediaFlow/qml/AudienceWindow.qml")));
@@ -546,6 +798,62 @@ void BroadcastController::openAudienceWindow()
 void BroadcastController::closeAudienceWindow() { if (m_audienceWindow) m_audienceWindow->hide(); m_feedExtended = false; emit feedExtendedChanged(); }
 void BroadcastController::toggleAudienceWindow() { if (m_feedExtended) closeAudienceWindow(); else openAudienceWindow(); }
 
+void BroadcastController::setTimerScreenIndex(int index)
+{
+    if (m_timerScreenIndex == index) return;
+    m_timerScreenIndex = index;
+    emit timerScreenIndexChanged();
+    saveState();
+    // Re-place the window immediately if it's already up, rather than
+    // waiting for the next toggle, so picking a screen while the timer is
+    // already showing takes effect right away.
+    if (m_timerWindow && m_timerWindow->isVisible())
+        setTimerFullScreenActive(true);
+}
+
+void BroadcastController::setTimerFullScreenActive(bool active)
+{
+    if (!active) {
+        if (m_timerWindow) m_timerWindow->hide();
+        return;
+    }
+
+    const QList<QScreen *> screens = QGuiApplication::screens();
+    QScreen *targetScreen = nullptr;
+    if (m_timerScreenIndex >= 0 && m_timerScreenIndex < screens.size())
+        targetScreen = screens.at(m_timerScreenIndex);
+    if (!targetScreen)
+        targetScreen = screens.size() > 1 ? screens.at(1) : QGuiApplication::primaryScreen();
+
+    if (!m_timerWindow) {
+        QQmlComponent component(m_engine, QUrl(QStringLiteral("qrc:/MediaFlow/qml/TimerWindow.qml")));
+        if (component.status() != QQmlComponent::Ready) {
+            qWarning() << "TimerWindow component failed:" << component.errors();
+            return;
+        }
+        QObject *created = component.create();
+        m_timerWindow = qobject_cast<QQuickWindow *>(created);
+        if (!m_timerWindow) {
+            qWarning() << "TimerWindow did not create a QQuickWindow:" << created;
+            if (created) created->deleteLater();
+            return;
+        }
+    }
+
+    m_timerWindow->hide();
+    if (targetScreen)
+        m_timerWindow->setScreen(targetScreen);
+    if (screens.size() > 1 && targetScreen) {
+        m_timerWindow->setGeometry(targetScreen->geometry());
+        m_timerWindow->showFullScreen();
+    } else {
+        m_timerWindow->resize(1280, 720);
+        m_timerWindow->show();
+        m_timerWindow->raise();
+        m_timerWindow->requestActivate();
+    }
+}
+
 bool BroadcastController::openZoomWindow()
 {
     if (!m_zoomWindow) {
@@ -565,29 +873,40 @@ bool BroadcastController::openZoomWindow()
         }
     }
 
-    m_zoomWindow->setGeometry(-10000, -10000, 1920, 1080);
+    // Must be positioned on an actual monitor -- Qt Quick never fires
+    // afterRendering for a window entirely outside every screen's bounds
+    // (confirmed live: the previous (-10000,-10000) placement left
+    // VirtualCameraManager::onAfterRendering never firing at all, so no
+    // frame was ever captured, regardless of the shared-memory protocol
+    // underneath). WindowStaysOnBottomHint (set in VirtualCameraWindow.qml)
+    // keeps it out of the operator's way while still rendering.
+    m_zoomWindow->setGeometry(0, 0, 1920, 1080);
     m_zoomWindow->show();
+    m_zoomWindow->lower();
     return true;
 }
 
 bool BroadcastController::hasVirtualCameraDriver() const
 {
-    // MediaFlow feeds VirtualCameraManager's output through the UnityCapture
-    // shared-memory protocol (see UnityCaptureWriter), whose DirectShow filter
-    // registers as "Unity Video Capture". Qt6's QMediaDevices enumerates
-    // cameras via Windows Media Foundation, which does not reliably surface a
-    // classic DirectShow-only capture filter -- confirmed live: even with the
-    // driver correctly registered (verified in the registry), it never
-    // appeared in QMediaDevices::videoInputs(). So check what the question is
-    // actually asking -- "is the driver installed" -- directly against the
-    // registry's DirectShow video capture sources category, which is
-    // authoritative regardless of what any particular app's camera picker shows.
+    // MediaFlow feeds VirtualCameraManager's output directly into OBS
+    // Studio's own virtual-camera shared-memory protocol (see
+    // ObsVirtualCamWriter) -- installing OBS Studio once registers its
+    // DirectShow filter ("OBS Virtual Camera") system-wide; OBS Studio
+    // itself never needs to run. Qt6's QMediaDevices enumerates cameras via
+    // Windows Media Foundation, which doesn't reliably surface classic
+    // DirectShow-only capture filters (confirmed with the previous
+    // UnityCapture-based driver: correctly registered, verified in the
+    // registry, yet never appeared in QMediaDevices::videoInputs()). So
+    // check what the question is actually asking -- "is the driver
+    // installed" -- directly against the registry's DirectShow video
+    // capture sources category, which is authoritative regardless of what
+    // any particular app's camera picker shows.
     QSettings reg(QStringLiteral("HKEY_LOCAL_MACHINE\\SOFTWARE\\Classes\\CLSID\\{860BB310-5D01-11d0-BD3B-00A0C911CE86}\\Instance"),
                   QSettings::NativeFormat);
     const QStringList instances = reg.childGroups();
     for (const QString &instance : instances) {
         const QString friendlyName = reg.value(instance + QStringLiteral("/FriendlyName")).toString();
-        if (friendlyName.contains(QStringLiteral("Unity"), Qt::CaseInsensitive))
+        if (friendlyName.contains(QStringLiteral("OBS Virtual Camera"), Qt::CaseInsensitive))
             return true;
     }
 
@@ -597,17 +916,27 @@ bool BroadcastController::hasVirtualCameraDriver() const
 void BroadcastController::toggleZoomBroadcast() { 
     qDebug() << "toggleZoomBroadcast() clicked!";
     if (m_vcamManager->isBroadcasting()) {
-        m_vcamManager->stop(); 
+        m_vcamManager->stop();
         if (m_zoomWindow)
             m_zoomWindow->hide();
+        m_duckingExemptionTimer->stop();
     } else {
         if (!hasVirtualCameraDriver()) {
             qWarning() << "OBS Virtual Camera is not installed or not detected.";
         } else if (openZoomWindow() && m_zoomWindow) {
             m_vcamManager->start(m_zoomWindow.data());
+            // Re-apply the ducking exemption -- Zoom joining/activating its
+            // call session is exactly the trigger Windows watches for, and
+            // it can (re-)apply ducking to sessions right around that point.
+            // Kept running every 2s for as long as broadcasting is on (not
+            // just once) because a Cut/Take to a new video or a fresh BGM
+            // track can tear down and recreate the underlying WASAPI audio
+            // session, which comes back in the default (duckable) state.
+            exemptProcessAudioFromDucking();
+            m_duckingExemptionTimer->start();
         }
     }
-    m_vcamEnabled = m_vcamManager->isBroadcasting(); 
+    m_vcamEnabled = m_vcamManager->isBroadcasting();
     emit vcamEnabledChanged(); 
 }
 
@@ -735,6 +1064,13 @@ void BroadcastController::saveState()
     const QString code = SongSearchUtils::normalizeLanguageCode(m_languageCode);
     root["currentLanguageCode"] = code;
     root["currentLanguageName"] = SongSearchUtils::languageNameForCode(code);
+    root["extendedFeedScreenIndex"] = m_extendedFeedScreenIndex;
+    root["timerScreenIndex"] = m_timerScreenIndex;
+    root["bgmUseCustomFolder"] = m_bgmUseCustomFolder;
+    root["bgmCustomFolder"] = m_bgmCustomFolder;
+    root["extendedFeedBackgroundPath"] = m_extendedFeedBackgroundPath;
+    root["extendedFeedBackgroundType"] = m_extendedFeedBackgroundType;
+    root["customLanguages"] = QJsonArray::fromVariantList(m_customLanguages);
     file.write(QJsonDocument(root).toJson());
     file.commit();
 }
@@ -766,7 +1102,14 @@ void BroadcastController::loadState()
     m_meetingModel->setFullState("weekend", root["weekend"].toArray().toVariantList());
     m_meetingType = root["meetingType"].toString("midweek");
     const QString loadedLanguage = root["currentLanguageCode"].toString(root["languageCode"].toString("E"));
-    
+    m_extendedFeedScreenIndex = root["extendedFeedScreenIndex"].toInt(-1);
+    m_timerScreenIndex = root["timerScreenIndex"].toInt(-1);
+    m_bgmUseCustomFolder = root["bgmUseCustomFolder"].toBool(false);
+    m_bgmCustomFolder = root["bgmCustomFolder"].toString();
+    m_extendedFeedBackgroundPath = root["extendedFeedBackgroundPath"].toString();
+    m_extendedFeedBackgroundType = root["extendedFeedBackgroundType"].toString();
+    m_customLanguages = root["customLanguages"].toArray().toVariantList();
+
     // Sync models with loaded state
     if (m_meetingModel) m_meetingModel->loadMeeting(m_meetingType);
     applyLanguageCode(loadedLanguage, false, false);
@@ -870,14 +1213,60 @@ QVariantMap BroadcastController::addMediaToSegment(const QString &segmentId, con
         if (firstResult.isEmpty())
             firstResult = m_libraryModel->getRowById(id);
     }
-    if (row != -1)
+    if (row != -1) {
         saveState();
+        // addLinkedMedia() above only updates MeetingScheduleModel -- it does
+        // not refresh StagedMediaProxyModel's stagedIds, which is what
+        // Active Media actually filters against. Without this, newly added
+        // media shows up in the Sequence chips (which read linkedMediaIds
+        // directly) but never appears in Active Media itself, since the
+        // proxy's stagedIds is stale until something re-selects the segment.
+        if (segmentId == m_selectedSegmentId)
+            selectSegment(segmentId);
+    }
 
     return firstResult;
 }
 
 QVariantList BroadcastController::getSupportedLanguages() const {
-    return SongSearchUtils::supportedLanguages();
+    QVariantList result = SongSearchUtils::supportedLanguages();
+    result.append(m_customLanguages);
+    return result;
+}
+
+void BroadcastController::addCustomLanguage(const QString &name, const QString &code)
+{
+    const QString trimmedName = name.trimmed();
+    const QString upperCode = code.trimmed().toUpper();
+    if (trimmedName.isEmpty() || upperCode.isEmpty() || upperCode.length() > 3)
+        return;
+
+    // Reject duplicates against both built-ins and existing customs -- the
+    // filename marker filter matches by code, so two languages sharing one
+    // would be indistinguishable in Active Media.
+    for (const auto &v : getSupportedLanguages()) {
+        if (v.toMap().value("code").toString().compare(upperCode, Qt::CaseInsensitive) == 0)
+            return;
+    }
+
+    QVariantMap lang;
+    lang.insert("name", trimmedName);
+    lang.insert("code", upperCode);
+    m_customLanguages.append(lang);
+    emit languagesChanged();
+    saveState();
+}
+
+void BroadcastController::removeCustomLanguage(const QString &code)
+{
+    for (int i = 0; i < m_customLanguages.size(); ++i) {
+        if (m_customLanguages.at(i).toMap().value("code").toString().compare(code, Qt::CaseInsensitive) == 0) {
+            m_customLanguages.removeAt(i);
+            emit languagesChanged();
+            saveState();
+            return;
+        }
+    }
 }
 
 QVariantMap BroadcastController::getLanguageMap() const {

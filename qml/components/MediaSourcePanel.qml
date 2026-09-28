@@ -57,15 +57,21 @@ Item {
                     ]
                     Rectangle {
                         readonly property bool isActive: root.currentView === modelData.id || (modelData.id === "library" && root.currentView === "pins")
+                        // ACTIVE MEDIA's tab pill picks up the current meeting's
+                        // identity color (see Theme.meetingAccent) so the whole
+                        // panel visibly ties to Midweek vs. Weekend; QUICK FETCH
+                        // stays neutral since pins aren't meeting-specific.
+                        readonly property color activeColor: modelData.id === "segment" ? Theme.meetingAccent((MediaFlowBackend || {}).meetingType) : Theme.textPrimary
                         width: 110; height: 32; radius: 16
-                        color: isActive ? "#1AFFFFFF" : "transparent"
-                        border.width: 1; border.color: isActive ? "#33FFFFFF" : "transparent"
+                        color: isActive ? Qt.rgba(activeColor.r, activeColor.g, activeColor.b, 0.16) : "transparent"
+                        border.width: 1; border.color: isActive ? Qt.rgba(activeColor.r, activeColor.g, activeColor.b, 0.4) : "transparent"
+                        Behavior on color { ColorAnimation { duration: Theme.durationFast } }
 
                         RowLayout {
                             anchors.centerIn: parent; spacing: 6
                             BroadcastIcon { name: modelData.icon; iconSize: 12; opacity: parent.parent.isActive ? 1 : 0.5 }
                             Label {
-                                text: modelData.label; color: parent.parent.isActive ? "white" : "#6b7280"
+                                text: modelData.label; color: parent.parent.isActive ? parent.parent.activeColor : Theme.textDim
                                 font.bold: true; font.pixelSize: 10; font.letterSpacing: 0.5
                             }
                         }
@@ -88,7 +94,7 @@ Item {
                 // Import Button — file dialog supports multi-select, so an
                 // operator can add several images/videos in one pass.
                 Rectangle {
-                    width: 32; height: 32; radius: 8; color: "#10b981"
+                    width: 32; height: 32; radius: 8; color: Theme.accentEmerald
                     BroadcastIcon { anchors.centerIn: parent; name: "plus"; color: "white"; iconSize: 14 }
                     MouseArea {
                         anchors.fill: parent; cursorShape: Qt.PointingHandCursor
@@ -367,13 +373,29 @@ Item {
             id: delegateRoot
             width: grid.cellWidth; height: grid.cellHeight
 
+            // Reorder target -- delegateRoot stays put at its grid cell while
+            // assetCard reparents away during drag (see states below), so
+            // this is what a dragged card can actually be dropped onto.
+            // Only meaningful in the Active Media (segment) view, where
+            // StagedMediaProxyModel now sorts by link order (see
+            // StagedMediaProxyModel::lessThan) rather than natural order.
+            DropArea {
+                anchors.fill: parent
+                enabled: root.currentView === "segment"
+                onDropped: (drop) => {
+                    if (drop.hasText && drop.text !== "" && drop.text !== model.id) {
+                        MediaFlowBackend.reorderSegmentMedia(drop.text, model.id)
+                    }
+                }
+            }
+
             Rectangle {
                 id: assetCard
                 // Fixed size (not anchors.fill) so it keeps its dimensions once
                 // detached from layout anchoring during a drag.
                 width: delegateRoot.width - 12; height: delegateRoot.height - 12
-                radius: 10; clip: true; color: "#1AFFFFFF"
-                border.width: 1; border.color: cardMa.containsMouse ? "#33FFFFFF" : "transparent"
+                radius: Theme.radius; clip: true; color: Theme.surfaceHover
+                border.width: 1; border.color: cardMa.containsMouse ? Theme.panelBorderStrong : "transparent"
 
                 anchors.left: !cardMa.drag.active ? parent.left : undefined
                 anchors.top: !cardMa.drag.active ? parent.top : undefined
@@ -420,7 +442,7 @@ Item {
                 // Delete/Remove Button
                 Rectangle {
                     anchors.top: parent.top; anchors.right: parent.right; anchors.margins: 8
-                    width: 26; height: 26; radius: 6; color: "#EF4444"
+                    width: 26; height: 26; radius: 6; color: Theme.accentRed
                     opacity: cardMa.containsMouse ? 1.0 : 0.0
                     Behavior on opacity { NumberAnimation { duration: 150 } }
                     BroadcastIcon { anchors.centerIn: parent; name: "trash"; color: "white"; iconSize: 12 }
@@ -446,9 +468,9 @@ Item {
                     }
                     Row {
                         spacing: 4
-                        BroadcastIcon { anchors.verticalCenter: parent.verticalCenter; name: model.type; color: "#6b7280"; iconSize: 10 }
-                        Label { text: model.type.toUpperCase(); color: "#6b7280"; font.pixelSize: 8; font.bold: true }
-                        Label { text: " • " + model.category.toUpperCase(); color: "#4b5563"; font.pixelSize: 8; font.bold: true }
+                        BroadcastIcon { anchors.verticalCenter: parent.verticalCenter; name: model.type; color: Theme.textDim; iconSize: 10 }
+                        Label { text: model.type.toUpperCase(); color: Theme.textDim; font.pixelSize: 8; font.bold: true }
+                        Label { text: " • " + model.category.toUpperCase(); color: Theme.textFaint; font.pixelSize: 8; font.bold: true }
                     }
                 }
 

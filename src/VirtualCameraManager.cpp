@@ -1,8 +1,20 @@
 #include "VirtualCameraManager.h"
-#include "UnityCaptureWriter.h"
+#include "ObsVirtualCamWriter.h"
 #include <QtConcurrent>
 #include <QOpenGLContext>
 #include <QImage>
+#include <QDebug>
+#include <algorithm>
+
+namespace {
+// The OBS shared-memory queue's buffer size is fixed at creation time, so
+// we normalize every captured frame to this resolution regardless of the
+// source window's actual pixel size (matches VirtualCameraWindow.qml's own
+// fixed 1920x1080, but stays correct even if that ever changes).
+constexpr int kTargetWidth = 1920;
+constexpr int kTargetHeight = 1080;
+constexpr double kTargetFps = 30.0;
+} // namespace
 
 VirtualCameraManager::VirtualCameraManager(QObject *parent)
     : QObject(parent), m_pbo{QOpenGLBuffer(QOpenGLBuffer::PixelPackBuffer), QOpenGLBuffer(QOpenGLBuffer::PixelPackBuffer)}
@@ -28,7 +40,18 @@ void VirtualCameraManager::start(QQuickWindow *window)
     m_pboIndex = 0;
     m_hasPendingRead = false;
 
-    m_writer = std::make_unique<UnityCaptureWriter>();
+    m_writer = std::make_unique<ObsVirtualCamWriter>();
+    if (!m_writer->start(kTargetWidth, kTargetHeight, kTargetFps)) {
+        // Most likely cause: OBS Studio's own "Start Virtual Camera" (or
+        // another producer) already holds the shared memory -- only one
+        // producer at a time is possible, matching OBS's own semantics.
+        qWarning() << "VirtualCameraManager: failed to start OBS Virtual Camera producer "
+                      "(is OBS Studio's own virtual camera already running?)";
+        m_writer.reset();
+        m_isBroadcasting = false;
+        m_window = nullptr;
+        return;
+    }
 
     connect(m_window.data(), &QQuickWindow::afterRendering, this, &VirtualCameraManager::onAfterRendering, Qt::DirectConnection);
 }
@@ -46,9 +69,18 @@ void VirtualCameraManager::stop()
     }
 
     m_writer.reset();
-    
+
     if (m_pbo[0].isCreated()) m_pbo[0].destroy();
     if (m_pbo[1].isCreated()) m_pbo[1].destroy();
+
+    // Without this, a restart's first onAfterRendering() sees an unchanged
+    // window size and skips PBO reallocation (see the m_lastSize check
+    // below), leaving the freshly-recreated-but-never-allocated PBOs from
+    // just above in place -- glReadPixels into an unallocated PBO silently
+    // produces no usable frame, so the feed never resumes after a
+    // stop/start cycle even though start() reports success.
+    m_lastSize = QSize();
+    m_hasPendingRead = false;
 }
 
 void VirtualCameraManager::onAfterRendering()
@@ -103,14 +135,46 @@ void VirtualCameraManager::processFrame(const QByteArray &rgbaData, const QSize 
 {
     if (!m_writer) return;
 
-    // UnityCapture's FORMAT_UINT8 is DXGI_FORMAT_R8G8B8A8_UNORM — the exact
-    // same byte layout as QImage::Format_RGBA8888, so the captured frame can
-    // be sent as-is: no YUV/NV12 conversion, no channel reordering.
     QImage img(reinterpret_cast<const uchar *>(rgbaData.data()), size.width(), size.height(), QImage::Format_RGBA8888);
     QImage flipped = img.mirrored(false, true); // OpenGL readback is bottom-up
 
-    // Format_RGBA8888 is always 4 bytes/pixel, so Qt never pads rows for it —
-    // constBits() is safe to treat as tightly packed (bytesPerLine == width*4),
-    // matching the tightly-packed layout sendFrame() expects.
-    m_writer->sendFrame(flipped.width(), flipped.height(), flipped.constBits());
+    QImage frame = flipped;
+    if (frame.width() != kTargetWidth || frame.height() != kTargetHeight)
+        frame = flipped.scaled(kTargetWidth, kTargetHeight, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+    // Format_RGBA8888 is always 4 bytes/pixel, so Qt never pads rows for it,
+    // and .scaled() preserves the format -- safe to treat both as tightly
+    // packed (bytesPerLine == width*4).
+
+    // Convert to NV12 (Y plane followed by interleaved U/V), which is what
+    // OBS's shared-memory queue expects. Reads raw scanline bytes directly
+    // (R,G,B,A in that byte order for Format_RGBA8888) rather than casting
+    // to QRgb* and using qRed/qGreen/qBlue -- those assume ARGB32 packing,
+    // not RGBA8888's literal byte layout, which was a real bug in an earlier
+    // version of this conversion (silently swapped/misread channels).
+    const int w = kTargetWidth;
+    const int h = kTargetHeight;
+    QByteArray nv12(static_cast<int>(w * h * 3 / 2), Qt::Uninitialized);
+    auto *y = reinterpret_cast<uint8_t *>(nv12.data());
+    uint8_t *uv = y + (w * h);
+
+    for (int j = 0; j < h; ++j) {
+        const uchar *line = frame.constScanLine(j);
+        for (int i = 0; i < w; ++i) {
+            const uchar *px = line + i * 4;
+            const int r = px[0], g = px[1], b = px[2];
+
+            const int yVal = ((66 * r + 129 * g + 25 * b + 128) >> 8) + 16;
+            y[j * w + i] = static_cast<uint8_t>(std::clamp(yVal, 0, 255));
+
+            if ((j % 2) == 0 && (i % 2) == 0) {
+                const int uVal = ((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128;
+                const int vVal = ((112 * r - 94 * g - 18 * b + 128) >> 8) + 128;
+                const int uvIdx = (j / 2) * w + i;
+                uv[uvIdx] = static_cast<uint8_t>(std::clamp(uVal, 0, 255));
+                uv[uvIdx + 1] = static_cast<uint8_t>(std::clamp(vVal, 0, 255));
+            }
+        }
+    }
+
+    m_writer->writeFrame(reinterpret_cast<const uint8_t *>(nv12.constData()));
 }
