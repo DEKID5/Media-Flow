@@ -61,6 +61,11 @@ class BroadcastController final : public QObject
     Q_PROPERTY(bool feedExtended READ feedExtended NOTIFY feedExtendedChanged)
     Q_PROPERTY(bool hasSecondaryScreen READ hasSecondaryScreen NOTIFY hasSecondaryScreenChanged)
     Q_PROPERTY(QString scanStatus READ scanStatus NOTIFY scanStatusChanged)
+    // True once the first (startup) library scan has finished -- the splash
+    // screen (qml/SplashScreen.qml) waits on this before showing the main
+    // window, so the operator doesn't see an empty/flickering dashboard
+    // while assets are still being discovered.
+    Q_PROPERTY(bool initialScanComplete READ initialScanComplete NOTIFY initialScanCompleteChanged)
 
     // --- Settings ---
     // -1 = automatic (today's screens.at(1)-or-primary behavior).
@@ -124,6 +129,7 @@ public:
     bool feedExtended() const { return m_feedExtended; }
     bool hasSecondaryScreen() const;
     QString scanStatus() const { return m_scanStatus; }
+    bool initialScanComplete() const { return m_initialScanComplete; }
 
     int extendedFeedScreenIndex() const { return m_extendedFeedScreenIndex; }
     void setExtendedFeedScreenIndex(int index);
@@ -267,6 +273,7 @@ signals:
     void vcamEnabledChanged();
     void programCameraDeviceChanged();
     void scanStatusChanged();
+    void initialScanCompleteChanged();
     void hasSecondaryScreenChanged();
     void extendedFeedScreenIndexChanged();
     void timerScreenIndexChanged();
@@ -327,6 +334,7 @@ private:
     bool m_vcamEnabled = false;
     bool m_feedExtended = false;
     QString m_scanStatus;
+    bool m_initialScanComplete = false;
     QCameraDevice m_programCameraDevice;
     int m_extendedFeedScreenIndex = -1;
     int m_timerScreenIndex = -1;

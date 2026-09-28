@@ -1115,7 +1115,15 @@ void BroadcastController::onMediaFound(MediaType type, const QString &name, cons
     if (m_thumbManager) m_thumbManager->enqueue(id, absolutePath, typeStr);
 }
 
-void BroadcastController::onScanFinished() { m_scanStatus = tr("Scan complete."); emit scanStatusChanged(); }
+void BroadcastController::onScanFinished()
+{
+    m_scanStatus = tr("Scan complete.");
+    emit scanStatusChanged();
+    if (!m_initialScanComplete) {
+        m_initialScanComplete = true;
+        emit initialScanCompleteChanged();
+    }
+}
 
 void BroadcastController::saveState()
 {

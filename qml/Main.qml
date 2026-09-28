@@ -14,9 +14,22 @@ ApplicationWindow {
     // let the window actually be resized smaller without breaking the layout.
     minimumWidth: 1300
     minimumHeight: 700
-    visible: true
+    // Stays hidden until the splash screen signals it's done (see below) --
+    // showing this immediately let the operator see an empty dashboard
+    // flash while the startup library scan was still running.
+    visible: false
     title: qsTr("MediaFlow — Broadcast Suite")
     color: "#050505"
+
+    SplashScreen {
+        id: splash
+        onFinished: {
+            operatorRoot.visible = true
+            operatorRoot.raise()
+            operatorRoot.requestActivate()
+            splash.destroy()
+        }
+    }
 
     Rectangle {
         anchors.fill: parent

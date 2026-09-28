@@ -65,6 +65,7 @@ qt_add_qml_module(mediaflow
     VERSION 1.0
     QML_FILES
         qml/Main.qml
+        qml/SplashScreen.qml
         qml/Theme.qml
         qml/OperatorDashboard.qml
         qml/AudienceWindow.qml
