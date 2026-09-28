@@ -270,15 +270,22 @@ QVariantList WorkbookManager::availableWeeks() const
                 QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
                 db.setDatabaseName(dbPath);
                 if (db.open()) {
-                    QSqlQuery q(db);
-                    // mwb's date text is in Title; w's is in the separate
-                    // ContextTitle column (see applyFromLocal{Mwb,Watchtower}).
-                    const bool isW = (pubPrefix == QStringLiteral("w"));
-                    if (q.exec(isW ? QStringLiteral("SELECT ContextTitle FROM Document")
-                                   : QStringLiteral("SELECT Title FROM Document"))) {
-                        while (q.next()) {
-                            const QDate start = parseWeekStart(q.value(0).toString(), QDate::currentDate().year());
-                            if (start.isValid()) dates.insert(start);
+                    // QSqlQuery scoped separately so its destructor (which
+                    // finalizes the underlying SQLite statement) runs before
+                    // db.close() -- calling close() while the query object
+                    // is still alive, even after .clear(), is what Qt's
+                    // "connection ... is still in use" warning is about.
+                    {
+                        QSqlQuery q(db);
+                        // mwb's date text is in Title; w's is in the separate
+                        // ContextTitle column (see applyFromLocal{Mwb,Watchtower}).
+                        const bool isW = (pubPrefix == QStringLiteral("w"));
+                        if (q.exec(isW ? QStringLiteral("SELECT ContextTitle FROM Document")
+                                       : QStringLiteral("SELECT Title FROM Document"))) {
+                            while (q.next()) {
+                                const QDate start = parseWeekStart(q.value(0).toString(), QDate::currentDate().year());
+                                if (start.isValid()) dates.insert(start);
+                            }
                         }
                     }
                     db.close();
@@ -342,17 +349,19 @@ bool WorkbookManager::applyFromLocalMwb(const QString &lang, const QDate &target
             QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
             db.setDatabaseName(dbPath);
             if (db.open()) {
-                QSqlQuery q(db);
-                // mwb has no separate date field -- the week's own Title
-                // *is* the date range (e.g. "September 28-October 4").
-                if (q.exec(QStringLiteral("SELECT DocumentId, Title FROM Document ORDER BY DocumentId"))) {
-                    while (q.next()) {
-                        const int docId = q.value(0).toInt();
-                        const QString title = q.value(1).toString();
-                        const QDate start = parseWeekStart(title, targetDate.year());
-                        if (!start.isValid()) continue;
-                        const int diff = static_cast<int>(qAbs(start.daysTo(targetDate)));
-                        if (diff < best.diff) best = {dbPath, docId, title, diff};
+                {
+                    QSqlQuery q(db);
+                    // mwb has no separate date field -- the week's own Title
+                    // *is* the date range (e.g. "September 28-October 4").
+                    if (q.exec(QStringLiteral("SELECT DocumentId, Title FROM Document ORDER BY DocumentId"))) {
+                        while (q.next()) {
+                            const int docId = q.value(0).toInt();
+                            const QString title = q.value(1).toString();
+                            const QDate start = parseWeekStart(title, targetDate.year());
+                            if (!start.isValid()) continue;
+                            const int diff = static_cast<int>(qAbs(start.daysTo(targetDate)));
+                            if (diff < best.diff) best = {dbPath, docId, title, diff};
+                        }
                     }
                 }
                 db.close();
@@ -371,17 +380,19 @@ bool WorkbookManager::applyFromLocalMwb(const QString &lang, const QDate &target
         QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
         db.setDatabaseName(best.dbPath);
         if (db.open()) {
-            QSqlQuery q(db);
-            // "sjjm" is the song-video/audio publication symbol; its Track
-            // number is the song number, in document (opening/middle/
-            // concluding) order -- confirmed against a real local database.
-            q.prepare(QStringLiteral(
-                "SELECT m.Track FROM DocumentMultimedia dm "
-                "JOIN Multimedia m ON dm.MultimediaId = m.MultimediaId "
-                "WHERE dm.DocumentId = ? AND m.KeySymbol = 'sjjm' "
-                "ORDER BY dm.MultimediaId"));
-            q.addBindValue(best.docId);
-            if (q.exec()) { while (q.next()) songNumbers.append(q.value(0).toInt()); }
+            {
+                QSqlQuery q(db);
+                // "sjjm" is the song-video/audio publication symbol; its Track
+                // number is the song number, in document (opening/middle/
+                // concluding) order -- confirmed against a real local database.
+                q.prepare(QStringLiteral(
+                    "SELECT m.Track FROM DocumentMultimedia dm "
+                    "JOIN Multimedia m ON dm.MultimediaId = m.MultimediaId "
+                    "WHERE dm.DocumentId = ? AND m.KeySymbol = 'sjjm' "
+                    "ORDER BY dm.MultimediaId"));
+                q.addBindValue(best.docId);
+                if (q.exec()) { while (q.next()) songNumbers.append(q.value(0).toInt()); }
+            }
             db.close();
         }
         QSqlDatabase::removeDatabase(connName);
@@ -409,21 +420,23 @@ bool WorkbookManager::applyFromLocalWatchtower(const QString &lang, const QDate 
             QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
             db.setDatabaseName(dbPath);
             if (db.open()) {
-                QSqlQuery q(db);
-                // Unlike mwb, the Watchtower article's Title is its real
-                // headline -- the study date lives in the separate
-                // ContextTitle column instead (e.g. "SEPTEMBER 28-OCTOBER
-                // 4, 2026"), confirmed against a real local database.
-                if (q.exec(QStringLiteral("SELECT DocumentId, Title, ContextTitle FROM Document ORDER BY DocumentId"))) {
-                    while (q.next()) {
-                        const int docId = q.value(0).toInt();
-                        const QString title = q.value(1).toString();
-                        const QString contextTitle = q.value(2).toString();
-                        if (contextTitle.isEmpty()) continue;
-                        const QDate start = parseWeekStart(contextTitle, targetDate.year());
-                        if (!start.isValid()) continue;
-                        const int diff = static_cast<int>(qAbs(start.daysTo(targetDate)));
-                        if (diff < best.diff) best = {dir.absolutePath(), dbPath, docId, title, diff};
+                {
+                    QSqlQuery q(db);
+                    // Unlike mwb, the Watchtower article's Title is its real
+                    // headline -- the study date lives in the separate
+                    // ContextTitle column instead (e.g. "SEPTEMBER 28-OCTOBER
+                    // 4, 2026"), confirmed against a real local database.
+                    if (q.exec(QStringLiteral("SELECT DocumentId, Title, ContextTitle FROM Document ORDER BY DocumentId"))) {
+                        while (q.next()) {
+                            const int docId = q.value(0).toInt();
+                            const QString title = q.value(1).toString();
+                            const QString contextTitle = q.value(2).toString();
+                            if (contextTitle.isEmpty()) continue;
+                            const QDate start = parseWeekStart(contextTitle, targetDate.year());
+                            if (!start.isValid()) continue;
+                            const int diff = static_cast<int>(qAbs(start.daysTo(targetDate)));
+                            if (diff < best.diff) best = {dir.absolutePath(), dbPath, docId, title, diff};
+                        }
                     }
                 }
                 db.close();
@@ -443,14 +456,16 @@ bool WorkbookManager::applyFromLocalWatchtower(const QString &lang, const QDate 
         QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
         db.setDatabaseName(best.dbPath);
         if (db.open()) {
-            QSqlQuery sq(db);
-            sq.prepare(QStringLiteral(
-                "SELECT m.Track FROM DocumentMultimedia dm "
-                "JOIN Multimedia m ON dm.MultimediaId = m.MultimediaId "
-                "WHERE dm.DocumentId = ? AND m.KeySymbol = 'sjjm' "
-                "ORDER BY dm.MultimediaId"));
-            sq.addBindValue(best.docId);
-            if (sq.exec()) { while (sq.next()) songNumbers.append(sq.value(0).toInt()); }
+            {
+                QSqlQuery sq(db);
+                sq.prepare(QStringLiteral(
+                    "SELECT m.Track FROM DocumentMultimedia dm "
+                    "JOIN Multimedia m ON dm.MultimediaId = m.MultimediaId "
+                    "WHERE dm.DocumentId = ? AND m.KeySymbol = 'sjjm' "
+                    "ORDER BY dm.MultimediaId"));
+                sq.addBindValue(best.docId);
+                if (sq.exec()) { while (sq.next()) songNumbers.append(sq.value(0).toInt()); }
+            }
             db.close();
         }
         QSqlDatabase::removeDatabase(connName);
