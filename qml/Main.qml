@@ -23,6 +23,18 @@ ApplicationWindow {
     title: qsTr("MediaFlow — Broadcast Suite")
     color: "#050505"
 
+    // Without this, closing this window alone doesn't actually end the app
+    // if Extended Feed, the full-screen timer, or Zoom broadcasting left
+    // one of their own separate windows open -- Qt won't quit while any
+    // top-level window is still visible, so the process (still sending
+    // frames to Zoom, still showing content on the audience screen) kept
+    // running invisibly in the background. Stop/hide everything first,
+    // then quit unconditionally regardless of what else might be open.
+    onClosing: (close) => {
+        MediaFlowBackend.shutdownAllOutputs()
+        Qt.quit()
+    }
+
     SplashScreen {
         id: splash
         onFinished: {
