@@ -167,8 +167,21 @@ void VirtualCameraManager::processFrame(const QByteArray &rgbaData, const QSize 
             y[j * w + i] = static_cast<uint8_t>(std::clamp(yVal, 0, 255));
 
             if ((j % 2) == 0 && (i % 2) == 0) {
-                const int uVal = ((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128;
-                const int vVal = ((112 * r - 94 * g - 18 * b + 128) >> 8) + 128;
+                // Average all 4 pixels in this 2x2 block rather than just
+                // sampling the top-left one -- point-sampling aliases color
+                // edges (sharp-colored text/logos) more than a proper box
+                // filter does; w/h are always even (kTargetWidth/Height), so
+                // the +1 row/col reads are safe.
+                const uchar *lineBelow = frame.constScanLine(j + 1);
+                const uchar *pxRight = px + 4;
+                const uchar *pxBelow = lineBelow + i * 4;
+                const uchar *pxBelowRight = lineBelow + (i + 1) * 4;
+                const int rAvg = (r + pxRight[0] + pxBelow[0] + pxBelowRight[0] + 2) / 4;
+                const int gAvg = (g + pxRight[1] + pxBelow[1] + pxBelowRight[1] + 2) / 4;
+                const int bAvg = (b + pxRight[2] + pxBelow[2] + pxBelowRight[2] + 2) / 4;
+
+                const int uVal = ((-38 * rAvg - 74 * gAvg + 112 * bAvg + 128) >> 8) + 128;
+                const int vVal = ((112 * rAvg - 94 * gAvg - 18 * bAvg + 128) >> 8) + 128;
                 const int uvIdx = (j / 2) * w + i;
                 uv[uvIdx] = static_cast<uint8_t>(std::clamp(uVal, 0, 255));
                 uv[uvIdx + 1] = static_cast<uint8_t>(std::clamp(vVal, 0, 255));
