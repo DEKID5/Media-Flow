@@ -87,6 +87,10 @@ Window {
         z: 3
         fillMode: Image.PreserveAspectFit
         asynchronous: true
+        // Prevents shimmer/aliasing on fine detail (text, thin lines) when a
+        // high-res source photo is minified to fit this window, then
+        // minified again by VirtualCameraManager's scale-to-1080p pass.
+        mipmap: true
         visible: {
             let a = (MediaFlowBackend || {}).broadcastEngine ? MediaFlowBackend.broadcastEngine.programAsset : null
             return a && a.type === "image" && a.absolutePath
