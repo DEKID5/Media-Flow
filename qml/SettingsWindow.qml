@@ -392,11 +392,11 @@ Window {
                     text: "Click BROADCAST TO ZOOM, then in Zoom's own camera picker choose \"OBS Virtual Camera.\" Whatever's on Program shows there; when nothing is, it falls back to the webcam unless WEBCAM FORCE-OFF is on. Room audio always stays on your speakers -- nothing is sent to Zoom through this app."
                 }
 
-                Label { text: "Image slideshows"; color: Theme.textPrimary; font.bold: true; font.pixelSize: Theme.textSm; Layout.topMargin: Theme.space3 }
+                Label { text: "Folder slideshows"; color: Theme.textPrimary; font.bold: true; font.pixelSize: Theme.textSm; Layout.topMargin: Theme.space3 }
                 Label {
                     Layout.fillWidth: true; wrapMode: Text.WordWrap
                     color: Theme.textDim; font.pixelSize: Theme.textXs
-                    text: "Add several images to a pin folder, then drag that folder onto the PREVIEW monitor to cycle through them unattended for review, or onto the LIVE monitor to put them on air one after another automatically (each shown for 6s). Every Take -- including each slide in a live slideshow -- fades over about 2 seconds instead of cutting instantly; CUT is still instant."
+                    text: "Add several videos and/or images to a pin folder, then drag that folder onto either monitor -- it puts the first one live immediately and keeps going through the rest on its own (a video advances when it ends; an image advances after 6s) until you hit STOP. Every Take, including each step of the slideshow, fades over about 2 seconds instead of cutting instantly; CUT is still instant. Clicking any other card manually stops the slideshow."
                 }
             }
 
