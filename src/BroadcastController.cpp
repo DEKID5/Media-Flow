@@ -1119,7 +1119,22 @@ void BroadcastController::toggleZoomBroadcast() {
         }
     }
     m_vcamEnabled = m_vcamManager->isBroadcasting();
-    emit vcamEnabledChanged(); 
+    emit vcamEnabledChanged();
+}
+
+void BroadcastController::shutdownAllOutputs()
+{
+    if (m_vcamManager->isBroadcasting()) {
+        m_vcamManager->stop();
+        m_duckingExemptionTimer->stop();
+    }
+    if (m_zoomWindow) m_zoomWindow->hide();
+    if (m_audienceWindow) m_audienceWindow->hide();
+    if (m_timerWindow) m_timerWindow->hide();
+    m_vcamEnabled = false;
+    m_feedExtended = false;
+    emit vcamEnabledChanged();
+    emit feedExtendedChanged();
 }
 
 void BroadcastController::clearMediaIndexes()

@@ -273,6 +273,15 @@ public:
     Q_INVOKABLE void toggleAudienceWindow();
     Q_INVOKABLE void toggleZoomBroadcast();
     Q_INVOKABLE bool hasVirtualCameraDriver() const;
+    // Closing Main.qml's window alone doesn't actually quit the app if
+    // Extended Feed, the full-screen timer, or Zoom broadcasting left one
+    // of their own top-level windows open -- Qt won't fire its "quit on
+    // last window closed" behavior while any of them are still visible, so
+    // the process (and everything it's still doing: sending frames to
+    // Zoom, showing content on the audience screen) silently keeps running
+    // in the background. Called from Main.qml's onClosing before Qt.quit(),
+    // this stops/hides all of them unconditionally first.
+    Q_INVOKABLE void shutdownAllOutputs();
 
     Q_INVOKABLE QVariantList getSupportedLanguages() const;
     Q_INVOKABLE QVariantMap getLanguageMap() const;
