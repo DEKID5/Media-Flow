@@ -71,10 +71,16 @@ DockPanel {
                     visible: !timeEdit.visible
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
+                    // Traffic-light progress: green for the first half of the
+                    // target duration, yellow past the halfway point, red
+                    // once time's actually up (Overtime) -- not started yet
+                    // just stays neutral white.
                     color: {
                         if (TimerBackend.state === TimerBackend.Overtime) return "#EF4444"
-                        if (TimerBackend.state === TimerBackend.Paused) return "#F59E0B"
-                        return "#ffffff"
+                        if (TimerBackend.state === TimerBackend.Idle) return "#ffffff"
+                        let total = TimerBackend.targetDurationSeconds
+                        let frac = total > 0 ? TimerBackend.elapsedSeconds / total : 0
+                        return frac < 0.5 ? "#10B981" : "#F59E0B"
                     }
                     font.family: "JetBrains Mono"
                     font.pixelSize: 56

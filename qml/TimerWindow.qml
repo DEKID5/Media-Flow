@@ -21,7 +21,17 @@ Window {
     readonly property real tileW: tileH * 0.72
     readonly property color overtimeColor: "#EF4444"
     readonly property color normalColor: "#F5F5F5"
-    readonly property color digitColor: TimerBackend.state === TimerBackend.Overtime ? overtimeColor : normalColor
+    readonly property color runningColor: "#10B981"
+    readonly property color warningColor: "#F59E0B"
+    // Traffic-light progress: green for the first half of the target
+    // duration, yellow past the halfway point, red once time's actually up.
+    readonly property real progressFraction: TimerBackend.targetDurationSeconds > 0
+        ? TimerBackend.elapsedSeconds / TimerBackend.targetDurationSeconds : 0
+    readonly property color digitColor: {
+        if (TimerBackend.state === TimerBackend.Overtime) return overtimeColor
+        if (TimerBackend.state === TimerBackend.Idle) return normalColor
+        return progressFraction < 0.5 ? runningColor : warningColor
+    }
 
     // "-MM:SS" (the leading "-" only present in overtime) -> four digits
     // (m1 m2 s1 s2) plus a negative flag, recomputed whenever the backend's

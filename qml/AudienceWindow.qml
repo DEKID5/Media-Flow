@@ -255,10 +255,14 @@ Window {
         anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 40
         width: 240; height: 100; radius: 16
         color: "#CC000000"
+        // Traffic-light progress: green for the first half of the target
+        // duration, yellow past the halfway point, red once time's up.
         border.color: {
             if (TimerBackend.state === TimerBackend.Overtime) return "#EF4444"
-            if (TimerBackend.state === TimerBackend.Paused) return "#F59E0B"
-            return "#1AFFFFFF"
+            if (TimerBackend.state === TimerBackend.Idle) return "#1AFFFFFF"
+            let total = TimerBackend.targetDurationSeconds
+            let frac = total > 0 ? TimerBackend.elapsedSeconds / total : 0
+            return frac < 0.5 ? "#10B981" : "#F59E0B"
         }
         border.width: 2
         opacity: TimerBackend.isStaged ? 1.0 : 0.0
@@ -277,7 +281,14 @@ Window {
             Label {
                 text: TimerBackend.displayTime
                 font.pixelSize: 44; font.bold: true; font.family: "JetBrains Mono"
-                color: (TimerBackend.state === TimerBackend.Overtime) ? "#EF4444" : "white"
+                color: {
+                    if (TimerBackend.state === TimerBackend.Overtime) return "#EF4444"
+                    if (TimerBackend.state === TimerBackend.Idle) return "white"
+                    let total = TimerBackend.targetDurationSeconds
+                    let frac = total > 0 ? TimerBackend.elapsedSeconds / total : 0
+                    return frac < 0.5 ? "#10B981" : "#F59E0B"
+                }
+                Behavior on color { ColorAnimation { duration: 180 } }
                 Layout.alignment: Qt.AlignHCenter
                 
                 SequentialAnimation on opacity {
