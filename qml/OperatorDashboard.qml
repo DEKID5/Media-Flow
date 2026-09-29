@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Window
 import QtMultimedia
 import MediaFlow 1.0
 import "components"
@@ -10,6 +11,13 @@ Item {
     anchors.fill: parent
 
     property string manualSongSegmentId: ""
+    // Below this the header's full button labels no longer fit (measured:
+    // the header needs ~1900px with every label spelled out) -- collapse
+    // the broadcast buttons to icon-only (with tooltips) instead of letting
+    // the window's real minimum width stay stuck near ~1900px. The
+    // threshold sits above that measured requirement so it always
+    // switches to compact before anything would overflow.
+    readonly property bool compactHeader: Window.width > 0 && Window.width < 1950
     signal settingsRequested()
 
     function takeLive() {
@@ -290,7 +298,10 @@ Item {
                     spacing: Theme.space3
 
                     Rectangle {
-                        Layout.preferredHeight: 36; Layout.preferredWidth: 130; Layout.minimumWidth: 90; radius: Theme.radius
+                        Layout.preferredHeight: 36
+                        Layout.preferredWidth: root.compactHeader ? 44 : 130
+                        Layout.minimumWidth: root.compactHeader ? 44 : 90
+                        radius: Theme.radius
                         color: (MediaFlowBackend || {}).isMeetingLive ? "#1AEF4444" : Theme.surfaceRaised
                         border.color: (MediaFlowBackend || {}).isMeetingLive ? Theme.accentRed : Theme.panelBorder
                         Behavior on color { ColorAnimation { duration: Theme.durationFast } }
@@ -298,6 +309,9 @@ Item {
                         // spring settles it back so a rapid double-click doesn't stutter.
                         scale: goLiveMa.pressed ? 0.97 : 1.0
                         Behavior on scale { SpringAnimation { spring: 5; damping: 0.6 } }
+                        ToolTip.visible: root.compactHeader && goLiveMa.containsMouse
+                        ToolTip.delay: 500
+                        ToolTip.text: (MediaFlowBackend || {}).isMeetingLive ? "Meeting live — click to end" : "Go live"
                         RowLayout {
                             anchors.centerIn: parent; spacing: Theme.space2
                             BroadcastIcon {
@@ -305,15 +319,19 @@ Item {
                                 color: (MediaFlowBackend || {}).isMeetingLive ? Theme.accentRed : Theme.textSecondary
                             }
                             Label {
+                                visible: !root.compactHeader
                                 text: (MediaFlowBackend || {}).isMeetingLive ? "MEETING LIVE" : "GO LIVE"
                                 color: Theme.textPrimary; font.pixelSize: Theme.textXs; font.bold: true
                             }
                         }
-                        MouseArea { id: goLiveMa; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: (MediaFlowBackend || {}).toggleMeetingLive() }
+                        MouseArea { id: goLiveMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: (MediaFlowBackend || {}).toggleMeetingLive() }
                     }
 
                     Rectangle {
-                        Layout.preferredHeight: 36; Layout.preferredWidth: 190; Layout.minimumWidth: 130; radius: Theme.radius
+                        Layout.preferredHeight: 36
+                        Layout.preferredWidth: root.compactHeader ? 44 : 190
+                        Layout.minimumWidth: root.compactHeader ? 44 : 130
+                        radius: Theme.radius
                         color: (MediaFlowBackend || {}).vcamEnabled ? "#1A3B82F6" : Theme.surfaceRaised
                         border.color: (MediaFlowBackend || {}).vcamEnabled ? Theme.accentBlue : Theme.panelBorder
                         Behavior on color { ColorAnimation { duration: Theme.durationFast } }
@@ -337,6 +355,7 @@ Item {
                                 }
                             }
                             Label {
+                                visible: !root.compactHeader
                                 text: "BROADCAST TO ZOOM"
                                 color: (MediaFlowBackend || {}).vcamEnabled ? "white" : Theme.textSecondary
                                 font.pixelSize: Theme.textXs; font.bold: true
@@ -352,7 +371,10 @@ Item {
                     // what shows when nothing's on Program). See
                     // VirtualCameraWindow.qml's Camera.active.
                     Rectangle {
-                        Layout.preferredHeight: 36; Layout.preferredWidth: 100; Layout.minimumWidth: 70; radius: Theme.radius
+                        Layout.preferredHeight: 36
+                        Layout.preferredWidth: root.compactHeader ? 44 : 100
+                        Layout.minimumWidth: root.compactHeader ? 44 : 70
+                        radius: Theme.radius
                         color: (MediaFlowBackend || {}).webcamFallbackEnabled ? Theme.surfaceRaised : "#1AEF4444"
                         border.color: (MediaFlowBackend || {}).webcamFallbackEnabled ? Theme.panelBorder : Theme.accentRed
                         Behavior on color { ColorAnimation { duration: Theme.durationFast } }
@@ -372,6 +394,7 @@ Item {
                                 color: (MediaFlowBackend || {}).webcamFallbackEnabled ? Theme.textPrimary : Theme.accentRed
                             }
                             Label {
+                                visible: !root.compactHeader
                                 text: (MediaFlowBackend || {}).webcamFallbackEnabled ? "WEBCAM" : "OFF"
                                 color: (MediaFlowBackend || {}).webcamFallbackEnabled ? Theme.textSecondary : Theme.accentRed
                                 font.pixelSize: Theme.textXs; font.bold: true
@@ -384,7 +407,10 @@ Item {
                     }
 
                     Rectangle {
-                        Layout.preferredHeight: 36; Layout.preferredWidth: 144; Layout.minimumWidth: 95; radius: Theme.radius
+                        Layout.preferredHeight: 36
+                        Layout.preferredWidth: root.compactHeader ? 44 : 144
+                        Layout.minimumWidth: root.compactHeader ? 44 : 95
+                        radius: Theme.radius
                         color: {
                             let ext = (MediaFlowBackend || {}).feedExtended
                             if (ext) return Theme.accentBlue
@@ -394,6 +420,9 @@ Item {
                         Behavior on color { ColorAnimation { duration: Theme.durationFast } }
                         scale: extMa.pressed ? 0.97 : 1.0
                         Behavior on scale { SpringAnimation { spring: 5; damping: 0.6 } }
+                        ToolTip.visible: root.compactHeader && extMa.containsMouse
+                        ToolTip.delay: 500
+                        ToolTip.text: (MediaFlowBackend || {}).feedExtended ? "Feed active" : "Extend feed"
                         Row {
                             anchors.centerIn: parent; spacing: Theme.space2
                             BroadcastIcon {
@@ -402,6 +431,7 @@ Item {
                                 iconSize: 13; color: "white"
                             }
                             Label {
+                                visible: !root.compactHeader
                                 text: (MediaFlowBackend || {}).feedExtended ? "FEED ACTIVE" : "EXTEND FEED"
                                 color: "white"; font.pixelSize: Theme.textXs; font.bold: true
                             }
