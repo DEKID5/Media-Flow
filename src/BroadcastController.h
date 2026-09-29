@@ -58,6 +58,10 @@ class BroadcastController final : public QObject
     Q_PROPERTY(bool mixerMuted READ mixerMuted WRITE setMixerMuted NOTIFY mixerMutedChanged)
     Q_PROPERTY(bool isMeetingLive READ isMeetingLive WRITE setMeetingLive NOTIFY isMeetingLiveChanged)
     Q_PROPERTY(bool vcamEnabled READ vcamEnabled NOTIFY vcamEnabledChanged)
+    // Gates the Zoom feed's automatic webcam fallback (see
+    // VirtualCameraWindow.qml's Camera.active) -- when false, the feed
+    // shows black whenever nothing is on Program, instead of the webcam.
+    Q_PROPERTY(bool webcamFallbackEnabled READ webcamFallbackEnabled WRITE setWebcamFallbackEnabled NOTIFY webcamFallbackEnabledChanged)
     Q_PROPERTY(bool feedExtended READ feedExtended NOTIFY feedExtendedChanged)
     Q_PROPERTY(bool hasSecondaryScreen READ hasSecondaryScreen NOTIFY hasSecondaryScreenChanged)
     Q_PROPERTY(QString scanStatus READ scanStatus NOTIFY scanStatusChanged)
@@ -126,6 +130,8 @@ public:
     bool mixerMuted() const { return m_mixerMuted; }
     bool isMeetingLive() const { return m_isMeetingLive; }
     bool vcamEnabled() const { return m_vcamEnabled; }
+    bool webcamFallbackEnabled() const { return m_webcamFallbackEnabled; }
+    void setWebcamFallbackEnabled(bool enabled);
     bool feedExtended() const { return m_feedExtended; }
     bool hasSecondaryScreen() const;
     QString scanStatus() const { return m_scanStatus; }
@@ -271,6 +277,7 @@ signals:
     void mixerMutedChanged();
     void isMeetingLiveChanged();
     void vcamEnabledChanged();
+    void webcamFallbackEnabledChanged();
     void programCameraDeviceChanged();
     void scanStatusChanged();
     void initialScanCompleteChanged();
@@ -332,6 +339,7 @@ private:
     bool m_mixerMuted = false;
     bool m_isMeetingLive = false;
     bool m_vcamEnabled = false;
+    bool m_webcamFallbackEnabled = true;
     bool m_feedExtended = false;
     QString m_scanStatus;
     bool m_initialScanComplete = false;
@@ -369,6 +377,7 @@ private:
     MediaExtractor *m_extractor = nullptr;
     QPointer<QQuickWindow> m_audienceWindow;
     QPointer<QQuickWindow> m_zoomWindow;
+    bool m_zoomWindowHidden = false;
     QTimer *m_duckingExemptionTimer = nullptr;
     QHash<QString, QVariantMap> m_mediaIndexByPath;
     QHash<QString, QVariantMap> m_songIndex;

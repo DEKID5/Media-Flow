@@ -556,8 +556,32 @@ Item {
                 // Small drag hint, visible on hover so the gesture is discoverable.
                 BroadcastIcon {
                     anchors.top: parent.top; anchors.left: parent.left; anchors.margins: 8
+                    visible: !addBtn.visible
                     name: "pin"; iconSize: 12; color: "white"; opacity: cardMa.containsMouse && !cardMa.drag.active ? 0.6 : 0.0
                     Behavior on opacity { NumberAnimation { duration: 150 } }
+                }
+
+                // Explicit "add to segment" action -- a plain click now only
+                // previews (see cardMa.onClicked below), so browsing Quick
+                // Fetch/Pins for a quick look no longer silently attaches
+                // whatever was clicked to the currently selected segment.
+                // This button is the deliberate way to actually add it.
+                Rectangle {
+                    id: addBtn
+                    anchors.top: parent.top; anchors.left: parent.left; anchors.margins: 8
+                    width: 26; height: 26; radius: 6; color: Theme.accentEmerald
+                    visible: root.currentView !== "segment" && (MediaFlowBackend || {}).selectedSegmentId
+                    opacity: cardMa.containsMouse ? 1.0 : 0.0
+                    Behavior on opacity { NumberAnimation { duration: 150 } }
+                    BroadcastIcon { anchors.centerIn: parent; name: "plus"; color: "white"; iconSize: 12 }
+                    MouseArea {
+                        id: addBtnMa
+                        anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                        onClicked: MediaFlowBackend.bindMediaToSequence(model.id)
+                    }
+                    ToolTip.visible: addBtnMa.containsMouse
+                    ToolTip.delay: 400
+                    ToolTip.text: "Add to selected segment"
                 }
 
                 MouseArea {
@@ -569,19 +593,10 @@ Item {
                         // playlist -- otherwise the next auto-advance would
                         // silently hijack the preview back to the folder.
                         if (MediaFlowBackend.previewPlaylistActive) MediaFlowBackend.stopPreviewPlaylist()
-                        if (root.currentView === "segment") {
-                            MediaFlowBackend.stageMedia(model.id)
-                        } else {
-                            // Library and Pins both behave the same: clicking links
-                            // the item into the selected segment (so it then shows
-                            // up under ACTIVE MEDIA), or just previews it if no
-                            // segment is selected yet.
-                            if (MediaFlowBackend.selectedSegmentId) {
-                                MediaFlowBackend.bindMediaToSequence(model.id)
-                            } else {
-                                MediaFlowBackend.stageMedia(model.id) // Just preview
-                            }
-                        }
+                        // Always just preview -- linking to a segment is now a
+                        // deliberate action via the "+" button above, not a
+                        // side effect of browsing/previewing media.
+                        MediaFlowBackend.stageMedia(model.id)
                     }
                 }
             }

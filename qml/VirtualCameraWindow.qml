@@ -38,6 +38,7 @@ Window {
             id: programCamera
             cameraDevice: (MediaFlowBackend || {}).programCameraDevice
             active: {
+                if (!(MediaFlowBackend || {}).webcamFallbackEnabled) return false
                 let a = (MediaFlowBackend || {}).broadcastEngine ? MediaFlowBackend.broadcastEngine.programAsset : null
                 return !a || !a.absolutePath || a.type === "input"
             }
