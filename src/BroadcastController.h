@@ -62,6 +62,11 @@ class BroadcastController final : public QObject
     // VirtualCameraWindow.qml's Camera.active) -- when false, the feed
     // shows black whenever nothing is on Program, instead of the webcam.
     Q_PROPERTY(bool webcamFallbackEnabled READ webcamFallbackEnabled WRITE setWebcamFallbackEnabled NOTIFY webcamFallbackEnabledChanged)
+    // Operator-customizable keyboard shortcuts (action name -> single-key
+    // sequence string, e.g. "C", "Ctrl+T"). Always contains every known
+    // action -- unbound ones map to "". See defaultShortcutKeys() for the
+    // action names and factory defaults.
+    Q_PROPERTY(QVariantMap shortcutKeys READ shortcutKeys NOTIFY shortcutKeysChanged)
     Q_PROPERTY(bool feedExtended READ feedExtended NOTIFY feedExtendedChanged)
     Q_PROPERTY(bool hasSecondaryScreen READ hasSecondaryScreen NOTIFY hasSecondaryScreenChanged)
     Q_PROPERTY(QString scanStatus READ scanStatus NOTIFY scanStatusChanged)
@@ -132,6 +137,14 @@ public:
     bool vcamEnabled() const { return m_vcamEnabled; }
     bool webcamFallbackEnabled() const { return m_webcamFallbackEnabled; }
     void setWebcamFallbackEnabled(bool enabled);
+    QVariantMap shortcutKeys() const { return m_shortcutKeys; }
+    // Empty keySequence unbinds the action. If another action already owns
+    // the requested key, that action is unbound first so no two actions can
+    // ever share the same key (a Shortcut with a duplicate sequence would
+    // fire both, ambiguously).
+    Q_INVOKABLE void setShortcutKey(const QString &action, const QString &keySequence);
+    Q_INVOKABLE void resetShortcutKeys();
+    static QVariantMap defaultShortcutKeys();
     bool feedExtended() const { return m_feedExtended; }
     bool hasSecondaryScreen() const;
     QString scanStatus() const { return m_scanStatus; }
@@ -278,6 +291,7 @@ signals:
     void isMeetingLiveChanged();
     void vcamEnabledChanged();
     void webcamFallbackEnabledChanged();
+    void shortcutKeysChanged();
     void programCameraDeviceChanged();
     void scanStatusChanged();
     void initialScanCompleteChanged();
@@ -340,6 +354,7 @@ private:
     bool m_isMeetingLive = false;
     bool m_vcamEnabled = false;
     bool m_webcamFallbackEnabled = true;
+    QVariantMap m_shortcutKeys = defaultShortcutKeys();
     bool m_feedExtended = false;
     QString m_scanStatus;
     bool m_initialScanComplete = false;

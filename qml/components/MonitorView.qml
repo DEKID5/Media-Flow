@@ -9,6 +9,11 @@ Rectangle {
 
     property string title: "MONITOR"
     property bool isLive: false
+    function keyHint(action) {
+        const keys = (MediaFlowBackend || {}).shortcutKeys
+        const k = keys ? (keys[action] || "") : ""
+        return k ? ("  (" + k + ")") : ""
+    }
     property var asset: null
     property string mediaType: asset ? (asset.type || "") : ""
     property var cameraDevice: null
@@ -423,6 +428,9 @@ Rectangle {
                     }
                 }
             }
+            ToolTip.visible: ppMa.containsMouse
+            ToolTip.delay: 500
+            ToolTip.text: isLive ? ("Pause/resume Program" + monitor.keyHint("pauseProgram")) : "Pause/resume preview"
         }
 
         // CUT LIVE
@@ -440,6 +448,9 @@ Rectangle {
                 Label { text: "CUT LIVE"; color: Theme.accentRed; font.pixelSize: Theme.textXs; font.bold: true }
             }
             MouseArea { id: cutMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: monitor.cutClicked() }
+            ToolTip.visible: cutMa.containsMouse
+            ToolTip.delay: 500
+            ToolTip.text: "Instant cut to Program" + monitor.keyHint("cut")
         }
 
         // TAKE LIVE
@@ -453,6 +464,9 @@ Rectangle {
             Behavior on scale { SpringAnimation { spring: 5; damping: 0.5 } }
             Label { anchors.centerIn: parent; text: "TAKE LIVE"; color: "white"; font.pixelSize: Theme.textXs; font.bold: true }
             MouseArea { id: takeMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: monitor.takeClicked() }
+            ToolTip.visible: takeMa.containsMouse
+            ToolTip.delay: 500
+            ToolTip.text: "Crossfade to Program" + monitor.keyHint("take")
         }
     }
 }
