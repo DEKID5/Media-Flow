@@ -1,0 +1,4 @@
+// Windows resource script -- embeds the app icon into MediaFlow.exe itself
+// (taskbar, Explorer, Alt-Tab), independent of the installer's own icon
+// setting (see packaging/mediaflow.iss's SetupIconFile).
+IDI_ICON1 ICON "../qml/assets/icon.ico"
