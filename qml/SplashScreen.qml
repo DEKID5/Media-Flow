@@ -29,10 +29,11 @@ Window {
     property bool scanReady: (MediaFlowBackend || {}).initialScanComplete === true
     property bool closed: false
 
-    Timer { interval: 900; running: true; onTriggered: splashRoot.minTimeElapsed = true }
-    // Never block startup indefinitely -- an unusually large library or a
-    // slow disk still gets the operator into the app within a few seconds.
-    Timer { interval: 6000; running: true; onTriggered: splashRoot.requestClose() }
+    // Always shows for a full 10s, regardless of how fast the scan finishes.
+    Timer { interval: 10000; running: true; onTriggered: splashRoot.minTimeElapsed = true }
+    // Safety net only -- if the scan is somehow still running well past the
+    // 10s minimum, don't block startup indefinitely.
+    Timer { interval: 20000; running: true; onTriggered: splashRoot.requestClose() }
 
     onScanReadyChanged: maybeClose()
     onMinTimeElapsedChanged: maybeClose()
