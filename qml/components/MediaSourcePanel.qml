@@ -591,8 +591,10 @@ Item {
                     onClicked: {
                         // A manual pick always wins over an unattended folder
                         // playlist -- otherwise the next auto-advance would
-                        // silently hijack the preview back to the folder.
+                        // silently hijack Program (or Preview) back to the
+                        // folder right after the operator picked something else.
                         if (MediaFlowBackend.previewPlaylistActive) MediaFlowBackend.stopPreviewPlaylist()
+                        if (MediaFlowBackend.livePlaylistActive) MediaFlowBackend.stopLivePlaylist()
                         // Always just preview -- linking to a segment is now a
                         // deliberate action via the "+" button above, not a
                         // side effect of browsing/previewing media.

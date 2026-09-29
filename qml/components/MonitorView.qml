@@ -80,8 +80,13 @@ Rectangle {
         audioOutput: AudioOutput { id: audioA; volume: monitor.isAudioSource ? monitor.roomVolume : 0; muted: !monitor.isAudioSource; device: (MediaFlowBackend || {}).roomAudioOutputDevice }
         onMediaStatusChanged: {
             if (isLive && activeIsA && mediaStatus === MediaPlayer.EndOfMedia) {
-                if (MediaFlowBackend && MediaFlowBackend.broadcastEngine)
+                // A folder slideshow driving Program advances to the next
+                // item instead of cutting to standby when one finishes.
+                if ((MediaFlowBackend || {}).livePlaylistActive) {
+                    MediaFlowBackend.advanceLivePlaylist()
+                } else if (MediaFlowBackend && MediaFlowBackend.broadcastEngine) {
                     MediaFlowBackend.broadcastEngine.clearLive()
+                }
             } else if (!isLive && activeIsA && mediaStatus === MediaPlayer.EndOfMedia
                        && monitor.acceptsFolderDrop && (MediaFlowBackend || {}).previewPlaylistActive) {
                 MediaFlowBackend.advancePreviewPlaylist()
@@ -104,8 +109,11 @@ Rectangle {
         audioOutput: AudioOutput { id: audioB; volume: monitor.isAudioSource ? monitor.roomVolume : 0; muted: !monitor.isAudioSource; device: (MediaFlowBackend || {}).roomAudioOutputDevice }
         onMediaStatusChanged: {
             if (isLive && !activeIsA && mediaStatus === MediaPlayer.EndOfMedia) {
-                if (MediaFlowBackend && MediaFlowBackend.broadcastEngine)
+                if ((MediaFlowBackend || {}).livePlaylistActive) {
+                    MediaFlowBackend.advanceLivePlaylist()
+                } else if (MediaFlowBackend && MediaFlowBackend.broadcastEngine) {
                     MediaFlowBackend.broadcastEngine.clearLive()
+                }
             } else if (!isLive && !activeIsA && mediaStatus === MediaPlayer.EndOfMedia
                        && monitor.acceptsFolderDrop && (MediaFlowBackend || {}).previewPlaylistActive) {
                 MediaFlowBackend.advancePreviewPlaylist()
@@ -382,9 +390,11 @@ Rectangle {
     }
 
     // =====================================================================
-    //  FOLDER DRAG-AND-DROP -- Preview starts an unattended preview
-    //  playlist; the LIVE monitor instead takes each image live immediately
-    //  (see acceptsFolderDrop).
+    //  FOLDER DRAG-AND-DROP -- dropping a pinned folder onto either monitor
+    //  starts the same live playlist: it takes the first item live right
+    //  away and auto-advances through the rest (video EndOfMedia, or a
+    //  dwell timer for images) until stopped, instead of requiring a manual
+    //  Take Live click for every item (see acceptsFolderDrop).
     // =====================================================================
     DropArea {
         id: folderDropArea
@@ -394,9 +404,7 @@ Rectangle {
         z: 25
         onDropped: (drop) => {
             const folderId = drop.getDataAsString("application/x-mediaflow-pinfolder")
-            if (!folderId || !MediaFlowBackend) return
-            if (monitor.isLive) MediaFlowBackend.playPinnedFolderLive(folderId)
-            else MediaFlowBackend.playPinnedFolderInPreview(folderId)
+            if (folderId && MediaFlowBackend) MediaFlowBackend.playPinnedFolderLive(folderId)
         }
     }
 
@@ -407,23 +415,25 @@ Rectangle {
         border.color: Theme.accentEmerald; border.width: 2
         Label {
             anchors.centerIn: parent
-            text: monitor.isLive ? "DROP TO PLAY IMAGES LIVE" : "DROP TO PLAY FOLDER"
+            text: "DROP TO PLAY FOLDER LIVE"
             color: "white"; font.bold: true; font.pixelSize: 13; font.letterSpacing: 1
         }
     }
 
-    // Playlist status + stop control (Preview and Live each have their own
-    // independent playlist state, so only one of these shows at a time).
+    // Playlist status + stop control. The live playlist is shared global
+    // state (not per-monitor), so both the Preview and Live instances show
+    // the same status here -- only the Live instance's own dwell timer
+    // actually drives advancing, this is purely informational on Preview.
     Rectangle {
         anchors.top: parent.top; anchors.horizontalCenter: parent.horizontalCenter; anchors.margins: 16; z: 20
-        visible: monitor.playlistDriving || monitor.livePlaylistDriving
+        visible: monitor.playlistDriving || (MediaFlowBackend || {}).livePlaylistActive
         width: playlistRow.width + 20; height: 26; radius: 13
         color: "#CC000000"; border.color: Theme.accentEmerald; border.width: 1
         Row {
             id: playlistRow
             anchors.centerIn: parent; spacing: 8
             Label {
-                text: "PLAYING: " + ((monitor.isLive
+                text: "PLAYING: " + (((MediaFlowBackend || {}).livePlaylistActive
                     ? (MediaFlowBackend || {}).livePlaylistFolderName
                     : (MediaFlowBackend || {}).previewPlaylistFolderName) || "").toUpperCase()
                 color: "white"; font.bold: true; font.pixelSize: 9; font.letterSpacing: 0.5
@@ -433,7 +443,7 @@ Rectangle {
                 Label { id: stopLbl; anchors.centerIn: parent; text: "STOP"; color: "white"; font.bold: true; font.pixelSize: 8 }
                 MouseArea {
                     anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                    onClicked: monitor.isLive ? MediaFlowBackend.stopLivePlaylist() : MediaFlowBackend.stopPreviewPlaylist()
+                    onClicked: (MediaFlowBackend || {}).livePlaylistActive ? MediaFlowBackend.stopLivePlaylist() : MediaFlowBackend.stopPreviewPlaylist()
                 }
             }
         }

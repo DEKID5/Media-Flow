@@ -759,7 +759,8 @@ void BroadcastController::playPinnedFolderLive(const QString &folderId)
     QStringList playable;
     for (const QString &id : m_pinnedFolders->mediaIdsForFolder(folderId)) {
         const QVariantMap row = m_libraryModel->getRowById(id);
-        if (row.value(QStringLiteral("type")).toString() == QStringLiteral("image"))
+        const QString type = row.value(QStringLiteral("type")).toString();
+        if (type == QStringLiteral("video") || type == QStringLiteral("image"))
             playable << id;
     }
     if (playable.isEmpty()) return;

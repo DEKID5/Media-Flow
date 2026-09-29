@@ -97,11 +97,11 @@ class BroadcastController final : public QObject
     Q_PROPERTY(bool previewPlaylistActive READ previewPlaylistActive NOTIFY previewPlaylistChanged)
     Q_PROPERTY(QString previewPlaylistFolderName READ previewPlaylistFolderName NOTIFY previewPlaylistChanged)
     // Same idea as the preview playlist above, but drives Program directly --
-    // each advance stages the next image then calls takeLive() so it goes
-    // out through the normal crossfade, instead of just sitting in Preview.
-    // Images only (see playPinnedFolderLive): a live video ending already
-    // triggers MonitorView's EndOfMedia -> clearLive() cut-to-black, so
-    // mixing videos into an unattended live playlist would fight that.
+    // each advance stages the next video/image then calls takeLive() so it
+    // goes out through the normal crossfade, instead of just sitting in
+    // Preview. MonitorView's LIVE instance checks this before treating a
+    // video's EndOfMedia as "clear to standby", so a video mid-playlist
+    // advances to the next item instead of cutting to black.
     Q_PROPERTY(bool livePlaylistActive READ livePlaylistActive NOTIFY livePlaylistChanged)
     Q_PROPERTY(QString livePlaylistFolderName READ livePlaylistFolderName NOTIFY livePlaylistChanged)
 
@@ -231,10 +231,11 @@ public:
     Q_INVOKABLE void playPinnedFolderInPreview(const QString &folderId);
     Q_INVOKABLE void stopPreviewPlaylist();
     Q_INVOKABLE void advancePreviewPlaylist();
-    // Same, but for Program: dragging a pinned folder onto the LIVE monitor
-    // stages its first image and takes it live immediately (crossfade), then
-    // MonitorView's dwell timer calls advanceLivePlaylist() to move to the
-    // next one -- images only, see the Q_PROPERTY comments above.
+    // Same, but for Program: dragging a pinned folder onto either monitor
+    // stages its first video/image and takes it live immediately
+    // (crossfade), then MonitorView calls advanceLivePlaylist() to move to
+    // the next one -- video EndOfMedia or a dwell timer for images, same as
+    // the preview playlist above, see the Q_PROPERTY comments above.
     Q_INVOKABLE void playPinnedFolderLive(const QString &folderId);
     Q_INVOKABLE void stopLivePlaylist();
     Q_INVOKABLE void advanceLivePlaylist();
