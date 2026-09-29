@@ -68,6 +68,23 @@ Window {
 
             Rectangle { Layout.fillWidth: true; height: 1; color: Theme.panelBorder }
 
+            // ── Webcam ──
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Theme.space3
+                Label { text: "WEBCAM"; color: Theme.textSecondary; font.bold: true; font.pixelSize: Theme.textSm; font.letterSpacing: 1 }
+                Label {
+                    text: "Which camera feeds the Zoom broadcast whenever nothing else is on Program. Toggle it off entirely from the header."
+                    color: Theme.textDim; font.pixelSize: Theme.textSm; wrapMode: Text.WordWrap; Layout.fillWidth: true
+                }
+                CameraPicker {
+                    currentDevice: (MediaFlowBackend || {}).programCameraDevice
+                    onDeviceChosen: (device) => { MediaFlowBackend.setProgramCameraDevice(device) }
+                }
+            }
+
+            Rectangle { Layout.fillWidth: true; height: 1; color: Theme.panelBorder }
+
             // ── Background Music ──
             ColumnLayout {
                 Layout.fillWidth: true
@@ -322,6 +339,50 @@ Window {
             onActivated: (idx) => pickerRoot.valueChosen(model[idx].index)
             contentItem: Label {
                 text: combo.currentText || (pickerRoot.allowAutomatic ? "Automatic (recommended)" : "Choose a screen…")
+                color: Theme.textPrimary; font.pixelSize: Theme.textMd
+                verticalAlignment: Text.AlignVCenter; leftPadding: 8
+            }
+            background: Rectangle { color: "transparent" }
+        }
+    }
+
+    // Mirrors ScreenPicker above, bound to the CameraDeviceModel exposed as
+    // MediaFlowBackend.cameraDevices (a real QAbstractListModel, unlike
+    // ScreenPicker's plain JS array) instead of a screen index.
+    component CameraPicker: Rectangle {
+        id: camPickerRoot
+        property var currentDevice: null
+        signal deviceChosen(var device)
+
+        Layout.fillWidth: true; Layout.preferredHeight: 44
+        radius: Theme.radius; color: Theme.surfaceRaised; border.color: Theme.panelBorder
+
+        ComboBox {
+            id: camCombo
+            anchors.fill: parent; anchors.margins: 6
+            flat: true
+            textRole: "deviceName"
+            model: (MediaFlowBackend || {}).cameraDevices || null
+
+            function syncFromCurrent() {
+                if (!camPickerRoot.currentDevice || !model) return
+                const targetName = camPickerRoot.currentDevice.description || ""
+                for (let i = 0; i < model.rowCount(); i++) {
+                    if (model.nameAt(i) === targetName) { currentIndex = i; return }
+                }
+            }
+            Component.onCompleted: syncFromCurrent()
+            Connections {
+                target: camPickerRoot
+                function onCurrentDeviceChanged() { camCombo.syncFromCurrent() }
+            }
+
+            onActivated: (idx) => {
+                const id = model.deviceIdAt(idx)
+                camPickerRoot.deviceChosen(model.deviceForId(id))
+            }
+            contentItem: Label {
+                text: camCombo.currentText || "No camera found"
                 color: Theme.textPrimary; font.pixelSize: Theme.textMd
                 verticalAlignment: Text.AlignVCenter; leftPadding: 8
             }

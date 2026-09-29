@@ -21,7 +21,7 @@ public:
     Q_INVOKABLE QString deviceIdAt(int row) const;
     Q_INVOKABLE QString nameAt(int row) const;
 
-    QCameraDevice deviceForId(const QString &id) const;
+    Q_INVOKABLE QCameraDevice deviceForId(const QString &id) const;
 
 private:
     QVector<QCameraDevice> m_devices;

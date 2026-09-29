@@ -18,6 +18,9 @@
 #include <QUuid>
 #include <QBuffer>
 #include <QCameraDevice>
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 #include <QTimer>
 #include <QImageReader>
 #include <QStandardPaths>
@@ -956,7 +959,34 @@ bool BroadcastController::openZoomWindow()
     m_zoomWindow->setGeometry(0, 0, 1920, 1080);
     m_zoomWindow->show();
     m_zoomWindow->lower();
+
+#ifdef Q_OS_WIN
+    // Being on-screen (required above) still means whatever's behind every
+    // other window shows this window's own content through any gap on the
+    // operator's own desktop -- confirmed live. WS_EX_LAYERED + alpha=0
+    // makes DWM composite it as fully transparent (nothing drawn to the
+    // display) without touching the window's own GL backbuffer, which
+    // VirtualCameraManager::onAfterRendering reads via glReadPixels
+    // directly from the GL context, not from what DWM shows -- so capture
+    // keeps working exactly as before, just invisible to the operator.
+    // Applied once per window instance (winId() is stable once created).
+    if (!m_zoomWindowHidden) {
+        HWND hwnd = reinterpret_cast<HWND>(m_zoomWindow->winId());
+        LONG_PTR exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+        SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
+        SetLayeredWindowAttributes(hwnd, 0, 0, LWA_ALPHA);
+        m_zoomWindowHidden = true;
+    }
+#endif
     return true;
+}
+
+void BroadcastController::setWebcamFallbackEnabled(bool enabled)
+{
+    if (m_webcamFallbackEnabled == enabled) return;
+    m_webcamFallbackEnabled = enabled;
+    emit webcamFallbackEnabledChanged();
+    saveState();
 }
 
 bool BroadcastController::hasVirtualCameraDriver() const
@@ -1147,6 +1177,7 @@ void BroadcastController::saveState()
     root["currentLanguageName"] = SongSearchUtils::languageNameForCode(code);
     root["extendedFeedScreenIndex"] = m_extendedFeedScreenIndex;
     root["timerScreenIndex"] = m_timerScreenIndex;
+    root["webcamFallbackEnabled"] = m_webcamFallbackEnabled;
     root["bgmUseCustomFolder"] = m_bgmUseCustomFolder;
     root["bgmCustomFolder"] = m_bgmCustomFolder;
     root["extendedFeedBackgroundPath"] = m_extendedFeedBackgroundPath;
@@ -1185,6 +1216,7 @@ void BroadcastController::loadState()
     const QString loadedLanguage = root["currentLanguageCode"].toString(root["languageCode"].toString("E"));
     m_extendedFeedScreenIndex = root["extendedFeedScreenIndex"].toInt(-1);
     m_timerScreenIndex = root["timerScreenIndex"].toInt(-1);
+    m_webcamFallbackEnabled = root["webcamFallbackEnabled"].toBool(true);
     m_bgmUseCustomFolder = root["bgmUseCustomFolder"].toBool(false);
     m_bgmCustomFolder = root["bgmCustomFolder"].toString();
     m_extendedFeedBackgroundPath = root["extendedFeedBackgroundPath"].toString();

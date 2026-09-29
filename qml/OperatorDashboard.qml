@@ -53,9 +53,9 @@ Item {
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: Theme.space5
-                anchors.rightMargin: Theme.space5
-                spacing: Theme.space5
+                anchors.leftMargin: Theme.space3
+                anchors.rightMargin: Theme.space3
+                spacing: Theme.space3
 
                 // 1. BRANDING
                 RowLayout {
@@ -108,7 +108,7 @@ Item {
 
                 // 1d. MEETING WEEK PICKER
                 Rectangle {
-                    Layout.preferredHeight: 36; Layout.preferredWidth: 180; Layout.minimumWidth: 150; radius: Theme.radius; color: Theme.surfaceRaised; border.color: Theme.panelBorder
+                    Layout.preferredHeight: 36; Layout.preferredWidth: 180; Layout.minimumWidth: 130; radius: Theme.radius; color: Theme.surfaceRaised; border.color: Theme.panelBorder
                     RowLayout {
                         anchors.fill: parent; anchors.margins: 4; spacing: 4
                         ComboBox {
@@ -151,7 +151,7 @@ Item {
 
                 // 2. MEETING TYPE SELECTOR
                 Rectangle {
-                    Layout.preferredHeight: 36; Layout.preferredWidth: 190; Layout.minimumWidth: 160; radius: Theme.radius; color: Theme.surfaceRaised; border.color: Theme.panelBorder
+                    Layout.preferredHeight: 36; Layout.preferredWidth: 190; Layout.minimumWidth: 140; radius: Theme.radius; color: Theme.surfaceRaised; border.color: Theme.panelBorder
                     RowLayout {
                         anchors.fill: parent; anchors.margins: 4; spacing: 0
                         Rectangle {
@@ -173,7 +173,7 @@ Item {
 
                 // 3. LANGUAGE SELECTOR
                 Rectangle {
-                    Layout.preferredHeight: 36; Layout.preferredWidth: 150; Layout.minimumWidth: 130; radius: Theme.radius; color: Theme.surfaceRaised; border.color: Theme.panelBorder
+                    Layout.preferredHeight: 36; Layout.preferredWidth: 150; Layout.minimumWidth: 110; radius: Theme.radius; color: Theme.surfaceRaised; border.color: Theme.panelBorder
                     RowLayout {
                         anchors.fill: parent; anchors.margins: 4; spacing: 4
                         BroadcastIcon { name: "globe"; iconSize: 13; Layout.leftMargin: 8; opacity: 0.7; color: Theme.textPrimary }
@@ -233,7 +233,7 @@ Item {
 
                 // 4. ROOM AUDIO (the audience window's volume/mute — the single audio channel out of the PC)
                 Rectangle {
-                    Layout.preferredHeight: 36; Layout.preferredWidth: 150; Layout.minimumWidth: 130; radius: Theme.radius; color: Theme.surfaceRaised; border.color: Theme.panelBorder
+                    Layout.preferredHeight: 36; Layout.preferredWidth: 150; Layout.minimumWidth: 110; radius: Theme.radius; color: Theme.surfaceRaised; border.color: Theme.panelBorder
                     RowLayout {
                         anchors.centerIn: parent; spacing: Theme.space2
                         BroadcastIcon {
@@ -269,14 +269,18 @@ Item {
                     }
                 }
 
-                // 5. SYSTEM STATUS — only real, live-checked state; no decorative fake indicators.
+                // 5. SYSTEM STATUS — only real, live-checked state; no decorative fake
+                // indicators. Just the dot + a tooltip, not a permanent text label --
+                // the header has no room to spare for status text that isn't actionable.
                 RowLayout {
                     spacing: Theme.space2
-                    Rectangle { width: 6; height: 6; radius: 3; color: (MediaFlowBackend || {}).hasSecondaryScreen ? Theme.accentEmerald : Theme.textFaint }
-                    Label {
-                        text: (MediaFlowBackend || {}).hasSecondaryScreen ? "DISPLAY 2" : "NO 2ND DISPLAY"
-                        color: (MediaFlowBackend || {}).hasSecondaryScreen ? Theme.textPrimary : Theme.textSecondary
-                        font.pixelSize: Theme.textXs; font.bold: true
+                    Rectangle {
+                        width: 6; height: 6; radius: 3
+                        color: (MediaFlowBackend || {}).hasSecondaryScreen ? Theme.accentEmerald : Theme.textFaint
+                        ToolTip.visible: statusMa.containsMouse
+                        ToolTip.delay: 400
+                        ToolTip.text: (MediaFlowBackend || {}).hasSecondaryScreen ? "Second display connected" : "No second display connected"
+                        MouseArea { id: statusMa; anchors.fill: parent; anchors.margins: -6; hoverEnabled: true }
                     }
                     Rectangle { Layout.leftMargin: Theme.space2; width: 1; height: 16; color: Theme.panelBorder }
                 }
@@ -286,7 +290,7 @@ Item {
                     spacing: Theme.space3
 
                     Rectangle {
-                        Layout.preferredHeight: 36; Layout.preferredWidth: 130; Layout.minimumWidth: 110; radius: Theme.radius
+                        Layout.preferredHeight: 36; Layout.preferredWidth: 130; Layout.minimumWidth: 90; radius: Theme.radius
                         color: (MediaFlowBackend || {}).isMeetingLive ? "#1AEF4444" : Theme.surfaceRaised
                         border.color: (MediaFlowBackend || {}).isMeetingLive ? Theme.accentRed : Theme.panelBorder
                         Behavior on color { ColorAnimation { duration: Theme.durationFast } }
@@ -309,7 +313,7 @@ Item {
                     }
 
                     Rectangle {
-                        Layout.preferredHeight: 36; Layout.preferredWidth: 190; Layout.minimumWidth: 150; radius: Theme.radius
+                        Layout.preferredHeight: 36; Layout.preferredWidth: 190; Layout.minimumWidth: 130; radius: Theme.radius
                         color: (MediaFlowBackend || {}).vcamEnabled ? "#1A3B82F6" : Theme.surfaceRaised
                         border.color: (MediaFlowBackend || {}).vcamEnabled ? Theme.accentBlue : Theme.panelBorder
                         Behavior on color { ColorAnimation { duration: Theme.durationFast } }
@@ -342,8 +346,45 @@ Item {
                         MouseArea { id: zoomMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: requestZoomBroadcast() }
                     }
 
+                    // Forces the Zoom feed's webcam fallback off entirely --
+                    // independent of BROADCAST TO ZOOM itself (that starts/
+                    // stops sending anything at all; this only controls
+                    // what shows when nothing's on Program). See
+                    // VirtualCameraWindow.qml's Camera.active.
                     Rectangle {
-                        Layout.preferredHeight: 36; Layout.preferredWidth: 144; Layout.minimumWidth: 120; radius: Theme.radius
+                        Layout.preferredHeight: 36; Layout.preferredWidth: 100; Layout.minimumWidth: 70; radius: Theme.radius
+                        color: (MediaFlowBackend || {}).webcamFallbackEnabled ? Theme.surfaceRaised : "#1AEF4444"
+                        border.color: (MediaFlowBackend || {}).webcamFallbackEnabled ? Theme.panelBorder : Theme.accentRed
+                        Behavior on color { ColorAnimation { duration: Theme.durationFast } }
+                        scale: webcamMa.pressed ? 0.97 : 1.0
+                        Behavior on scale { SpringAnimation { spring: 5; damping: 0.6 } }
+                        ToolTip.visible: webcamMa.containsMouse
+                        ToolTip.delay: 500
+                        ToolTip.text: (MediaFlowBackend || {}).webcamFallbackEnabled
+                            ? "Webcam shows on Zoom whenever nothing's on Program. Click to force it off (black instead)."
+                            : "Webcam is forced off — Zoom shows black whenever nothing's on Program. Click to re-enable."
+                        Row {
+                            anchors.centerIn: parent; spacing: Theme.space1
+                            BroadcastIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                name: (MediaFlowBackend || {}).webcamFallbackEnabled ? "video" : "mute"
+                                iconSize: 12
+                                color: (MediaFlowBackend || {}).webcamFallbackEnabled ? Theme.textPrimary : Theme.accentRed
+                            }
+                            Label {
+                                text: (MediaFlowBackend || {}).webcamFallbackEnabled ? "WEBCAM" : "OFF"
+                                color: (MediaFlowBackend || {}).webcamFallbackEnabled ? Theme.textSecondary : Theme.accentRed
+                                font.pixelSize: Theme.textXs; font.bold: true
+                            }
+                        }
+                        MouseArea {
+                            id: webcamMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                            onClicked: { if (MediaFlowBackend) MediaFlowBackend.webcamFallbackEnabled = !MediaFlowBackend.webcamFallbackEnabled }
+                        }
+                    }
+
+                    Rectangle {
+                        Layout.preferredHeight: 36; Layout.preferredWidth: 144; Layout.minimumWidth: 95; radius: Theme.radius
                         color: {
                             let ext = (MediaFlowBackend || {}).feedExtended
                             if (ext) return Theme.accentBlue
