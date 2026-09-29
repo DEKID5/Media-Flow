@@ -10,14 +10,11 @@ ApplicationWindow {
     height: 900
     // No floor previously existed, so the dashboard's fixed-width toolbar
     // controls and side panels would clip/overflow uncontrollably below
-    // ~1400px -- this plus the panel/toolbar changes in OperatorDashboard.qml
-    // let the window actually be resized smaller without breaking the layout.
-    // 1900 is the header RowLayout's real minimum content width, verified by
-    // resizing the live window and confirming every control (through EXTEND
-    // FEED, the last one) still renders in full; a lower floor here just
-    // lets the header's own controls run off the right edge instead of
-    // clipping cleanly, since RowLayout doesn't hide overflow on its own.
-    minimumWidth: 1900
+    // ~1400px. OperatorDashboard.qml's header now collapses its broadcast
+    // buttons to icon-only below ~1950px (see compactHeader there), which
+    // is what makes a floor this low possible without any control
+    // overflowing off the right edge -- verified live down to 1450px.
+    minimumWidth: 1500
     minimumHeight: 700
     // Stays hidden until the splash screen signals it's done (see below) --
     // showing this immediately let the operator see an empty dashboard
