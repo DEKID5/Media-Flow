@@ -752,6 +752,43 @@ void BroadcastController::advancePreviewPlaylist()
     stageMedia(m_previewPlaylistIds.at(m_previewPlaylistIndex));
 }
 
+void BroadcastController::playPinnedFolderLive(const QString &folderId)
+{
+    if (!m_pinnedFolders || !m_broadcastEngine) return;
+
+    QStringList playable;
+    for (const QString &id : m_pinnedFolders->mediaIdsForFolder(folderId)) {
+        const QVariantMap row = m_libraryModel->getRowById(id);
+        if (row.value(QStringLiteral("type")).toString() == QStringLiteral("image"))
+            playable << id;
+    }
+    if (playable.isEmpty()) return;
+
+    m_livePlaylistIds = playable;
+    m_livePlaylistIndex = 0;
+    m_livePlaylistFolderName = m_pinnedFolders->nameForFolder(folderId);
+    emit livePlaylistChanged();
+    stageMedia(m_livePlaylistIds.first());
+    m_broadcastEngine->takeLive();
+}
+
+void BroadcastController::stopLivePlaylist()
+{
+    if (m_livePlaylistIds.isEmpty()) return;
+    m_livePlaylistIds.clear();
+    m_livePlaylistIndex = -1;
+    m_livePlaylistFolderName.clear();
+    emit livePlaylistChanged();
+}
+
+void BroadcastController::advanceLivePlaylist()
+{
+    if (m_livePlaylistIds.isEmpty() || !m_broadcastEngine) return;
+    m_livePlaylistIndex = (m_livePlaylistIndex + 1) % m_livePlaylistIds.size();
+    stageMedia(m_livePlaylistIds.at(m_livePlaylistIndex));
+    m_broadcastEngine->takeLive();
+}
+
 void BroadcastController::findAndStageSong(int songNumber, const QString &languageCode, const QString &targetSegmentId)
 {
     const QString lang = languageCode.isEmpty() ? m_languageCode : languageCode;

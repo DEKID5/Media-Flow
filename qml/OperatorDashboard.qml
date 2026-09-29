@@ -502,6 +502,7 @@ Item {
                 Layout.fillHeight: true
                 title: "LIVE"
                 isLive: true
+                acceptsFolderDrop: true
                 asset: (MediaFlowBackend || {}).broadcastEngine ? MediaFlowBackend.broadcastEngine.programAsset : null
                 cameraDevice: (MediaFlowBackend || {}).programCameraDevice
             }

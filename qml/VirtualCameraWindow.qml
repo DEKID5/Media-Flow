@@ -82,7 +82,12 @@ Window {
         z: activeIsA ? 1 : 2
     }
 
+    // Imperatively driven by takeImageLive()/cutImageLive() (called from
+    // onTakeExecuted/onCutExecuted below) instead of a plain reactive
+    // binding, so Take fades over 2s like the video crossfade instead of
+    // just snapping to the new image.
     Image {
+        id: programImage
         anchors.fill: parent
         z: 3
         fillMode: Image.PreserveAspectFit
@@ -91,14 +96,43 @@ Window {
         // high-res source photo is minified to fit this window, then
         // minified again by VirtualCameraManager's scale-to-1080p pass.
         mipmap: true
-        visible: {
-            let a = (MediaFlowBackend || {}).broadcastEngine ? MediaFlowBackend.broadcastEngine.programAsset : null
-            return a && a.type === "image" && a.absolutePath
+        visible: opacity > 0
+        opacity: 0
+        Behavior on opacity {
+            id: imageFade
+            NumberAnimation { duration: 1000; easing.type: Easing.InOutQuad }
         }
-        source: {
-            let a = (MediaFlowBackend || {}).broadcastEngine ? MediaFlowBackend.broadcastEngine.programAsset : null
-            return a && a.absolutePath ? "file:///" + a.absolutePath : ""
+    }
+
+    Timer {
+        id: imageSwapTimer
+        interval: 1000
+        property string pendingSource: ""
+        onTriggered: {
+            programImage.source = pendingSource
+            programImage.opacity = 1
         }
+    }
+
+    // Fades the current live image out, swaps to the new one, then fades it
+    // in -- ~2s total, matching the video crossfade's duration.
+    function takeImageLive(path) {
+        if (programImage.opacity > 0) {
+            programImage.opacity = 0
+            imageSwapTimer.pendingSource = path
+            imageSwapTimer.restart()
+        } else {
+            programImage.source = path
+            programImage.opacity = 1
+        }
+    }
+
+    // Cut is instant, unlike Take -- bypass the opacity Behavior entirely.
+    function cutImageLive() {
+        imageFade.enabled = false
+        programImage.opacity = 0
+        programImage.source = ""
+        imageFade.enabled = true
     }
 
     function executeCut(url, type) {
@@ -127,6 +161,9 @@ Window {
         let a = (MediaFlowBackend || {}).broadcastEngine ? MediaFlowBackend.broadcastEngine.programAsset : null
         if (a && a.absolutePath && (a.type === "video" || a.type === "audio")) {
             executeCut("file:///" + a.absolutePath, a.type)
+        } else if (a && a.absolutePath && a.type === "image") {
+            programImage.source = "file:///" + a.absolutePath
+            programImage.opacity = 1
         }
     }
     onVisibleChanged: if (visible) syncToCurrentProgram()
@@ -147,7 +184,7 @@ Window {
             property: "opacity"
             from: 0.0
             to: 1.0
-            duration: 300
+            duration: 2000
             easing.type: Easing.InOutQuad
         }
         NumberAnimation {
@@ -155,7 +192,7 @@ Window {
             property: "opacity"
             from: 1.0
             to: 0.0
-            duration: 300
+            duration: 2000
             easing.type: Easing.InOutQuad
         }
         onFinished: {
@@ -179,12 +216,15 @@ Window {
                 playerB.stop()
                 playerB.source = ""
             }
+            cutImageLive()
         }
 
         function onTakeExecuted() {
             let a = MediaFlowBackend.broadcastEngine.programAsset
             if (a && a.absolutePath && (a.type === "video" || a.type === "audio")) {
                 executeTake("file:///" + a.absolutePath, a.type)
+            } else if (a && a.absolutePath && a.type === "image") {
+                takeImageLive("file:///" + a.absolutePath)
             } else {
                 playerA.stop()
                 playerA.source = ""

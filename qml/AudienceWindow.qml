@@ -88,21 +88,54 @@ Window {
         z: activeIsA ? 1 : 2
     }
 
-    // ── Image display ──
+    // ── Image display -- imperatively driven by takeImageLive()/
+    // cutImageLive() (called from onTakeExecuted/onCutExecuted below)
+    // instead of a plain reactive binding, so Take fades over 2s like the
+    // video crossfade instead of just snapping to the new image. ──
     Image {
+        id: programImage
         anchors.fill: parent; z: 3
         fillMode: Image.PreserveAspectFit; asynchronous: true
         // Prevents shimmer/aliasing on fine detail (text, thin lines) when a
         // high-res source photo is minified to fit this window.
         mipmap: true
-        visible: {
-            let a = (MediaFlowBackend || {}).broadcastEngine ? MediaFlowBackend.broadcastEngine.programAsset : null;
-            return a && a.type === "image" && a.absolutePath;
+        visible: opacity > 0
+        opacity: 0
+        Behavior on opacity {
+            id: imageFade
+            NumberAnimation { duration: 1000; easing.type: Easing.InOutQuad }
         }
-        source: {
-            let a = (MediaFlowBackend || {}).broadcastEngine ? MediaFlowBackend.broadcastEngine.programAsset : null;
-            return a && a.absolutePath ? "file:///" + a.absolutePath : "";
+    }
+
+    Timer {
+        id: imageSwapTimer
+        interval: 1000
+        property string pendingSource: ""
+        onTriggered: {
+            programImage.source = pendingSource
+            programImage.opacity = 1
         }
+    }
+
+    // Fades the current live image out, swaps to the new one, then fades it
+    // in -- ~2s total, matching the video crossfade's duration.
+    function takeImageLive(path) {
+        if (programImage.opacity > 0) {
+            programImage.opacity = 0
+            imageSwapTimer.pendingSource = path
+            imageSwapTimer.restart()
+        } else {
+            programImage.source = path
+            programImage.opacity = 1
+        }
+    }
+
+    // Cut is instant, unlike Take -- bypass the opacity Behavior entirely.
+    function cutImageLive() {
+        imageFade.enabled = false
+        programImage.opacity = 0
+        programImage.source = ""
+        imageFade.enabled = true
     }
 
     // =====================================================================
@@ -137,12 +170,15 @@ Window {
         let a = (MediaFlowBackend || {}).broadcastEngine ? MediaFlowBackend.broadcastEngine.programAsset : null
         if (a && a.absolutePath && (a.type === "video" || a.type === "audio")) {
             executeCut("file:///" + a.absolutePath, a.type)
+        } else if (a && a.absolutePath && a.type === "image") {
+            programImage.source = "file:///" + a.absolutePath
+            programImage.opacity = 1
         }
     }
     onVisibleChanged: if (visible) syncToCurrentProgram()
 
     // =====================================================================
-    //  TAKE (500ms crossfade)
+    //  TAKE (2s crossfade)
     // =====================================================================
     function executeTake(url, type) {
         let next = activeIsA ? playerB : playerA
@@ -157,11 +193,11 @@ Window {
         id: crossfadeAnim
         NumberAnimation {
             target: activeIsA ? videoOutB : videoOutA
-            property: "opacity"; from: 0.0; to: 1.0; duration: 300; easing.type: Easing.InOutQuad
+            property: "opacity"; from: 0.0; to: 1.0; duration: 2000; easing.type: Easing.InOutQuad
         }
         NumberAnimation {
             target: activeIsA ? videoOutA : videoOutB
-            property: "opacity"; from: 1.0; to: 0.0; duration: 300; easing.type: Easing.InOutQuad
+            property: "opacity"; from: 1.0; to: 0.0; duration: 2000; easing.type: Easing.InOutQuad
         }
         onFinished: {
             let prev = activeIsA ? playerA : playerB
@@ -184,15 +220,18 @@ Window {
                 playerA.stop(); playerA.source = ""
                 playerB.stop(); playerB.source = ""
             }
+            cutImageLive()
         }
 
         function onTakeExecuted() {
             let a = MediaFlowBackend.broadcastEngine.programAsset
             if (a && a.absolutePath && (a.type === "video" || a.type === "audio")) {
                 executeTake("file:///" + a.absolutePath, a.type)
+            } else if (a && a.absolutePath && a.type === "image") {
+                takeImageLive("file:///" + a.absolutePath)
             } else {
-                // Taking live to an image (or camera input) — stop any video/audio
-                // that was previously live so its sound doesn't keep playing under it.
+                // Taking live to camera input -- stop any video/audio that
+                // was previously live so its sound doesn't keep playing under it.
                 playerA.stop(); playerA.source = ""
                 playerB.stop(); playerB.source = ""
             }
