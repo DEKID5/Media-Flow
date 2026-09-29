@@ -1443,7 +1443,16 @@ QString BroadcastController::resolveSongToSegment(int songNumber, const QString 
     if (id.isEmpty())
         return {};
 
-    m_meetingModel->addLinkedMediaForId(targetSegmentId, id);
+    // Replaces (not appends) -- a song segment holds exactly one video, the
+    // current best match for this song number/language. Auto-discovered
+    // (non-imported) library entries get a fresh random id every scan (see
+    // BroadcastController::onMediaFound), so appending here would leave
+    // every previous restart's now-stale id for the *same* underlying file
+    // sitting in the list forever, since its id never matches the new one
+    // for the dedup check in addLinkedMediaForId to catch -- confirmed
+    // live: repeated restarts piled up half a dozen broken-thumbnail
+    // entries on Opening Song.
+    m_meetingModel->setLinkedMediaForId(targetSegmentId, {id});
     m_meetingModel->setSongNumberForId(targetSegmentId, songNumber);
     if (targetSegmentId == m_selectedSegmentId)
         selectSegment(targetSegmentId);

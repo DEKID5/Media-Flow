@@ -47,6 +47,8 @@ set(MFQ_SOURCES
 
 if(WIN32)
     list(APPEND MFQ_SOURCES src/zoomhotkey_win.cpp src/zoomhotkey_win.h)
+    # Embeds qml/assets/icon.ico into MediaFlow.exe (taskbar/Explorer/Alt-Tab).
+    list(APPEND MFQ_SOURCES resources/app.rc)
 endif()
 
 qt_add_executable(mediaflow ${MFQ_SOURCES})
