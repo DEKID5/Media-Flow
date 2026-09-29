@@ -121,15 +121,68 @@ Rectangle {
         z: activeIsA ? 1 : 2
     }
 
-    // ── Image display (for image assets) ──
+    // ── Image display (for image assets) -- Preview only; the LIVE
+    // instance uses liveProgramImage below instead, so Take/Cut can fade
+    // it like video does rather than snapping instantly. ──
     Image {
         id: imageDisplay
         anchors.fill: parent
         fillMode: Image.PreserveAspectFit
         asynchronous: true
+        mipmap: true
         source: (asset && asset.absolutePath && asset.type === "image") ? ("file:///" + asset.absolutePath) : ""
-        visible: mediaType === "image"
+        visible: !monitor.isLive && mediaType === "image"
         z: 3
+    }
+
+    // ── Live image display -- imperatively driven by takeImageLive()/
+    // cutImageLive() (called from the engine signal handlers below) instead
+    // of a plain reactive binding, so a Take fades over 2s like video does
+    // and a Cut still clears instantly. ──
+    Image {
+        id: liveProgramImage
+        anchors.fill: parent
+        fillMode: Image.PreserveAspectFit
+        asynchronous: true
+        mipmap: true
+        visible: monitor.isLive && opacity > 0
+        opacity: 0
+        z: 3
+        Behavior on opacity {
+            id: liveImageFade
+            NumberAnimation { duration: 1000; easing.type: Easing.InOutQuad }
+        }
+    }
+
+    Timer {
+        id: liveImageSwapTimer
+        interval: 1000
+        property string pendingSource: ""
+        onTriggered: {
+            liveProgramImage.source = pendingSource
+            liveProgramImage.opacity = 1
+        }
+    }
+
+    // Fades the current live image out, swaps to the new one, then fades
+    // it in -- ~2s total, matching the video crossfade's duration.
+    function takeImageLive(path) {
+        if (liveProgramImage.opacity > 0) {
+            liveProgramImage.opacity = 0
+            liveImageSwapTimer.pendingSource = path
+            liveImageSwapTimer.restart()
+        } else {
+            liveProgramImage.source = path
+            liveProgramImage.opacity = 1
+        }
+    }
+
+    // Cut is instant, unlike Take -- bypass the opacity Behavior entirely.
+    function cutImageLive() {
+        liveImageFade.enabled = false
+        liveProgramImage.opacity = 0
+        liveProgramImage.source = ""
+        liveImageFade.enabled = true
     }
 
     // ── Thumbnail overlay (preview, paused state) ──
@@ -152,8 +205,16 @@ Rectangle {
     //    actively driving this monitor, in which case it should actually
     //    play through unattended (see acceptsFolderDrop). ──
     readonly property bool playlistDriving: acceptsFolderDrop && (MediaFlowBackend || {}).previewPlaylistActive
+    readonly property bool livePlaylistDriving: isLive && (MediaFlowBackend || {}).livePlaylistActive
     onAssetChanged: {
-        if (isLive) return  // Live is handled by cut/take signals
+        if (isLive) {
+            // Program's own crossfade (executeTake) handles actually
+            // displaying each slide; this only manages the unattended
+            // dwell-then-advance timer for the live image playlist.
+            if (livePlaylistDriving && asset && asset.type === "image") liveImageDwellTimer.restart()
+            else liveImageDwellTimer.stop()
+            return
+        }
 
         if (!asset || !asset.absolutePath || asset.type === "input") {
             playerA.stop(); playerA.source = ""
@@ -191,6 +252,13 @@ Rectangle {
         interval: 6000; repeat: false
         onTriggered: {
             if (monitor.playlistDriving) MediaFlowBackend.advancePreviewPlaylist()
+        }
+    }
+    Timer {
+        id: liveImageDwellTimer
+        interval: 6000; repeat: false
+        onTriggered: {
+            if (monitor.livePlaylistDriving) MediaFlowBackend.advanceLivePlaylist()
         }
     }
 
@@ -253,7 +321,7 @@ Rectangle {
     }
 
     // =====================================================================
-    //  TAKE TRANSITION (crossfade — 500ms)
+    //  TAKE TRANSITION (crossfade — 2s)
     // =====================================================================
     function executeTake(url, type) {
         let next = activeIsA ? playerB : playerA
@@ -269,12 +337,12 @@ Rectangle {
         NumberAnimation {
             target: activeIsA ? videoOutB : videoOutA
             property: "opacity"; from: 0.0; to: 1.0
-            duration: 500; easing.type: Easing.InOutQuad
+            duration: 2000; easing.type: Easing.InOutQuad
         }
         NumberAnimation {
             target: activeIsA ? videoOutA : videoOutB
             property: "opacity"; from: 1.0; to: 0.0
-            duration: 500; easing.type: Easing.InOutQuad
+            duration: 2000; easing.type: Easing.InOutQuad
         }
         onFinished: {
             let prev = activeIsA ? playerA : playerB
@@ -294,12 +362,15 @@ Rectangle {
             } else {
                 executeFadeOut()
             }
+            cutImageLive()
         }
 
         function onTakeExecuted() {
             let a = MediaFlowBackend.broadcastEngine.programAsset
             if (a && a.absolutePath && (a.type === "video" || a.type === "audio")) {
                 executeTake("file:///" + a.absolutePath, a.type)
+            } else if (a && a.absolutePath && a.type === "image") {
+                takeImageLive("file:///" + a.absolutePath)
             }
         }
 
@@ -311,7 +382,9 @@ Rectangle {
     }
 
     // =====================================================================
-    //  FOLDER DRAG-AND-DROP (Preview only, see acceptsFolderDrop)
+    //  FOLDER DRAG-AND-DROP -- Preview starts an unattended preview
+    //  playlist; the LIVE monitor instead takes each image live immediately
+    //  (see acceptsFolderDrop).
     // =====================================================================
     DropArea {
         id: folderDropArea
@@ -321,7 +394,9 @@ Rectangle {
         z: 25
         onDropped: (drop) => {
             const folderId = drop.getDataAsString("application/x-mediaflow-pinfolder")
-            if (folderId && MediaFlowBackend) MediaFlowBackend.playPinnedFolderInPreview(folderId)
+            if (!folderId || !MediaFlowBackend) return
+            if (monitor.isLive) MediaFlowBackend.playPinnedFolderLive(folderId)
+            else MediaFlowBackend.playPinnedFolderInPreview(folderId)
         }
     }
 
@@ -332,22 +407,25 @@ Rectangle {
         border.color: Theme.accentEmerald; border.width: 2
         Label {
             anchors.centerIn: parent
-            text: "DROP TO PLAY FOLDER"
+            text: monitor.isLive ? "DROP TO PLAY IMAGES LIVE" : "DROP TO PLAY FOLDER"
             color: "white"; font.bold: true; font.pixelSize: 13; font.letterSpacing: 1
         }
     }
 
-    // Playlist status + stop control
+    // Playlist status + stop control (Preview and Live each have their own
+    // independent playlist state, so only one of these shows at a time).
     Rectangle {
         anchors.top: parent.top; anchors.horizontalCenter: parent.horizontalCenter; anchors.margins: 16; z: 20
-        visible: monitor.playlistDriving
+        visible: monitor.playlistDriving || monitor.livePlaylistDriving
         width: playlistRow.width + 20; height: 26; radius: 13
         color: "#CC000000"; border.color: Theme.accentEmerald; border.width: 1
         Row {
             id: playlistRow
             anchors.centerIn: parent; spacing: 8
             Label {
-                text: "PLAYING: " + ((MediaFlowBackend || {}).previewPlaylistFolderName || "").toUpperCase()
+                text: "PLAYING: " + ((monitor.isLive
+                    ? (MediaFlowBackend || {}).livePlaylistFolderName
+                    : (MediaFlowBackend || {}).previewPlaylistFolderName) || "").toUpperCase()
                 color: "white"; font.bold: true; font.pixelSize: 9; font.letterSpacing: 0.5
             }
             Rectangle {
@@ -355,7 +433,7 @@ Rectangle {
                 Label { id: stopLbl; anchors.centerIn: parent; text: "STOP"; color: "white"; font.bold: true; font.pixelSize: 8 }
                 MouseArea {
                     anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                    onClicked: MediaFlowBackend.stopPreviewPlaylist()
+                    onClicked: monitor.isLive ? MediaFlowBackend.stopLivePlaylist() : MediaFlowBackend.stopPreviewPlaylist()
                 }
             }
         }

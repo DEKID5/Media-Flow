@@ -96,6 +96,14 @@ class BroadcastController final : public QObject
     Q_PROPERTY(QString workbookStatus READ workbookStatus NOTIFY workbookStatusChanged)
     Q_PROPERTY(bool previewPlaylistActive READ previewPlaylistActive NOTIFY previewPlaylistChanged)
     Q_PROPERTY(QString previewPlaylistFolderName READ previewPlaylistFolderName NOTIFY previewPlaylistChanged)
+    // Same idea as the preview playlist above, but drives Program directly --
+    // each advance stages the next image then calls takeLive() so it goes
+    // out through the normal crossfade, instead of just sitting in Preview.
+    // Images only (see playPinnedFolderLive): a live video ending already
+    // triggers MonitorView's EndOfMedia -> clearLive() cut-to-black, so
+    // mixing videos into an unattended live playlist would fight that.
+    Q_PROPERTY(bool livePlaylistActive READ livePlaylistActive NOTIFY livePlaylistChanged)
+    Q_PROPERTY(QString livePlaylistFolderName READ livePlaylistFolderName NOTIFY livePlaylistChanged)
 
     // --- Legacy Timer System Removed ---
 
@@ -173,6 +181,8 @@ public:
 
     bool previewPlaylistActive() const { return !m_previewPlaylistIds.isEmpty(); }
     QString previewPlaylistFolderName() const { return m_previewPlaylistFolderName; }
+    bool livePlaylistActive() const { return !m_livePlaylistIds.isEmpty(); }
+    QString livePlaylistFolderName() const { return m_livePlaylistFolderName; }
     // Weeks found across every locally downloaded mwb/w publication, for the
     // week-picker dropdown; each entry is {"label", "iso"}.
     Q_INVOKABLE QVariantList availableWorkbookWeeks() const;
@@ -221,6 +231,13 @@ public:
     Q_INVOKABLE void playPinnedFolderInPreview(const QString &folderId);
     Q_INVOKABLE void stopPreviewPlaylist();
     Q_INVOKABLE void advancePreviewPlaylist();
+    // Same, but for Program: dragging a pinned folder onto the LIVE monitor
+    // stages its first image and takes it live immediately (crossfade), then
+    // MonitorView's dwell timer calls advanceLivePlaylist() to move to the
+    // next one -- images only, see the Q_PROPERTY comments above.
+    Q_INVOKABLE void playPinnedFolderLive(const QString &folderId);
+    Q_INVOKABLE void stopLivePlaylist();
+    Q_INVOKABLE void advanceLivePlaylist();
     Q_INVOKABLE void previewMediaByPath(const QString &path);
     Q_INVOKABLE void importMediaToFileSystem(const QString &category);
     Q_INVOKABLE QVariantMap addMediaToSegment(const QString &segmentId, const QString &mediaType);
@@ -302,6 +319,7 @@ signals:
     void extendedFeedBackgroundChanged();
     void workbookStatusChanged();
     void previewPlaylistChanged();
+    void livePlaylistChanged();
     void languagesChanged();
     void songNotFound(int songNumber);
     void songNotFoundInLanguage(int songNumber, const QString &languageName);
@@ -371,6 +389,9 @@ private:
     QStringList m_previewPlaylistIds;
     int m_previewPlaylistIndex = -1;
     QString m_previewPlaylistFolderName;
+    QStringList m_livePlaylistIds;
+    int m_livePlaylistIndex = -1;
+    QString m_livePlaylistFolderName;
     QString m_mwbPublicationFolder;
     QString m_watchtowerPublicationFolder;
     QString m_cbsPublicationFolder;
