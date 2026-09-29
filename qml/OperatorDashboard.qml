@@ -48,6 +48,39 @@ Item {
         color: Theme.bg
     }
 
+    // Global operator shortcuts -- a Shortcut item attaches to the nearest
+    // Window ancestor automatically, so these fire regardless of which
+    // control currently has focus. Reuse the same guarded wrapper functions
+    // the header buttons call (requestZoomBroadcast's driver-check/warning
+    // dialog in particular must not be bypassed). Key sequences are bound to
+    // MediaFlowBackend.shortcutKeys rather than hardcoded, so rebinding one
+    // in Settings (SHORTCUTS section) takes effect immediately -- an empty
+    // string just means "unbound" (Shortcut accepts that as a no-op).
+    function keyFor(action) {
+        const keys = (MediaFlowBackend || {}).shortcutKeys
+        return keys ? (keys[action] || "") : ""
+    }
+    function keyHint(action) {
+        const k = root.keyFor(action)
+        return k ? ("  (" + k + ")") : ""
+    }
+    Shortcut { sequence: root.keyFor("cut"); onActivated: root.cutLive() }
+    Shortcut { sequence: root.keyFor("take"); onActivated: root.takeLive() }
+    Shortcut {
+        sequence: root.keyFor("pauseProgram")
+        onActivated: {
+            if (MediaFlowBackend && MediaFlowBackend.broadcastEngine)
+                MediaFlowBackend.broadcastEngine.toggleProgramPause()
+        }
+    }
+    Shortcut { sequence: root.keyFor("goLive"); onActivated: (MediaFlowBackend || {}).toggleMeetingLive() }
+    Shortcut { sequence: root.keyFor("broadcastZoom"); onActivated: root.requestZoomBroadcast() }
+    Shortcut {
+        sequence: root.keyFor("webcamToggle")
+        onActivated: { if (MediaFlowBackend) MediaFlowBackend.webcamFallbackEnabled = !MediaFlowBackend.webcamFallbackEnabled }
+    }
+    Shortcut { sequence: root.keyFor("extendFeed"); onActivated: (MediaFlowBackend || {}).toggleAudienceWindow() }
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
@@ -309,9 +342,9 @@ Item {
                         // spring settles it back so a rapid double-click doesn't stutter.
                         scale: goLiveMa.pressed ? 0.97 : 1.0
                         Behavior on scale { SpringAnimation { spring: 5; damping: 0.6 } }
-                        ToolTip.visible: root.compactHeader && goLiveMa.containsMouse
+                        ToolTip.visible: goLiveMa.containsMouse
                         ToolTip.delay: 500
-                        ToolTip.text: (MediaFlowBackend || {}).isMeetingLive ? "Meeting live — click to end" : "Go live"
+                        ToolTip.text: ((MediaFlowBackend || {}).isMeetingLive ? "Meeting live — click to end" : "Go live") + root.keyHint("goLive")
                         RowLayout {
                             anchors.centerIn: parent; spacing: Theme.space2
                             BroadcastIcon {
@@ -339,9 +372,9 @@ Item {
                         Behavior on scale { SpringAnimation { spring: 5; damping: 0.6 } }
                         ToolTip.visible: zoomMa.containsMouse
                         ToolTip.delay: 500
-                        ToolTip.text: (MediaFlowBackend || {}).vcamEnabled
+                        ToolTip.text: ((MediaFlowBackend || {}).vcamEnabled
                             ? "Broadcasting — click to stop sending video to Zoom."
-                            : "1. Click to start.  2. In Zoom's camera picker, choose “OBS Virtual Camera.”  3. Room audio stays on your speakers — nothing is sent to Zoom."
+                            : "1. Click to start.  2. In Zoom's camera picker, choose “OBS Virtual Camera.”  3. Room audio stays on your speakers — nothing is sent to Zoom.") + root.keyHint("broadcastZoom")
                         RowLayout {
                             anchors.centerIn: parent; spacing: Theme.space2
                             Rectangle {
@@ -382,9 +415,9 @@ Item {
                         Behavior on scale { SpringAnimation { spring: 5; damping: 0.6 } }
                         ToolTip.visible: webcamMa.containsMouse
                         ToolTip.delay: 500
-                        ToolTip.text: (MediaFlowBackend || {}).webcamFallbackEnabled
+                        ToolTip.text: ((MediaFlowBackend || {}).webcamFallbackEnabled
                             ? "Webcam shows on Zoom whenever nothing's on Program. Click to force it off (black instead)."
-                            : "Webcam is forced off — Zoom shows black whenever nothing's on Program. Click to re-enable."
+                            : "Webcam is forced off — Zoom shows black whenever nothing's on Program. Click to re-enable.") + root.keyHint("webcamToggle")
                         Row {
                             anchors.centerIn: parent; spacing: Theme.space1
                             BroadcastIcon {
@@ -420,9 +453,9 @@ Item {
                         Behavior on color { ColorAnimation { duration: Theme.durationFast } }
                         scale: extMa.pressed ? 0.97 : 1.0
                         Behavior on scale { SpringAnimation { spring: 5; damping: 0.6 } }
-                        ToolTip.visible: root.compactHeader && extMa.containsMouse
+                        ToolTip.visible: extMa.containsMouse
                         ToolTip.delay: 500
-                        ToolTip.text: (MediaFlowBackend || {}).feedExtended ? "Feed active" : "Extend feed"
+                        ToolTip.text: ((MediaFlowBackend || {}).feedExtended ? "Feed active" : "Extend feed") + root.keyHint("extendFeed")
                         Row {
                             anchors.centerIn: parent; spacing: Theme.space2
                             BroadcastIcon {

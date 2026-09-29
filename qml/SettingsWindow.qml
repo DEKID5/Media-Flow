@@ -26,6 +26,18 @@ Window {
     property string newLangCode: ""
     property string langError: ""
 
+    // Single source of truth for both the SHORTCUTS (rebindable) and MANUAL
+    // (reference) sections below, so the two never drift out of sync.
+    readonly property var shortcutActions: [
+        { action: "cut", label: "Cut Live", description: "Instantly cut Program to whatever's staged." },
+        { action: "take", label: "Take Live", description: "Crossfade Program to whatever's staged." },
+        { action: "pauseProgram", label: "Pause / Resume Program", description: "Pause or resume whatever's currently playing live." },
+        { action: "goLive", label: "Go Live", description: "Marks the meeting itself as live (header status)." },
+        { action: "broadcastZoom", label: "Broadcast to Zoom", description: "Starts/stops sending video to Zoom via the virtual camera." },
+        { action: "webcamToggle", label: "Webcam Force-Off", description: "Forces the Zoom feed to black instead of the webcam fallback." },
+        { action: "extendFeed", label: "Extend Feed", description: "Opens/closes the audience-facing second-display window." },
+    ]
+
     Flickable {
         anchors.fill: parent
         contentWidth: width
@@ -80,6 +92,40 @@ Window {
                 CameraPicker {
                     currentDevice: (MediaFlowBackend || {}).programCameraDevice
                     onDeviceChosen: (device) => { MediaFlowBackend.setProgramCameraDevice(device) }
+                }
+            }
+
+            Rectangle { Layout.fillWidth: true; height: 1; color: Theme.panelBorder }
+
+            // ── Shortcuts ──
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Theme.space3
+                RowLayout {
+                    Layout.fillWidth: true
+                    Label { text: "SHORTCUTS"; color: Theme.textSecondary; font.bold: true; font.pixelSize: Theme.textSm; font.letterSpacing: 1 }
+                    Item { Layout.fillWidth: true }
+                    PillButton {
+                        text: "RESET TO DEFAULTS"; accentColor: Theme.textSecondary
+                        onClicked: MediaFlowBackend.resetShortcutKeys()
+                    }
+                }
+                Label {
+                    text: "Click a key to rebind it, then press the new key. Backspace/Delete unbinds it; Escape cancels. Only one action can hold a given key at a time -- claiming a key that's already used moves it here."
+                    color: Theme.textDim; font.pixelSize: Theme.textSm; wrapMode: Text.WordWrap; Layout.fillWidth: true
+                }
+
+                Repeater {
+                    model: settingsRoot.shortcutActions
+                    delegate: Rectangle {
+                        Layout.fillWidth: true; Layout.preferredHeight: 44
+                        radius: Theme.radiusSm; color: Theme.surfaceRaised
+                        RowLayout {
+                            anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12; spacing: 8
+                            Label { text: modelData.label; color: Theme.textPrimary; font.pixelSize: Theme.textMd; Layout.fillWidth: true }
+                            ShortcutCapture { action: modelData.action }
+                        }
+                    }
                 }
             }
 
@@ -295,6 +341,60 @@ Window {
 
             Rectangle { Layout.fillWidth: true; height: 1; color: Theme.panelBorder }
 
+            // ── Manual ──
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Theme.space3
+                Label { text: "MANUAL"; color: Theme.textSecondary; font.bold: true; font.pixelSize: Theme.textSm; font.letterSpacing: 1 }
+
+                Label { text: "Broadcast controls"; color: Theme.textPrimary; font.bold: true; font.pixelSize: Theme.textSm; Layout.topMargin: Theme.space2 }
+                Repeater {
+                    model: settingsRoot.shortcutActions
+                    delegate: ColumnLayout {
+                        Layout.fillWidth: true; spacing: 2
+                        RowLayout {
+                            Layout.fillWidth: true; spacing: 8
+                            Label { text: modelData.label; color: Theme.textPrimary; font.bold: true; font.pixelSize: Theme.textSm }
+                            Rectangle {
+                                visible: keyLabel.text.length > 0
+                                Layout.preferredWidth: keyLabel.implicitWidth + 12; Layout.preferredHeight: 18
+                                radius: 9; color: Theme.panelBgDark; border.color: Theme.panelBorder
+                                Label {
+                                    id: keyLabel
+                                    anchors.centerIn: parent
+                                    text: {
+                                        const keys = (MediaFlowBackend || {}).shortcutKeys
+                                        return keys ? (keys[modelData.action] || "") : ""
+                                    }
+                                    color: Theme.accentBlue; font.pixelSize: Theme.textXs; font.bold: true
+                                }
+                            }
+                        }
+                        Label {
+                            Layout.fillWidth: true
+                            text: modelData.description
+                            color: Theme.textDim; font.pixelSize: Theme.textXs; wrapMode: Text.WordWrap
+                        }
+                    }
+                }
+
+                Label { text: "Quick Fetch & the meeting sequence"; color: Theme.textPrimary; font.bold: true; font.pixelSize: Theme.textSm; Layout.topMargin: Theme.space3 }
+                Label {
+                    Layout.fillWidth: true; wrapMode: Text.WordWrap
+                    color: Theme.textDim; font.pixelSize: Theme.textXs
+                    text: "Clicking a card in QUICK FETCH or Pins only previews it -- it does not change any segment's linked media. Select a segment in the SEQUENCE panel, then hover a card and click the green \"+\" that appears to actually link it to that segment."
+                }
+
+                Label { text: "Zoom broadcasting"; color: Theme.textPrimary; font.bold: true; font.pixelSize: Theme.textSm; Layout.topMargin: Theme.space3 }
+                Label {
+                    Layout.fillWidth: true; wrapMode: Text.WordWrap
+                    color: Theme.textDim; font.pixelSize: Theme.textXs
+                    text: "Click BROADCAST TO ZOOM, then in Zoom's own camera picker choose \"OBS Virtual Camera.\" Whatever's on Program shows there; when nothing is, it falls back to the webcam unless WEBCAM FORCE-OFF is on. Room audio always stays on your speakers -- nothing is sent to Zoom through this app."
+                }
+            }
+
+            Rectangle { Layout.fillWidth: true; height: 1; color: Theme.panelBorder }
+
             RowLayout {
                 Layout.fillWidth: true
                 Label {
@@ -387,6 +487,71 @@ Window {
                 verticalAlignment: Text.AlignVCenter; leftPadding: 8
             }
             background: Rectangle { color: "transparent" }
+        }
+    }
+
+    // A small rebindable key button: click to arm it, then press the
+    // desired key. Only single letters/digits/function keys (with optional
+    // Ctrl/Alt/Shift) are accepted -- arrow keys, Tab, etc. are ignored so a
+    // stray press while armed can't silently bind something unusable.
+    component ShortcutCapture: Rectangle {
+        id: captureRoot
+        property string action: ""
+        property bool listening: false
+
+        readonly property string currentKey: {
+            const keys = (MediaFlowBackend || {}).shortcutKeys
+            return keys ? (keys[action] || "") : ""
+        }
+
+        width: 96; height: 32; radius: Theme.radiusSm
+        color: listening ? Theme.accentBlue : Theme.surfaceRaised
+        border.color: listening ? Theme.accentBlue : Theme.panelBorder
+
+        Label {
+            anchors.centerIn: parent
+            text: captureRoot.listening ? "Press a key…" : (captureRoot.currentKey || "Unbound")
+            color: captureRoot.listening ? "white" : (captureRoot.currentKey ? Theme.textPrimary : Theme.textFaint)
+            font.pixelSize: Theme.textXs; font.bold: true
+            elide: Text.ElideRight
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: { captureRoot.listening = true; captureRoot.forceActiveFocus() }
+        }
+
+        onActiveFocusChanged: if (!activeFocus) listening = false
+
+        Keys.onPressed: (event) => {
+            if (!captureRoot.listening) return
+            event.accepted = true
+
+            if (event.key === Qt.Key_Escape) { captureRoot.listening = false; return }
+            if (event.key === Qt.Key_Backspace || event.key === Qt.Key_Delete) {
+                MediaFlowBackend.setShortcutKey(captureRoot.action, "")
+                captureRoot.listening = false
+                return
+            }
+            if (event.key === Qt.Key_Shift || event.key === Qt.Key_Control
+                || event.key === Qt.Key_Alt || event.key === Qt.Key_Meta)
+                return // modifier alone -- keep listening for the real key
+
+            let parts = []
+            if (event.modifiers & Qt.ControlModifier) parts.push("Ctrl")
+            if (event.modifiers & Qt.AltModifier) parts.push("Alt")
+            if (event.modifiers & Qt.ShiftModifier) parts.push("Shift")
+
+            let keyName = ""
+            if (event.key >= Qt.Key_F1 && event.key <= Qt.Key_F12) keyName = "F" + (event.key - Qt.Key_F1 + 1)
+            else if (event.key === Qt.Key_Space) keyName = "Space"
+            else if (event.text && event.text.trim().length === 1) keyName = event.text.toUpperCase()
+            else return // unsupported key (arrows, Tab, ...) -- stay listening
+
+            parts.push(keyName)
+            MediaFlowBackend.setShortcutKey(captureRoot.action, parts.join("+"))
+            captureRoot.listening = false
         }
     }
 }

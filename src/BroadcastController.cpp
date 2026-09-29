@@ -989,6 +989,44 @@ void BroadcastController::setWebcamFallbackEnabled(bool enabled)
     saveState();
 }
 
+QVariantMap BroadcastController::defaultShortcutKeys()
+{
+    return QVariantMap{
+        {QStringLiteral("cut"), QStringLiteral("C")},
+        {QStringLiteral("take"), QStringLiteral("T")},
+        {QStringLiteral("pauseProgram"), QStringLiteral("P")},
+        {QStringLiteral("goLive"), QStringLiteral("G")},
+        {QStringLiteral("broadcastZoom"), QStringLiteral("Z")},
+        {QStringLiteral("webcamToggle"), QStringLiteral("W")},
+        {QStringLiteral("extendFeed"), QStringLiteral("F")},
+    };
+}
+
+void BroadcastController::setShortcutKey(const QString &action, const QString &keySequence)
+{
+    if (!m_shortcutKeys.contains(action)) return;
+    if (m_shortcutKeys.value(action).toString() == keySequence) return;
+
+    if (!keySequence.isEmpty()) {
+        // No two actions may share a key -- a Shortcut item with a
+        // duplicate sequence would fire both bindings on one keypress.
+        for (auto it = m_shortcutKeys.begin(); it != m_shortcutKeys.end(); ++it) {
+            if (it.key() != action && it.value().toString() == keySequence)
+                it.value() = QString();
+        }
+    }
+    m_shortcutKeys[action] = keySequence;
+    emit shortcutKeysChanged();
+    saveState();
+}
+
+void BroadcastController::resetShortcutKeys()
+{
+    m_shortcutKeys = defaultShortcutKeys();
+    emit shortcutKeysChanged();
+    saveState();
+}
+
 bool BroadcastController::hasVirtualCameraDriver() const
 {
     // MediaFlow feeds VirtualCameraManager's output directly into OBS
@@ -1178,6 +1216,7 @@ void BroadcastController::saveState()
     root["extendedFeedScreenIndex"] = m_extendedFeedScreenIndex;
     root["timerScreenIndex"] = m_timerScreenIndex;
     root["webcamFallbackEnabled"] = m_webcamFallbackEnabled;
+    root["shortcutKeys"] = QJsonObject::fromVariantMap(m_shortcutKeys);
     root["bgmUseCustomFolder"] = m_bgmUseCustomFolder;
     root["bgmCustomFolder"] = m_bgmCustomFolder;
     root["extendedFeedBackgroundPath"] = m_extendedFeedBackgroundPath;
@@ -1217,6 +1256,16 @@ void BroadcastController::loadState()
     m_extendedFeedScreenIndex = root["extendedFeedScreenIndex"].toInt(-1);
     m_timerScreenIndex = root["timerScreenIndex"].toInt(-1);
     m_webcamFallbackEnabled = root["webcamFallbackEnabled"].toBool(true);
+    // Merge over the defaults rather than replacing wholesale, so an action
+    // added in a later version still gets a sensible default key even when
+    // loading an older save file that predates it.
+    const QVariantMap savedShortcuts = root["shortcutKeys"].toObject().toVariantMap();
+    if (!savedShortcuts.isEmpty()) {
+        QVariantMap merged = defaultShortcutKeys();
+        for (auto it = savedShortcuts.cbegin(); it != savedShortcuts.cend(); ++it)
+            if (merged.contains(it.key())) merged[it.key()] = it.value();
+        m_shortcutKeys = merged;
+    }
     m_bgmUseCustomFolder = root["bgmUseCustomFolder"].toBool(false);
     m_bgmCustomFolder = root["bgmCustomFolder"].toString();
     m_extendedFeedBackgroundPath = root["extendedFeedBackgroundPath"].toString();
