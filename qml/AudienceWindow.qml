@@ -10,6 +10,17 @@ Window {
     width: 1920; height: 1080; visible: false
     title: qsTr("MediaFlow — Audience Display")
     color: "black"
+    // This is a pure display output for the audience -- the operator never
+    // types or clicks into it directly, so it should never hold or request
+    // OS input focus. Without this, opening/closing another one of this
+    // app's own windows (or even switching to a different application
+    // entirely) can trigger a Win32 focus/activation event that briefly
+    // stalls Qt Quick's shared render thread across every top-level window
+    // in the process, including this one's continuously-playing video --
+    // confirmed live as the stutter/black-frame the operator reported.
+    // Frameless too, matching VirtualCameraWindow's pattern for the same
+    // reason: no title bar needed for a full-screen audience display.
+    flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
     // =====================================================================
     //  DUAL-PLAYER A/B — mirrors the operator's Live monitor
     //  Audio output comes from HERE (the audience display)
