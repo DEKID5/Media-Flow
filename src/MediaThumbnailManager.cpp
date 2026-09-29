@@ -4,6 +4,30 @@
 #include <QCoreApplication>
 #include <QTimer>
 #include <QMediaMetaData>
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
+
+namespace {
+// Every ffmpeg invocation below is a background helper the operator should
+// never see -- without this, launching a console executable (ffmpeg.exe)
+// from this app pops up its own visible console window with raw ffmpeg
+// stderr spam for the whole thumbnail-generation duration, confirmed live
+// in production (Windows creates a new console for a child console
+// process unless explicitly told not to).
+void runHidden(QProcess &process)
+{
+#ifdef Q_OS_WIN
+    process.setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments *args) {
+        args->flags |= CREATE_NO_WINDOW;
+        args->startupInfo->dwFlags |= STARTF_USESHOWWINDOW;
+        args->startupInfo->wShowWindow = SW_HIDE;
+    });
+#else
+    Q_UNUSED(process);
+#endif
+}
+} // namespace
 
 ThumbnailJob::ThumbnailJob(const QString &id, const QString &path, const QString &type)
     : m_id(id), m_path(path), m_type(type) 
@@ -51,6 +75,7 @@ bool ThumbnailJob::extractVideoFrame(const QString &input, const QString &output
     bool found = false;
     for (const QString &p : commonPaths) {
         QProcess check;
+        runHidden(check);
         check.start(p, {"-version"});
         if (check.waitForFinished(500) && check.exitCode() == 0) {
             ffmpegPath = p;
@@ -65,9 +90,10 @@ bool ThumbnailJob::extractVideoFrame(const QString &input, const QString &output
     }
 
     QProcess ffmpeg;
+    runHidden(ffmpeg);
     QStringList args;
     args << "-ss" << "00:00:01" << "-i" << input << "-vframes" << "1" << "-q:v" << "2" << "-s" << "320x180" << "-y" << output;
-    
+
     ffmpeg.start(ffmpegPath, args);
     if (!ffmpeg.waitForFinished(8000)) {
         qWarning() << "ThumbnailJob: ffmpeg timeout for" << input;
@@ -94,6 +120,7 @@ bool ThumbnailJob::scaleImage(const QString &input, const QString &output) {
 
 bool ThumbnailJob::extractAudioArt(const QString &input, const QString &output) {
     QProcess ffmpeg;
+    runHidden(ffmpeg);
     QStringList args;
     // Embedded ID3/cover art comes in whatever size and aspect ratio the
     // publisher shipped (square, portrait, odd sizes are all common) --
@@ -117,6 +144,7 @@ MediaThumbnailManager::MediaThumbnailManager(QObject *parent) : QObject(parent) 
 
     // Check for ffmpeg once
     QProcess check;
+    runHidden(check);
     check.start("ffmpeg", {"-version"});
     m_hasFfmpeg = check.waitForFinished(500) && check.exitCode() == 0;
     if (!m_hasFfmpeg) {

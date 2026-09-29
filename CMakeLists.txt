@@ -51,8 +51,15 @@ if(WIN32)
     list(APPEND MFQ_SOURCES resources/app.rc)
 endif()
 
+# WIN32_EXECUTABLE explicitly, not left to qt_add_executable's own default --
+# confirmed live that without it the linked exe still came out as a console
+# (CUI) subsystem app, which is what put a raw terminal window (showing
+# ffmpeg's own stderr spam, since child processes share the parent's
+# console) on screen for the whole app runtime in production. All logging
+# already goes to app_log.txt (see myMessageHandler in main.cpp), not
+# stdout/stderr, so nothing depends on having a console.
 qt_add_executable(mediaflow ${MFQ_SOURCES})
-set_target_properties(mediaflow PROPERTIES OUTPUT_NAME "MediaFlow")
+set_target_properties(mediaflow PROPERTIES OUTPUT_NAME "MediaFlow" WIN32_EXECUTABLE TRUE)
 
 # Must be set BEFORE qt_add_qml_module() -- Qt's qmldir generator reads this
 # property when the module is declared, not retroactively. Setting it after
