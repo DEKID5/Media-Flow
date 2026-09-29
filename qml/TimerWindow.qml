@@ -13,6 +13,10 @@ Window {
     width: 1920; height: 1080; visible: false
     title: qsTr("MediaFlow — Timer")
     color: "black"
+    // Pure display output, same reasoning as AudienceWindow.qml: never
+    // needs OS input focus, and giving it focus anyway risks the same
+    // cross-window render-thread stall on every other top-level window.
+    flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
 
     // Tile size derived from window height so the clock reads clearly at
     // whatever resolution the target monitor actually is (confirmed live

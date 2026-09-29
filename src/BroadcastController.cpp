@@ -898,10 +898,13 @@ void BroadcastController::openAudienceWindow()
             m_audienceWindow->setGeometry(targetScreen->geometry());
             m_audienceWindow->showFullScreen();
         } else {
+            // No raise()/requestActivate() here either -- a pure display
+            // output never needs OS input focus (see AudienceWindow.qml's
+            // Qt.WindowDoesNotAcceptFocus), and requesting it anyway forces
+            // an OS-level activation event that can stall every other
+            // top-level window's rendering for a frame or two.
             m_audienceWindow->resize(1280, 720);
             m_audienceWindow->show();
-            m_audienceWindow->raise();
-            m_audienceWindow->requestActivate();
         }
         m_feedExtended = true;
         emit feedExtendedChanged();
