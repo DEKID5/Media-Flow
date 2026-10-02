@@ -37,6 +37,20 @@ int main(int argc, char *argv[])
     // QOpenGLContext::currentContext() is always null during
     // afterRendering, so onAfterRendering() returns immediately and no
     // frame is ever captured or sent to the OBS Virtual Camera queue.
+    //
+    // This forces the whole app (every window, not just the Zoom capture
+    // one -- Qt has no per-window RHI backend) onto OpenGL instead of
+    // Windows' D3D11 default, which is the likely cause of Extended Feed
+    // stutter/blank-frame flashes on focus loss (confirmed architecturally;
+    // desktop OpenGL's swap-chain behavior on Windows is weaker across
+    // focus changes than D3D11). Tried routing through ANGLE
+    // (QT_OPENGL=angle) to get D3D11-backed behavior while keeping the
+    // same OpenGL API surface glReadPixels needs -- Qt6 rejects that env
+    // var outright ("no longer supported"), so that mitigation isn't
+    // available here. A real fix needs either a backend-agnostic rewrite
+    // of the capture path (QRhi texture readback instead of glReadPixels)
+    // or moving Zoom capture into a separate process -- both larger,
+    // riskier changes than this pass attempted.
     QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
 
     QApplication app(argc, argv);

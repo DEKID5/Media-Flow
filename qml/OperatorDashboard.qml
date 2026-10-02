@@ -18,6 +18,12 @@ Item {
     // threshold sits above that measured requirement so it always
     // switches to compact before anything would overflow.
     readonly property bool compactHeader: Window.width > 0 && Window.width < 1950
+    // A second, lower tier for the controls that still have room to shrink
+    // further (branding subtitle, week/meeting-type/language pickers) --
+    // lets the window's real floor come down enough to fit a half-screen
+    // Windows Snap slot (960px on a standard 1920-wide display) instead of
+    // being stuck well above it.
+    readonly property bool veryCompactHeader: Window.width > 0 && Window.width < 1100
     signal settingsRequested()
 
     function takeLive() {
@@ -111,7 +117,10 @@ Item {
                     Column {
                         spacing: -2
                         Label { text: "MediaFlow"; color: Theme.textPrimary; font.bold: true; font.pixelSize: Theme.textMd }
-                        Label { text: "BROADCAST SUITE"; color: Theme.accentBlue; font.bold: true; font.pixelSize: 9; font.letterSpacing: 1.5 }
+                        Label {
+                            text: "BROADCAST SUITE"; color: Theme.accentBlue; font.bold: true; font.pixelSize: 9; font.letterSpacing: 1.5
+                            visible: !root.veryCompactHeader
+                        }
                     }
                 }
 
@@ -149,7 +158,10 @@ Item {
 
                 // 1d. MEETING WEEK PICKER
                 Rectangle {
-                    Layout.preferredHeight: 36; Layout.preferredWidth: 180; Layout.minimumWidth: 130; radius: Theme.radius; color: Theme.surfaceRaised; border.color: Theme.panelBorder
+                    Layout.preferredHeight: 36
+                    Layout.preferredWidth: root.veryCompactHeader ? 70 : 180
+                    Layout.minimumWidth: root.veryCompactHeader ? 70 : 130
+                    radius: Theme.radius; color: Theme.surfaceRaised; border.color: Theme.panelBorder
                     RowLayout {
                         anchors.fill: parent; anchors.margins: 4; spacing: 4
                         ComboBox {
@@ -192,21 +204,36 @@ Item {
 
                 // 2. MEETING TYPE SELECTOR
                 Rectangle {
-                    Layout.preferredHeight: 36; Layout.preferredWidth: 190; Layout.minimumWidth: 140; radius: Theme.radius; color: Theme.surfaceRaised; border.color: Theme.panelBorder
+                    Layout.preferredHeight: 36
+                    Layout.preferredWidth: root.veryCompactHeader ? 80 : 190
+                    Layout.minimumWidth: root.veryCompactHeader ? 80 : 140
+                    radius: Theme.radius; color: Theme.surfaceRaised; border.color: Theme.panelBorder
                     RowLayout {
                         anchors.fill: parent; anchors.margins: 4; spacing: 0
                         Rectangle {
                             Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radiusSm + 1
                             color: (MediaFlowBackend || {}).meetingType === "midweek" ? Theme.meetingAccent("midweek") : "transparent"
                             Behavior on color { ColorAnimation { duration: Theme.durationFast } }
-                            Label { anchors.centerIn: parent; text: "MIDWEEK"; color: (MediaFlowBackend || {}).meetingType === "midweek" ? "white" : Theme.textSecondary; font.pixelSize: Theme.textXs; font.bold: true }
+                            Label {
+                                anchors.fill: parent; anchors.margins: 2
+                                horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                                elide: Text.ElideRight
+                                text: root.veryCompactHeader ? "MW" : "MIDWEEK"
+                                color: (MediaFlowBackend || {}).meetingType === "midweek" ? "white" : Theme.textSecondary; font.pixelSize: Theme.textXs; font.bold: true
+                            }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: (MediaFlowBackend || {}).setMeetingTypeStr("midweek") }
                         }
                         Rectangle {
                             Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radiusSm + 1
                             color: (MediaFlowBackend || {}).meetingType === "weekend" ? Theme.meetingAccent("weekend") : "transparent"
                             Behavior on color { ColorAnimation { duration: Theme.durationFast } }
-                            Label { anchors.centerIn: parent; text: "WEEKEND"; color: (MediaFlowBackend || {}).meetingType === "weekend" ? "white" : Theme.textSecondary; font.pixelSize: Theme.textXs; font.bold: true }
+                            Label {
+                                anchors.fill: parent; anchors.margins: 2
+                                horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                                elide: Text.ElideRight
+                                text: root.veryCompactHeader ? "WE" : "WEEKEND"
+                                color: (MediaFlowBackend || {}).meetingType === "weekend" ? "white" : Theme.textSecondary; font.pixelSize: Theme.textXs; font.bold: true
+                            }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: (MediaFlowBackend || {}).setMeetingTypeStr("weekend") }
                         }
                     }
@@ -214,7 +241,10 @@ Item {
 
                 // 3. LANGUAGE SELECTOR
                 Rectangle {
-                    Layout.preferredHeight: 36; Layout.preferredWidth: 150; Layout.minimumWidth: 110; radius: Theme.radius; color: Theme.surfaceRaised; border.color: Theme.panelBorder
+                    Layout.preferredHeight: 36
+                    Layout.preferredWidth: root.veryCompactHeader ? 70 : 150
+                    Layout.minimumWidth: root.veryCompactHeader ? 70 : 110
+                    radius: Theme.radius; color: Theme.surfaceRaised; border.color: Theme.panelBorder
                     RowLayout {
                         anchors.fill: parent; anchors.margins: 4; spacing: 4
                         BroadcastIcon { name: "globe"; iconSize: 13; Layout.leftMargin: 8; opacity: 0.7; color: Theme.textPrimary }
