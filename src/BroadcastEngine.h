@@ -21,6 +21,13 @@ class BroadcastEngine : public QObject
     Q_PROPERTY(MediaAsset previewAsset READ previewAsset NOTIFY previewAssetChanged)
     Q_PROPERTY(MediaAsset programAsset READ programAsset NOTIFY programAssetChanged)
     Q_PROPERTY(bool programPaused READ isProgramPaused WRITE setProgramPaused NOTIFY isProgramPausedChanged)
+    // How far into the current Program video the operator's own LIVE
+    // monitor already is (kept live-updated by MonitorView.qml's LIVE
+    // instance). Lets a newly-opened Zoom/Extended Feed window seek to
+    // roughly the right spot instead of restarting at 0:00 when it syncs
+    // to whatever's already playing -- see VirtualCameraWindow.qml/
+    // AudienceWindow.qml's syncToCurrentProgram().
+    Q_PROPERTY(qint64 programPositionMs READ programPositionMs WRITE setProgramPositionMs NOTIFY programPositionChanged)
 
     // --- Player Access (for QML VideoOutput binding) ---
     Q_PROPERTY(QMediaPlayer* previewPlayer READ previewPlayer CONSTANT)
@@ -32,6 +39,12 @@ public:
     MediaAsset previewAsset() const { return m_previewAsset; }
     MediaAsset programAsset() const { return m_programAsset; }
     bool isProgramPaused() const { return m_programPaused; }
+    qint64 programPositionMs() const { return m_programPositionMs; }
+    void setProgramPositionMs(qint64 ms) {
+        if (m_programPositionMs == ms) return;
+        m_programPositionMs = ms;
+        emit programPositionChanged();
+    }
 
     QMediaPlayer *previewPlayer() const { return m_previewPlayer; }
     QMediaPlayer *programPlayer() const { return m_programPlayer; }
@@ -72,6 +85,7 @@ signals:
     void isProgramPausedChanged();
     void cutExecuted();
     void takeExecuted();
+    void programPositionChanged();
 
 private:
     void loadPlayerSource(QMediaPlayer *player, const MediaAsset &asset);
@@ -79,6 +93,7 @@ private:
     MediaAsset m_previewAsset;
     MediaAsset m_programAsset;
     bool m_programPaused = false;
+    qint64 m_programPositionMs = 0;
 
     QMediaPlayer *m_previewPlayer;
     QMediaPlayer *m_programPlayer;

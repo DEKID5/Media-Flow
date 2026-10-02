@@ -97,6 +97,14 @@ Rectangle {
                 MediaFlowBackend.advancePreviewPlaylist()
             }
         }
+        // Keeps BroadcastEngine.programPositionMs live-updated so a
+        // newly-opened Zoom/Extended Feed window can seek to roughly the
+        // right spot instead of restarting at 0:00 -- see
+        // VirtualCameraWindow.qml/AudienceWindow.qml's syncToCurrentProgram().
+        onPositionChanged: {
+            if (monitor.isLive && activeIsA && MediaFlowBackend && MediaFlowBackend.broadcastEngine)
+                MediaFlowBackend.broadcastEngine.programPositionMs = position
+        }
     }
     VideoOutput {
         id: videoOutA
@@ -123,6 +131,10 @@ Rectangle {
                        && monitor.acceptsFolderDrop && (MediaFlowBackend || {}).previewPlaylistActive) {
                 MediaFlowBackend.advancePreviewPlaylist()
             }
+        }
+        onPositionChanged: {
+            if (monitor.isLive && !activeIsA && MediaFlowBackend && MediaFlowBackend.broadcastEngine)
+                MediaFlowBackend.broadcastEngine.programPositionMs = position
         }
     }
     VideoOutput {

@@ -10,11 +10,14 @@ ApplicationWindow {
     height: 900
     // No floor previously existed, so the dashboard's fixed-width toolbar
     // controls and side panels would clip/overflow uncontrollably below
-    // ~1400px. OperatorDashboard.qml's header now collapses its broadcast
-    // buttons to icon-only below ~1950px (see compactHeader there), which
-    // is what makes a floor this low possible without any control
-    // overflowing off the right edge -- verified live down to 1450px.
-    minimumWidth: 1500
+    // ~1400px. OperatorDashboard.qml's header collapses its broadcast
+    // buttons to icon-only below ~1950px (compactHeader) and the
+    // branding/week/meeting-type/language controls further below ~1100px
+    // (veryCompactHeader), which is what makes a floor this low possible --
+    // the three-column dock below the header only needs ~880px on its own,
+    // so 950 keeps a small margin above that while still fitting under a
+    // standard 1920-wide display's half-screen Windows Snap slot (960px).
+    minimumWidth: 950
     minimumHeight: 700
     // Stays hidden until the splash screen signals it's done (see below) --
     // showing this immediately let the operator see an empty dashboard

@@ -140,7 +140,10 @@ Window {
         imageFade.enabled = true
     }
 
-    function executeCut(url, type) {
+    // seekMs: only used by syncToCurrentProgram() below, to pick up mid-
+    // playback instead of restarting at 0:00 -- a real operator Cut always
+    // starts fresh, so every other caller leaves this at its default.
+    function executeCut(url, type, seekMs) {
         let next = activeIsA ? playerB : playerA
         let prev = activeIsA ? playerA : playerB
         let nextOut = activeIsA ? videoOutB : videoOutA
@@ -149,6 +152,7 @@ Window {
         if (type === "video" || type === "audio") {
             next.source = url
             next.play()
+            if (seekMs > 0) next.setPosition(seekMs)
         }
 
         nextOut.opacity = 1.0
@@ -161,11 +165,13 @@ Window {
 
     // Same gap as AudienceWindow: if media is already live when Zoom
     // broadcasting is turned on, start playing it immediately instead of
-    // showing black until the next Cut/Take.
+    // showing black until the next Cut/Take -- and pick up wherever the
+    // operator's own LIVE monitor already is, instead of restarting at
+    // 0:00 (see BroadcastEngine::programPositionMs).
     function syncToCurrentProgram() {
         let a = (MediaFlowBackend || {}).broadcastEngine ? MediaFlowBackend.broadcastEngine.programAsset : null
         if (a && a.absolutePath && (a.type === "video" || a.type === "audio")) {
-            executeCut("file:///" + a.absolutePath, a.type)
+            executeCut("file:///" + a.absolutePath, a.type, MediaFlowBackend.broadcastEngine.programPositionMs)
         } else if (a && a.absolutePath && a.type === "image") {
             programImage.source = "file:///" + a.absolutePath
             programImage.opacity = 1
