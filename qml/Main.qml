@@ -55,13 +55,7 @@ ApplicationWindow {
 
     OperatorDashboard {
         anchors.fill: parent
-        onSettingsRequested: {
-            // requestActivate() already brings the window to the front on
-            // Windows as part of activating it -- the separate raise() was
-            // a redundant extra native call every time Settings opened.
-            settingsWindow.show()
-            settingsWindow.requestActivate()
-        }
+        onSettingsRequested: settingsWindow.open()
     }
 
     SettingsWindow {
