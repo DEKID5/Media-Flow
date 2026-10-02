@@ -51,7 +51,17 @@ void BroadcastEngine::cutLive()
 
 void BroadcastEngine::takeLive()
 {
-    if (m_previewAsset.absolutePath.isEmpty() && m_previewAsset.type != "input") {
+    // A webcam/camera-input asset is preview-only -- Zoom's own fallback
+    // (VirtualCameraWindow.qml, gated by webcamFallbackEnabled) is the one
+    // and only place a webcam is meant to appear. Without this, tapping the
+    // webcam card in Quick Fetch to preview it, then hitting Take Live,
+    // would put a live camera feed onto Program and the operator's own LIVE
+    // monitor -- never intended.
+    if (m_previewAsset.type == "input") {
+        qDebug() << "BroadcastEngine: Cannot take webcam live — Zoom-only.";
+        return;
+    }
+    if (m_previewAsset.absolutePath.isEmpty()) {
         qDebug() << "BroadcastEngine: Cannot take — no preview.";
         return;
     }

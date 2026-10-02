@@ -193,6 +193,8 @@ Window {
                             anchors.fill: parent
                             visible: backgroundSection.hasBackground && !backgroundSection.isVideo
                             fillMode: Image.PreserveAspectCrop; asynchronous: true
+                            sourceSize.width: 128
+                            sourceSize.height: 80
                             source: visible ? "file:///" + (MediaFlowBackend || {}).extendedFeedBackgroundPath : ""
                         }
                         BroadcastIcon {

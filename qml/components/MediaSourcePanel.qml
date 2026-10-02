@@ -411,7 +411,12 @@ Item {
         anchors.bottom: parent.bottom; anchors.left: parent.left; anchors.right: parent.right
         anchors.topMargin: 12; anchors.leftMargin: 15; anchors.rightMargin: 15
         clip: true
-        cellWidth: width / 2
+        // Adapts column count to available width instead of a fixed 2
+        // columns -- stays at 2 near the panel's minimum width (no
+        // regression there) but uses the space properly once the window's
+        // wider, instead of just stretching 2 oversized cards.
+        readonly property int gridColumns: Math.max(2, Math.floor(width / 180))
+        cellWidth: width / gridColumns
         cellHeight: cellWidth * 0.7
         visible: root.currentView !== "pins" || root.selectedPinFolderId !== ""
 
@@ -499,6 +504,12 @@ Item {
                 Image {
                     anchors.fill: parent; fillMode: Image.PreserveAspectCrop; opacity: cardMa.containsMouse ? 0.9 : 0.7
                     asynchronous: true
+                    // Caps decode cost to the card's own on-screen size instead
+                    // of decoding at full source resolution for a small tile --
+                    // matters most here since there can be dozens of these
+                    // on screen at once.
+                    sourceSize.width: width
+                    sourceSize.height: height
                     source: model.thumbnailPath || "qrc:/MediaFlow/qml/assets/video_placeholder.png"
                     Behavior on opacity { NumberAnimation { duration: 200 } }
                 }
