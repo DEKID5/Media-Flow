@@ -96,6 +96,11 @@ Window {
         // high-res source photo is minified to fit this window, then
         // minified again by VirtualCameraManager's scale-to-1080p pass.
         mipmap: true
+        // Caps decode cost to this window's own 1920x1080 size -- matches
+        // VirtualCameraManager's output resolution, so nothing ever decodes
+        // bigger than what's actually captured.
+        sourceSize.width: 1920
+        sourceSize.height: 1080
         visible: opacity > 0
         opacity: 0
         Behavior on opacity {

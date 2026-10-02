@@ -359,7 +359,13 @@ bool WorkbookManager::applyFromLocalMwb(const QString &lang, const QDate &target
                             const QString title = q.value(1).toString();
                             const QDate start = parseWeekStart(title, targetDate.year());
                             if (!start.isValid()) continue;
-                            const int diff = static_cast<int>(qAbs(start.daysTo(targetDate)));
+                            // Must be the week that actually contains
+                            // targetDate (Monday on/before it, within 7
+                            // days) -- nearest absolute distance would
+                            // otherwise roll over as early as Thursday.
+                            const qint64 daysFromStart = start.daysTo(targetDate);
+                            if (daysFromStart < 0 || daysFromStart >= 7) continue;
+                            const int diff = static_cast<int>(daysFromStart);
                             if (diff < best.diff) best = {dbPath, docId, title, diff};
                         }
                     }
@@ -434,7 +440,12 @@ bool WorkbookManager::applyFromLocalWatchtower(const QString &lang, const QDate 
                             if (contextTitle.isEmpty()) continue;
                             const QDate start = parseWeekStart(contextTitle, targetDate.year());
                             if (!start.isValid()) continue;
-                            const int diff = static_cast<int>(qAbs(start.daysTo(targetDate)));
+                            // Same week-containment fix as the mwb lookup
+                            // above -- only a week whose Monday is on or
+                            // before targetDate, within 7 days, may win.
+                            const qint64 daysFromStart = start.daysTo(targetDate);
+                            if (daysFromStart < 0 || daysFromStart >= 7) continue;
+                            const int diff = static_cast<int>(daysFromStart);
                             if (diff < best.diff) best = {dir.absolutePath(), dbPath, docId, title, diff};
                         }
                     }
@@ -585,7 +596,14 @@ void WorkbookManager::applyMwbEpub(const QByteArray &epubData)
     for (int i = 0; i < weeks.size(); ++i) {
         const QDate start = parseWeekStart(weeks[i].text, issueYear);
         if (!start.isValid()) continue;
-        const int diff = static_cast<int>(qAbs(start.daysTo(today)));
+        // Must be the week that actually CONTAINS today (its Mon-start is on
+        // or before today, within the same 7-day span) -- nearest absolute
+        // distance would otherwise flip to next week as early as Thursday
+        // (once more than 3 days past this week's Monday), rolling the
+        // whole app over several days before Monday actually arrives.
+        const qint64 daysFromStart = start.daysTo(today);
+        if (daysFromStart < 0 || daysFromStart >= 7) continue;
+        const int diff = static_cast<int>(daysFromStart);
         if (diff < bestDiff) { bestDiff = diff; bestIndex = i; }
     }
     // Text parsing failed for every entry (unrecognized month names, e.g. a
@@ -665,7 +683,12 @@ void WorkbookManager::applyWatchtowerEpub(const QByteArray &epubData)
         const QDate start = parseWeekStart(dateMatch.captured(1), today.year());
         if (!start.isValid()) continue;
 
-        const int diff = static_cast<int>(qAbs(start.daysTo(today)));
+        // Same week-containment fix as applyMwbEpub above: only a week whose
+        // Monday is on or before today, within 7 days, may win -- otherwise
+        // this rolls over as early as Thursday instead of on Monday.
+        const qint64 daysFromStart = start.daysTo(today);
+        if (daysFromStart < 0 || daysFromStart >= 7) continue;
+        const int diff = static_cast<int>(daysFromStart);
         if (diff < bestDiff) {
             bestDiff = diff;
             bestChapter = it.value();

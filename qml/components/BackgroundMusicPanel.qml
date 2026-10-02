@@ -81,6 +81,8 @@ DockPanel {
                 visible: source !== ""
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
+                sourceSize.width: 200
+                sourceSize.height: 200
             }
 
             Rectangle {

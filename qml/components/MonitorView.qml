@@ -58,7 +58,12 @@ Rectangle {
         camera: Camera {
             id: monitorCamera
             cameraDevice: monitor.cameraDevice
-            active: !monitor.asset || !monitor.asset.absolutePath || monitor.asset.type === "input"
+            // Webcam must never show on the LIVE instance -- Zoom's fallback
+            // (VirtualCameraWindow.qml) is the only place a webcam is meant
+            // to actually render; this instance only ever shows Program
+            // content or the standby card. Preview keeps its existing
+            // tap-to-preview-the-webcam-card behavior.
+            active: !monitor.isLive && (!monitor.asset || !monitor.asset.absolutePath || monitor.asset.type === "input")
         }
         videoOutput: monitorCameraOut
     }
@@ -138,6 +143,11 @@ Rectangle {
         fillMode: Image.PreserveAspectFit
         asynchronous: true
         mipmap: true
+        // Caps decode cost to the actual broadcast target resolution --
+        // matches VirtualCameraManager's own output size, so a large source
+        // photo never decodes any bigger than what's ever actually shown.
+        sourceSize.width: 1920
+        sourceSize.height: 1080
         source: (asset && asset.absolutePath && asset.type === "image") ? ("file:///" + asset.absolutePath) : ""
         visible: !monitor.isLive && mediaType === "image"
         z: 3
@@ -153,6 +163,8 @@ Rectangle {
         fillMode: Image.PreserveAspectFit
         asynchronous: true
         mipmap: true
+        sourceSize.width: 1920
+        sourceSize.height: 1080
         visible: monitor.isLive && opacity > 0
         opacity: 0
         z: 3
@@ -199,6 +211,8 @@ Rectangle {
         anchors.fill: parent
         fillMode: Image.PreserveAspectCrop
         asynchronous: true
+        sourceSize.width: 1920
+        sourceSize.height: 1080
         opacity: 0.9
         visible: !isLive && mediaType === "video" && asset && asset.thumbnailPath && asset.thumbnailPath !== "" && activePlayer.playbackState !== MediaPlayer.PlayingState
         source: (asset && asset.thumbnailPath) ? asset.thumbnailPath : ""
