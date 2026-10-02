@@ -4,23 +4,34 @@ import QtQuick.Layouts
 import MediaFlow 1.0
 import "components"
 
-// Deliberately a plain Window (default OS chrome -- minimize/maximize/close
-// all work normally) rather than the frameless Qt.Tool windows used for
-// VirtualCameraWindow/AudienceWindow, since those need to stay out of the
-// operator's way while rendering; Settings is a normal UI surface the user
-// explicitly opens and closes like any other app window.
-Window {
+// A same-window dropdown instead of a separate OS Window. Opening/closing a
+// real Window -- even a small one like Settings previously was -- is an
+// OS-level activation event, and Qt Quick's threaded render loop syncs
+// every top-level window against one shared GUI thread once per frame, so
+// that event could stall rendering across every OTHER window in the
+// process too (confirmed this session as a real contributor to Extended
+// Feed stutter/blank-frame flashes). A Popup lives entirely inside the
+// main window's own scene graph -- opening/closing it never touches the
+// OS at all, eliminating that cause outright for Settings specifically.
+Popup {
     id: settingsRoot
-    width: 640
-    height: 620
-    minimumWidth: 560
-    minimumHeight: 520
-    // QML's Window defaults to visible:true, so without this it opens on
-    // every app launch instead of staying hidden until the gear icon is
-    // clicked (confirmed live: it appeared unprompted on startup).
+    width: Math.min(640, (parent ? parent.width : 640) - 32)
+    height: Math.min(620, (parent ? parent.height : 620) - 72)
+    x: 16
+    y: 56
     visible: false
-    title: qsTr("MediaFlow — Settings")
-    color: Theme.bg
+    modal: true
+    focus: true
+    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+    padding: 0
+    background: Rectangle { color: Theme.bg; radius: Theme.radius; border.color: Theme.panelBorder }
+
+    enter: Transition {
+        NumberAnimation { property: "opacity"; from: 0.0; to: 1.0; duration: 160; easing.type: Easing.OutQuad }
+    }
+    exit: Transition {
+        NumberAnimation { property: "opacity"; from: 1.0; to: 0.0; duration: 120; easing.type: Easing.InQuad }
+    }
 
     property string newLangName: ""
     property string newLangCode: ""
@@ -38,8 +49,27 @@ Window {
         { action: "extendFeed", label: "Extend Feed", description: "Opens/closes the audience-facing second-display window." },
     ]
 
+    contentItem: ColumnLayout {
+        spacing: 0
+
+        // Replaces the OS title bar a real Window would have had -- a
+        // Popup has no window chrome of its own, so Settings needs its own
+        // title/close affordance now.
+        RowLayout {
+            Layout.fillWidth: true; Layout.preferredHeight: 48
+            Layout.leftMargin: Theme.space5; Layout.rightMargin: Theme.space3
+            Label { text: "SETTINGS"; color: Theme.textPrimary; font.bold: true; font.pixelSize: Theme.textMd; font.letterSpacing: 1; Layout.fillWidth: true }
+            Rectangle {
+                width: 28; height: 28; radius: 14
+                color: closeMa.containsMouse ? Theme.surfaceHover : "transparent"
+                BroadcastIcon { anchors.centerIn: parent; name: "close"; iconSize: 12; color: Theme.textSecondary }
+                MouseArea { id: closeMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: settingsRoot.close() }
+            }
+        }
+        Rectangle { Layout.fillWidth: true; height: 1; color: Theme.panelBorder }
+
     Flickable {
-        anchors.fill: parent
+        Layout.fillWidth: true; Layout.fillHeight: true
         contentWidth: width
         contentHeight: contentColumn.implicitHeight + Theme.space6 * 2
         clip: true
@@ -413,6 +443,7 @@ Window {
                 Item { Layout.fillWidth: true }
             }
         }
+    }
     }
 
     component ScreenPicker: Rectangle {
