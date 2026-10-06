@@ -38,19 +38,7 @@ Rectangle {
     //  TAKE = crossfade (500ms opacity)
     // =====================================================================
 
-    property bool activeIsA: true  // which player is currently showing
-
-    // The audience window is the preferred single audio channel, but it only
-    // exists once "Extend Feed" has actually been used to open it. Without
-    // that fallback, taking media live before ever extending the feed (no
-    // second display, or just not clicked yet) produced no audio anywhere.
-    // So: this (LIVE) monitor is the audio source whenever the audience
-    // window isn't the one carrying it -- never both, to keep it to one channel.
-    readonly property bool isAudioSource: isLive && !((MediaFlowBackend || {}).feedExtended)
-    readonly property real roomVolume: {
-        let mf = MediaFlowBackend || {}
-        return (mf.mixerMuted ? 0 : 1) * ((mf.masterVolume !== undefined ? mf.masterVolume : 100) / 100.0)
-    }
+    property bool activeIsA: true  // which player is currently showing (Preview use only -- see below)
 
     // ── Camera Background ──
     CaptureSession {
@@ -78,32 +66,17 @@ Rectangle {
     // ── Player A ──
     MediaPlayer {
         id: playerA
-        videoOutput: videoOutA
-        // Normally video-confidence-only (audience window carries the audio);
-        // becomes the audio source itself when the audience window isn't active,
-        // so program audio is never silently lost. See isAudioSource above.
-        audioOutput: AudioOutput { id: audioA; volume: monitor.isAudioSource ? monitor.roomVolume : 0; muted: !monitor.isAudioSource; device: (MediaFlowBackend || {}).roomAudioOutputDevice }
+        // Only the Preview instance actually plays through this player --
+        // the LIVE instance displays BroadcastEngine's shared programSinkA
+        // instead (bound in Component.onCompleted below), so it never gets
+        // a videoOutput and stays dormant.
+        videoOutput: monitor.isLive ? null : videoOutA
+        audioOutput: AudioOutput { id: audioA; muted: true; volume: 0 }
         onMediaStatusChanged: {
-            if (isLive && activeIsA && mediaStatus === MediaPlayer.EndOfMedia) {
-                // A folder slideshow driving Program advances to the next
-                // item instead of cutting to standby when one finishes.
-                if ((MediaFlowBackend || {}).livePlaylistActive) {
-                    MediaFlowBackend.advanceLivePlaylist()
-                } else if (MediaFlowBackend && MediaFlowBackend.broadcastEngine) {
-                    MediaFlowBackend.broadcastEngine.clearLive()
-                }
-            } else if (!isLive && activeIsA && mediaStatus === MediaPlayer.EndOfMedia
+            if (!isLive && activeIsA && mediaStatus === MediaPlayer.EndOfMedia
                        && monitor.acceptsFolderDrop && (MediaFlowBackend || {}).previewPlaylistActive) {
                 MediaFlowBackend.advancePreviewPlaylist()
             }
-        }
-        // Keeps BroadcastEngine.programPositionMs live-updated so a
-        // newly-opened Zoom/Extended Feed window can seek to roughly the
-        // right spot instead of restarting at 0:00 -- see
-        // VirtualCameraWindow.qml/AudienceWindow.qml's syncToCurrentProgram().
-        onPositionChanged: {
-            if (monitor.isLive && activeIsA && MediaFlowBackend && MediaFlowBackend.broadcastEngine)
-                MediaFlowBackend.broadcastEngine.programPositionMs = position
         }
     }
     VideoOutput {
@@ -118,23 +91,13 @@ Rectangle {
     // ── Player B ──
     MediaPlayer {
         id: playerB
-        videoOutput: videoOutB
-        audioOutput: AudioOutput { id: audioB; volume: monitor.isAudioSource ? monitor.roomVolume : 0; muted: !monitor.isAudioSource; device: (MediaFlowBackend || {}).roomAudioOutputDevice }
+        videoOutput: monitor.isLive ? null : videoOutB
+        audioOutput: AudioOutput { id: audioB; muted: true; volume: 0 }
         onMediaStatusChanged: {
-            if (isLive && !activeIsA && mediaStatus === MediaPlayer.EndOfMedia) {
-                if ((MediaFlowBackend || {}).livePlaylistActive) {
-                    MediaFlowBackend.advanceLivePlaylist()
-                } else if (MediaFlowBackend && MediaFlowBackend.broadcastEngine) {
-                    MediaFlowBackend.broadcastEngine.clearLive()
-                }
-            } else if (!isLive && !activeIsA && mediaStatus === MediaPlayer.EndOfMedia
+            if (!isLive && !activeIsA && mediaStatus === MediaPlayer.EndOfMedia
                        && monitor.acceptsFolderDrop && (MediaFlowBackend || {}).previewPlaylistActive) {
                 MediaFlowBackend.advancePreviewPlaylist()
             }
-        }
-        onPositionChanged: {
-            if (monitor.isLive && !activeIsA && MediaFlowBackend && MediaFlowBackend.broadcastEngine)
-                MediaFlowBackend.broadcastEngine.programPositionMs = position
         }
     }
     VideoOutput {
@@ -144,6 +107,19 @@ Rectangle {
         opacity: activeIsA ? 0.0 : 1.0
         visible: opacity > 0
         z: activeIsA ? 1 : 2
+    }
+
+    // The LIVE instance doesn't decode anything itself -- BroadcastEngine
+    // pushes every frame it decodes into videoOutA/B's own sinks (registered
+    // here once), the same way it feeds Extended Feed and Zoom. videoSink is
+    // read-only in Qt6 (can't just point this window's VideoOutput at the
+    // engine's sink), so frame-forwarding happens on the C++ side instead --
+    // see BroadcastEngine::registerProgramOutputs(). The Preview instance's
+    // videoOutA/B keep their normal MediaPlayer-owned sinks untouched.
+    Component.onCompleted: {
+        if (monitor.isLive && MediaFlowBackend && MediaFlowBackend.broadcastEngine) {
+            MediaFlowBackend.broadcastEngine.registerProgramOutputs(videoOutA.videoSink, videoOutB.videoSink)
+        }
     }
 
     // ── Image display (for image assets) -- Preview only; the LIVE
@@ -328,41 +304,31 @@ Rectangle {
         target: activeIsA ? videoOutA : videoOutB
         property: "opacity"; from: 1.0; to: 0.0
         duration: 500; easing.type: Easing.InOutQuad
-        onFinished: {
-            playerA.stop(); playerA.source = ""
-            playerB.stop(); playerB.source = ""
-        }
+        // BroadcastEngine stops the real program players itself, on its own
+        // matching 500ms timer -- this animation is purely visual now.
     }
 
     // =====================================================================
     //  CUT TRANSITION (instant — 0ms)
+    //  Purely visual for the LIVE instance -- BroadcastEngine's cutLive()/
+    //  clearLive() already drove the real program players before this fired.
     // =====================================================================
     function executeCut(url, type) {
-        let next = activeIsA ? playerB : playerA
-        let prev = activeIsA ? playerA : playerB
         let nextOut = activeIsA ? videoOutB : videoOutA
         let prevOut = activeIsA ? videoOutA : videoOutB
-
-        if (type === "video" || type === "audio") {
-            next.source = url
-            next.play()
-        }
 
         nextOut.opacity = 1.0
         prevOut.opacity = 0.0
         activeIsA = !activeIsA
-        prev.stop(); prev.source = ""
     }
 
     // =====================================================================
     //  TAKE TRANSITION (crossfade — 2s)
+    //  Purely visual for the LIVE instance -- BroadcastEngine's takeLive()
+    //  already started the new asset on its real program player; this just
+    //  crossfades opacity between the two shared-sink VideoOutputs.
     // =====================================================================
     function executeTake(url, type) {
-        let next = activeIsA ? playerB : playerA
-        if (type === "video" || type === "audio") {
-            next.source = url
-            next.play()
-        }
         crossfadeAnim.start()
     }
 
@@ -379,8 +345,6 @@ Rectangle {
             duration: 2000; easing.type: Easing.InOutQuad
         }
         onFinished: {
-            let prev = activeIsA ? playerA : playerB
-            prev.stop(); prev.source = ""
             activeIsA = !activeIsA
         }
     }
@@ -408,11 +372,9 @@ Rectangle {
             }
         }
 
-        function onIsProgramPausedChanged() {
-            let ap = activeIsA ? playerA : playerB
-            if (MediaFlowBackend.broadcastEngine.programPaused) ap.pause()
-            else ap.play()
-        }
+        // No onIsProgramPausedChanged handler needed -- BroadcastEngine's
+        // toggleProgramPause()/setProgramPaused() already pause/resume its
+        // own real program player directly now.
     }
 
     // =====================================================================
@@ -527,7 +489,14 @@ Rectangle {
             Behavior on scale { SpringAnimation { spring: 5; damping: 0.5 } }
             BroadcastIcon {
                 anchors.centerIn: parent; iconSize: 14
-                name: (activeIsA ? playerA : playerB).playbackState === MediaPlayer.PlayingState ? "eye" : "video"
+                name: {
+                    if (monitor.isLive) {
+                        let be = (MediaFlowBackend || {}).broadcastEngine
+                        let p = be ? (be.programActiveIsA ? be.programPlayerA : be.programPlayerB) : null
+                        return (p && p.playbackState === MediaPlayer.PlayingState) ? "eye" : "video"
+                    }
+                    return (activeIsA ? playerA : playerB).playbackState === MediaPlayer.PlayingState ? "eye" : "video"
+                }
             }
             MouseArea {
                 id: ppMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor

@@ -250,8 +250,28 @@ BroadcastController::BroadcastController(QQmlApplicationEngine *engine, QObject 
     connect(m_broadcastEngine, &BroadcastEngine::isProgramPausedChanged,
             this, &BroadcastController::isProgramPausedChanged);
 
-    // masterVolume/mixerMuted are consumed directly by AudienceWindow.qml
-    // (the single audio output) rather than routed through the engine.
+    // masterVolume/mixerMuted now drive BroadcastEngine's own shared
+    // program audio outputs directly (the single, centralized audio path
+    // every output window's decoded sink shares), instead of each window
+    // computing its own room-volume expression against these properties.
+    connect(this, &BroadcastController::masterVolumeChanged, this, [this]() {
+        m_broadcastEngine->setProgramVolume(m_masterVolume);
+    });
+    connect(this, &BroadcastController::mixerMutedChanged, this, [this]() {
+        m_broadcastEngine->setProgramMuted(m_mixerMuted);
+    });
+
+    // Centralized decode means EndOfMedia detection now lives on the
+    // engine's own program players (see BroadcastEngine::programEndOfMedia)
+    // instead of each output window's local MediaPlayer -- this replaces
+    // the identical branch that used to live in MonitorView.qml's LIVE
+    // instance onMediaStatusChanged handlers.
+    connect(m_broadcastEngine, &BroadcastEngine::programEndOfMedia, this, [this]() {
+        if (livePlaylistActive())
+            advanceLivePlaylist();
+        else
+            m_broadcastEngine->clearLive();
+    });
 
     // ── Auto-pause BGM when a program (video/audio) goes live ──
     // Keeps audio to a single channel: opening/closing music plays only

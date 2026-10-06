@@ -28,13 +28,11 @@ Window {
 
     property bool activeIsA: true
 
-    // Audience window is the single authoritative audio output for the whole
-    // app — the operator's monitors are always muted (see MonitorView.qml) —
-    // so room volume/mute are wired in here.
-    readonly property real roomVolume: {
-        let mf = MediaFlowBackend || {}
-        return (mf.mixerMuted ? 0 : 1) * ((mf.masterVolume !== undefined ? mf.masterVolume : 100) / 100.0)
-    }
+    // Audio is no longer owned here -- BroadcastEngine's own programAudioA/B
+    // are now the single authoritative audio output for the whole app,
+    // driven by BroadcastController's masterVolume/mixerMuted. This window
+    // just displays the shared decoded video, same as Zoom and the
+    // operator's own LIVE monitor.
 
     // Nothing currently live -- the same "no program asset" condition the
     // Image element below already keys off of, hoisted here so the
@@ -75,30 +73,31 @@ Window {
         visible: audienceRoot.isStandby && (MediaFlowBackend || {}).extendedFeedBackgroundType === "video"
     }
 
-    // ── Player A ──
-    MediaPlayer {
-        id: playerA
-        videoOutput: videoOutA
-        audioOutput: AudioOutput { id: audioA; volume: audienceRoot.roomVolume; device: (MediaFlowBackend || {}).roomAudioOutputDevice }
-    }
+    // ── Shared program sinks -- BroadcastEngine pushes every frame it
+    //    decodes into these sinks (registered below), the same way it
+    //    feeds the operator's LIVE monitor and Zoom. No local MediaPlayer
+    //    here anymore; this window never decodes. ──
     VideoOutput {
         id: videoOutA; anchors.fill: parent
         fillMode: VideoOutput.PreserveAspectFit
         opacity: activeIsA ? 1.0 : 0.0; visible: opacity > 0
         z: activeIsA ? 2 : 1
     }
-
-    // ── Player B ──
-    MediaPlayer {
-        id: playerB
-        videoOutput: videoOutB
-        audioOutput: AudioOutput { id: audioB; volume: audienceRoot.roomVolume; device: (MediaFlowBackend || {}).roomAudioOutputDevice }
-    }
     VideoOutput {
         id: videoOutB; anchors.fill: parent
         fillMode: VideoOutput.PreserveAspectFit
         opacity: activeIsA ? 0.0 : 1.0; visible: opacity > 0
         z: activeIsA ? 1 : 2
+    }
+
+    // videoSink is read-only on VideoOutput in Qt6, so the shared decode is
+    // fanned out by the engine pushing frames into each registered sink
+    // instead of this window binding to the engine's sink directly -- see
+    // BroadcastEngine::registerProgramOutputs().
+    Component.onCompleted: {
+        if (MediaFlowBackend && MediaFlowBackend.broadcastEngine) {
+            MediaFlowBackend.broadcastEngine.registerProgramOutputs(videoOutA.videoSink, videoOutB.videoSink)
+        }
     }
 
     // ── Image display -- imperatively driven by takeImageLive()/
@@ -154,41 +153,29 @@ Window {
     }
 
     // =====================================================================
-    //  CUT (instant swap)
+    //  CUT (instant swap) -- purely visual. BroadcastEngine's cutLive()/
+    //  takeLive() already drove the real shared program players before
+    //  this fired; this just flips which VideoOutput is visible.
     // =====================================================================
-    // seekMs: only used by syncToCurrentProgram() below, to pick up mid-
-    // playback instead of restarting at 0:00 -- a real operator Cut always
-    // starts fresh, so every other caller leaves this at its default.
-    function executeCut(url, type, seekMs) {
-        let next = activeIsA ? playerB : playerA
-        let prev = activeIsA ? playerA : playerB
+    function executeCut() {
         let nextOut = activeIsA ? videoOutB : videoOutA
         let prevOut = activeIsA ? videoOutA : videoOutB
-
-        if (type === "video" || type === "audio") {
-            next.source = url
-            next.play()
-            if (seekMs > 0) next.setPosition(seekMs)
-        }
-
         nextOut.opacity = 1.0
         prevOut.opacity = 0.0
         activeIsA = !activeIsA
-
-        prev.stop()
-        prev.source = ""
     }
 
-    // If a video/audio is already live when this window is (re-)shown --
-    // e.g. the operator took media live before ever clicking "Extend Feed",
-    // or after re-opening it -- start playing immediately instead of
-    // sitting black/silent until the next Cut/Take, picking up wherever the
-    // operator's own LIVE monitor already is (BroadcastEngine::
-    // programPositionMs) instead of restarting at 0:00.
+    // If this window is (re-)shown while something is already live -- e.g.
+    // the operator took media live before ever clicking "Extend Feed", or
+    // after re-opening it -- show the side that matches whichever shared
+    // sink BroadcastEngine is actually driving right now, instead of
+    // restarting or guessing. No seek needed -- the shared decode is
+    // already flowing; this window just needs to display the right half.
     function syncToCurrentProgram() {
-        let a = (MediaFlowBackend || {}).broadcastEngine ? MediaFlowBackend.broadcastEngine.programAsset : null
+        let be = (MediaFlowBackend || {}).broadcastEngine
+        let a = be ? be.programAsset : null
         if (a && a.absolutePath && (a.type === "video" || a.type === "audio")) {
-            executeCut("file:///" + a.absolutePath, a.type, MediaFlowBackend.broadcastEngine.programPositionMs)
+            activeIsA = be.programActiveIsA
         } else if (a && a.absolutePath && a.type === "image") {
             programImage.source = "file:///" + a.absolutePath
             programImage.opacity = 1
@@ -197,14 +184,9 @@ Window {
     onVisibleChanged: if (visible) syncToCurrentProgram()
 
     // =====================================================================
-    //  TAKE (2s crossfade)
+    //  TAKE (2s crossfade) -- purely visual, same reasoning as executeCut.
     // =====================================================================
-    function executeTake(url, type) {
-        let next = activeIsA ? playerB : playerA
-        if (type === "video" || type === "audio") {
-            next.source = url
-            next.play()
-        }
+    function executeTake() {
         crossfadeAnim.start()
     }
 
@@ -219,8 +201,6 @@ Window {
             property: "opacity"; from: 1.0; to: 0.0; duration: 2000; easing.type: Easing.InOutQuad
         }
         onFinished: {
-            let prev = activeIsA ? playerA : playerB
-            prev.stop(); prev.source = ""
             activeIsA = !activeIsA
         }
     }
@@ -234,33 +214,21 @@ Window {
         function onCutExecuted() {
             let a = MediaFlowBackend.broadcastEngine.programAsset
             if (a && a.absolutePath && (a.type === "video" || a.type === "audio"))
-                executeCut("file:///" + a.absolutePath, a.type)
-            else {
-                playerA.stop(); playerA.source = ""
-                playerB.stop(); playerB.source = ""
-            }
+                executeCut()
             cutImageLive()
         }
 
         function onTakeExecuted() {
             let a = MediaFlowBackend.broadcastEngine.programAsset
             if (a && a.absolutePath && (a.type === "video" || a.type === "audio")) {
-                executeTake("file:///" + a.absolutePath, a.type)
+                executeTake()
             } else if (a && a.absolutePath && a.type === "image") {
                 takeImageLive("file:///" + a.absolutePath)
-            } else {
-                // Taking live to camera input -- stop any video/audio that
-                // was previously live so its sound doesn't keep playing under it.
-                playerA.stop(); playerA.source = ""
-                playerB.stop(); playerB.source = ""
             }
         }
 
-        function onIsProgramPausedChanged() {
-            let ap = activeIsA ? playerA : playerB
-            if (MediaFlowBackend.broadcastEngine.programPaused) ap.pause()
-            else ap.play()
-        }
+        // No onIsProgramPausedChanged handler needed -- BroadcastEngine
+        // pauses/resumes its own real program player directly now.
     }
 
     // =====================================================================
