@@ -391,17 +391,23 @@ bool WorkbookManager::applyFromLocalMwb(const QString &lang, const QDate &target
                 // "sjjm" is the song-video/audio publication symbol; its Track
                 // number is the song number, in document (opening/middle/
                 // concluding) order -- confirmed against a real local database.
+                // Capped at 3 via LIMIT so an unrelated extra sjjm-tagged row
+                // elsewhere in the document can't silently shift which song
+                // lands on which segment (m1/m7/m11).
                 q.prepare(QStringLiteral(
                     "SELECT m.Track FROM DocumentMultimedia dm "
                     "JOIN Multimedia m ON dm.MultimediaId = m.MultimediaId "
                     "WHERE dm.DocumentId = ? AND m.KeySymbol = 'sjjm' "
-                    "ORDER BY dm.MultimediaId"));
+                    "ORDER BY dm.MultimediaId LIMIT 3"));
                 q.addBindValue(best.docId);
                 if (q.exec()) { while (q.next()) songNumbers.append(q.value(0).toInt()); }
             }
             db.close();
         }
         QSqlDatabase::removeDatabase(connName);
+    }
+    if (songNumbers.size() != 3) {
+        qWarning() << "WorkbookManager: expected 3 songs (opening/middle/concluding) in mwb document, found" << songNumbers.size();
     }
 
     if (songNumbers.size() > 0) m_controller->resolveWeeklySong(songNumbers[0], lang, QStringLiteral("m1"));
@@ -469,17 +475,24 @@ bool WorkbookManager::applyFromLocalWatchtower(const QString &lang, const QDate 
         if (db.open()) {
             {
                 QSqlQuery sq(db);
+                // Capped at 2 via LIMIT -- see the comment below on why this
+                // article only ever carries the middle/closing songs -- so an
+                // unrelated extra sjjm-tagged row can't silently shift w6 to
+                // the wrong song.
                 sq.prepare(QStringLiteral(
                     "SELECT m.Track FROM DocumentMultimedia dm "
                     "JOIN Multimedia m ON dm.MultimediaId = m.MultimediaId "
                     "WHERE dm.DocumentId = ? AND m.KeySymbol = 'sjjm' "
-                    "ORDER BY dm.MultimediaId"));
+                    "ORDER BY dm.MultimediaId LIMIT 2"));
                 sq.addBindValue(best.docId);
                 if (sq.exec()) { while (sq.next()) songNumbers.append(sq.value(0).toInt()); }
             }
             db.close();
         }
         QSqlDatabase::removeDatabase(connName);
+    }
+    if (songNumbers.size() != 2) {
+        qWarning() << "WorkbookManager: expected 2 songs (middle/closing) in Watchtower document, found" << songNumbers.size();
     }
 
     // Auto-link just the magazine cover as a placeholder thumbnail, not the
@@ -634,6 +647,9 @@ void WorkbookManager::applyMwbEpub(const QByteArray &epubData)
     auto it = songRe.globalMatch(html);
     while (it.hasNext() && songs.size() < 3)
         songs.append(it.next().captured(1).toInt());
+    if (songs.size() != 3) {
+        qWarning() << "WorkbookManager: expected 3 songs (opening/middle/concluding) in mwb chapter, found" << songs.size();
+    }
 
     const QString lang = currentLanguageCode();
     if (songs.size() > 0) m_controller->resolveWeeklySong(songs[0], lang, QStringLiteral("m1"));
@@ -704,8 +720,16 @@ void WorkbookManager::applyWatchtowerEpub(const QByteArray &epubData)
     static const QRegularExpression songRe(R"(SONG\s+(\d+))", QRegularExpression::CaseInsensitiveOption);
     const QString html = QString::fromUtf8(bestChapter);
     auto sit = songRe.globalMatch(html);
-    while (sit.hasNext())
+    // Capped at 2 -- exactly [middle, closing] -- so an extra "SONG n"
+    // occurrence elsewhere in the article's own body text (a footnote, a
+    // box, a cross-reference) can't silently shift which song lands on w6.
+    // This was previously uncapped, unlike applyMwbEpub's equivalent loop
+    // below -- confirmed as the cause of the closing-song mismatch reports.
+    while (sit.hasNext() && songs.size() < 2)
         songs.append(sit.next().captured(1).toInt());
+    if (songs.size() != 2) {
+        qWarning() << "WorkbookManager: expected 2 songs (middle/closing) in Watchtower article, found" << songs.size();
+    }
 
     const QString lang = currentLanguageCode();
     // See applyFromLocalWatchtower: the article's two songs are the middle
