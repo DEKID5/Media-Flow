@@ -10,6 +10,10 @@
 #include "MediaLibraryModel.h"
 #include "MeetingScheduleModel.h"
 #include "TimerController.h"
+#ifdef Q_OS_WIN
+#include <windows.h>
+#include <shlobj.h>
+#endif
 
 #include <QFile>
 #include <QTextStream>
@@ -54,6 +58,14 @@ int main(int argc, char *argv[])
     QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
 
     QApplication app(argc, argv);
+
+#ifdef Q_OS_WIN
+    // Windows blocks drag-and-drop from a normal (non-elevated) Explorer into
+    // an elevated process, so an admin-launched MediaFlow silently ignores
+    // every file drop. Log it so that cause is diagnosable from app_log.txt.
+    if (IsUserAnAdmin())
+        qWarning() << "MediaFlow is running elevated (Administrator): drag-and-drop from Explorer will not work. Launch it normally.";
+#endif
 
     qRegisterMetaType<QCameraDevice>("QCameraDevice");
     QApplication::setOrganizationName(QStringLiteral("MediaFlow"));
