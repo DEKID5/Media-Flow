@@ -18,11 +18,13 @@ Window {
     // cross-window render-thread stall on every other top-level window.
     flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
 
-    // Tile size derived from window height so the clock reads clearly at
-    // whatever resolution the target monitor actually is (confirmed live
-    // this session: TimerWindow can open on wildly different screen sizes).
-    readonly property real tileH: Math.min(height * 0.42, width * 0.22) * TimerBackend.timerScale
-    readonly property real tileW: tileH * 0.72
+    // Tiles fill the screen: width budget covers 4 tiles + colon + the
+    // overtime minus slot (always reserved so the digits never resize when
+    // overtime starts) minus the row's spacing; height takes most of the
+    // window height, leaving room for the header and labels. 100% on the
+    // slider = this maximum.
+    readonly property real tileW: width * 0.2 * TimerBackend.timerScale
+    readonly property real tileH: Math.min(height * 0.62, width * 0.2 * 1.9) * TimerBackend.timerScale
     readonly property color overtimeColor: "#FF1F1F"
     readonly property color normalColor: "#FFFFFF"
     readonly property color runningColor: "#00FF66"
@@ -74,9 +76,9 @@ Window {
                     visible: timerRoot.negative
                     color: timerRoot.overtimeColor
                     font.bold: true
-                    font.pixelSize: timerRoot.tileH * 0.5
+                    font.pixelSize: timerRoot.tileH * 0.35
                     Layout.alignment: Qt.AlignVCenter
-                    Layout.preferredWidth: timerRoot.tileW * 0.4
+                    Layout.preferredWidth: timerRoot.tileW * 0.3
                 }
 
                 ColumnLayout {
@@ -142,7 +144,15 @@ Window {
         property real tileH: 140
         width: tileW; height: tileH
         horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
-        font.family: "JetBrains Mono"; font.bold: true; font.pixelSize: tileH * 0.62
+        font.family: "JetBrains Mono"; font.bold: true
+        // Glyph is limited by tile width; any spare tile height is filled by
+        // stretching it vertically (cap height ~0.73em) so the digits use the
+        // whole tile instead of floating in it.
+        font.pixelSize: Math.min(tileH * 0.95, tileW * 1.5)
+        transform: Scale {
+            origin.y: tileH / 2
+            yScale: Math.max(1, Math.min(1.35, 0.78 * tileH / (0.73 * Math.min(tileH * 0.95, tileW * 1.5))))
+        }
     }
 
     // ── Split-flap digit ──────────────────────────────────────────────

@@ -23,7 +23,7 @@ class TimerController : public QObject
     // full-screen takeover, per the user's explicit choice that the two not
     // be tied together.
     Q_PROPERTY(bool fullScreenTimer READ fullScreenTimer WRITE setFullScreenTimer NOTIFY fullScreenTimerChanged)
-    // Size multiplier for the full-screen timer's digits (0.5 - 1.3), so the
+    // Size multiplier for the full-screen timer's digits (0.5 - 1.0, 1.0 = fills the screen), so the
     // operator can tune legibility for the room/screen. Persisted in QSettings.
     Q_PROPERTY(double timerScale READ timerScale WRITE setTimerScale NOTIFY timerScaleChanged)
 

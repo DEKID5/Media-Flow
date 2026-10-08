@@ -881,6 +881,21 @@ QVariantMap BroadcastController::getSong(int number, const QString &langCode) co
 }
 
 
+// Shows a borderless output window covering `screen`, but deliberately NOT via
+// showFullScreen() and one pixel short of the screen's height. Windows treats
+// an OpenGL window that exactly covers a monitor as fullscreen and switches
+// its presentation path; every time another window of the app (the operator
+// UI) then gets activated or clicked, that monitor blinks black or the video
+// stutters. A plain frameless window that doesn't quite cover the monitor
+// keeps the normal composited path, so the operator can freely multitask.
+static void showBorderlessOnScreen(QQuickWindow *window, QScreen *screen)
+{
+    const QRect g = screen->geometry();
+    window->setScreen(screen);
+    window->setGeometry(g.x(), g.y(), g.width(), g.height() - 1);
+    window->show();
+}
+
 void BroadcastController::openAudienceWindow()
 {
     const QList<QScreen *> screens = QGuiApplication::screens();
@@ -915,8 +930,7 @@ void BroadcastController::openAudienceWindow()
         if (targetScreen)
             m_audienceWindow->setScreen(targetScreen);
         if (screens.size() > 1) {
-            m_audienceWindow->setGeometry(targetScreen->geometry());
-            m_audienceWindow->showFullScreen();
+            showBorderlessOnScreen(m_audienceWindow, targetScreen);
         } else {
             // No raise()/requestActivate() here either -- a pure display
             // output never needs OS input focus (see AudienceWindow.qml's
@@ -986,9 +1000,7 @@ void BroadcastController::setTimerFullScreenActive(bool active)
     }
 
     m_timerWindow->hide();
-    m_timerWindow->setScreen(targetScreen);
-    m_timerWindow->setGeometry(targetScreen->geometry());
-    m_timerWindow->showFullScreen();
+    showBorderlessOnScreen(m_timerWindow, targetScreen);
 }
 
 bool BroadcastController::openZoomWindow()
