@@ -68,6 +68,26 @@ void VirtualCameraManager::stop()
         m_processFuture.waitForFinished();
     }
 
+    // Without this, Zoom (or any other consumer) just keeps showing the
+    // last frame we ever wrote -- the shared-memory ring buffer has no
+    // "producer went away" signal of its own beyond the state field, and
+    // a consumer that doesn't poll that closely enough simply freezes on
+    // stale video instead of visibly going black/off. Writing one last
+    // black frame before tearing the writer down means whatever's still
+    // reading at least shows black, as close to "the camera turned off"
+    // as a producer-side close can make it look.
+    if (m_writer) {
+        const int frameSize = kTargetWidth * kTargetHeight * 3 / 2;
+        QByteArray black(frameSize, '\0');
+        // NV12 black: Y=16 (limited-range black), U=V=128 (neutral chroma) --
+        // all-zero would decode as full-black Y but also zeroed (wrong/
+        // saturated) chroma, which some renderers show as a green tint.
+        std::fill_n(reinterpret_cast<uint8_t *>(black.data()), kTargetWidth * kTargetHeight, uint8_t{16});
+        std::fill_n(reinterpret_cast<uint8_t *>(black.data()) + kTargetWidth * kTargetHeight,
+                    frameSize - kTargetWidth * kTargetHeight, uint8_t{128});
+        m_writer->writeFrame(reinterpret_cast<const uint8_t *>(black.constData()));
+    }
+
     m_writer.reset();
 
     if (m_pbo[0].isCreated()) m_pbo[0].destroy();
