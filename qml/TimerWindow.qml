@@ -21,12 +21,12 @@ Window {
     // Tile size derived from window height so the clock reads clearly at
     // whatever resolution the target monitor actually is (confirmed live
     // this session: TimerWindow can open on wildly different screen sizes).
-    readonly property real tileH: Math.min(height * 0.42, width * 0.22)
+    readonly property real tileH: Math.min(height * 0.42, width * 0.22) * TimerBackend.timerScale
     readonly property real tileW: tileH * 0.72
-    readonly property color overtimeColor: "#EF4444"
-    readonly property color normalColor: "#F5F5F5"
-    readonly property color runningColor: "#10B981"
-    readonly property color warningColor: "#F59E0B"
+    readonly property color overtimeColor: "#FF1F1F"
+    readonly property color normalColor: "#FFFFFF"
+    readonly property color runningColor: "#00FF66"
+    readonly property color warningColor: "#FFB000"
     // Traffic-light progress: green for the first half of the target
     // duration, yellow past the halfway point, red once time's actually up.
     readonly property real progressFraction: TimerBackend.targetDurationSeconds > 0

@@ -23,6 +23,9 @@ class TimerController : public QObject
     // full-screen takeover, per the user's explicit choice that the two not
     // be tied together.
     Q_PROPERTY(bool fullScreenTimer READ fullScreenTimer WRITE setFullScreenTimer NOTIFY fullScreenTimerChanged)
+    // Size multiplier for the full-screen timer's digits (0.5 - 1.3), so the
+    // operator can tune legibility for the room/screen. Persisted in QSettings.
+    Q_PROPERTY(double timerScale READ timerScale WRITE setTimerScale NOTIFY timerScaleChanged)
 
 public:
     enum TimerState {
@@ -42,11 +45,13 @@ public:
     QString displayTime() const;
     bool isStaged() const { return m_isStaged; }
     bool fullScreenTimer() const { return m_fullScreenTimer; }
+    double timerScale() const { return m_timerScale; }
 
     // Setters
     void setTargetDurationSeconds(int seconds);
     void setIsStaged(bool staged);
     void setFullScreenTimer(bool full);
+    void setTimerScale(double scale);
 
     // Invokables
     Q_INVOKABLE void start();
@@ -62,6 +67,7 @@ signals:
     void timeChanged();
     void stagingChanged();
     void fullScreenTimerChanged();
+    void timerScaleChanged();
     void stagedSignal(); // For Audience View to force display
 
 private slots:
@@ -76,6 +82,7 @@ private:
     int m_elapsedSeconds = 0;
     bool m_isStaged = false;
     bool m_fullScreenTimer = false;
+    double m_timerScale = 1.0;
 
     QTimer *m_tickTimer;
     QElapsedTimer m_elapsedTimer;

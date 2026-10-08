@@ -5,8 +5,8 @@ import MediaFlow 1.0
 
 DockPanel {
     id: timerRoot
-    Layout.preferredHeight: 196
-    Layout.minimumHeight: 188
+    Layout.preferredHeight: 236
+    Layout.minimumHeight: 228
     accentColor: Theme.accentBlue
     title: "MEETING TIMER"
 
@@ -49,8 +49,8 @@ DockPanel {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
-            anchors.bottom: controlsRow.top
-            anchors.bottomMargin: 10
+            anchors.bottom: sizeRow.top
+            anchors.bottomMargin: 6
             spacing: 18
 
             RoundIconButton {
@@ -152,6 +152,39 @@ DockPanel {
                 iconName: "chevron-up"
                 Layout.alignment: Qt.AlignVCenter
                 onClicked: TimerBackend.adjustDuration(1)
+            }
+        }
+
+        RowLayout {
+            id: sizeRow
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: controlsRow.top
+            anchors.bottomMargin: 8
+            height: 24
+            spacing: 8
+
+            Label {
+                text: "SIZE"
+                color: "#71717A"
+                font.family: "Inter"; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1.0
+            }
+            Label { text: "A"; color: "#71717A"; font.pixelSize: 10; font.bold: true }
+            Slider {
+                Layout.fillWidth: true
+                from: 0.5; to: 1.3; stepSize: 0.05
+                value: TimerBackend.timerScale
+                onMoved: TimerBackend.timerScale = value
+                ToolTip.visible: hovered || pressed
+                ToolTip.text: "Full-screen timer size: " + Math.round(value * 100) + "%"
+            }
+            Label { text: "A"; color: "#d4d4d8"; font.pixelSize: 16; font.bold: true }
+            Label {
+                text: Math.round(TimerBackend.timerScale * 100) + "%"
+                color: "#a1a1aa"
+                font.family: "JetBrains Mono"; font.pixelSize: 10
+                Layout.preferredWidth: 34
+                horizontalAlignment: Text.AlignRight
             }
         }
 
