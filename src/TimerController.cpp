@@ -9,7 +9,7 @@ TimerController::TimerController(QObject *parent)
 {
     m_tickTimer->setInterval(100);
     connect(m_tickTimer, &QTimer::timeout, this, &TimerController::onTick);
-    m_timerScale = std::clamp(QSettings().value(QStringLiteral("timer/scale"), 1.0).toDouble(), 0.5, 1.3);
+    m_timerScale = std::clamp(QSettings().value(QStringLiteral("timer/scale"), 1.0).toDouble(), 0.5, 1.0);
 }
 
 QString TimerController::displayTime() const
@@ -57,7 +57,7 @@ void TimerController::setFullScreenTimer(bool full)
 
 void TimerController::setTimerScale(double scale)
 {
-    scale = std::clamp(scale, 0.5, 1.3);
+    scale = std::clamp(scale, 0.5, 1.0);
     if (qFuzzyCompare(m_timerScale, scale)) return;
     m_timerScale = scale;
     QSettings().setValue(QStringLiteral("timer/scale"), scale);

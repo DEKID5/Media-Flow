@@ -172,7 +172,7 @@ DockPanel {
             Label { text: "A"; color: "#71717A"; font.pixelSize: 10; font.bold: true }
             Slider {
                 Layout.fillWidth: true
-                from: 0.5; to: 1.3; stepSize: 0.05
+                from: 0.5; to: 1.0; stepSize: 0.05
                 value: TimerBackend.timerScale
                 onMoved: TimerBackend.timerScale = value
                 ToolTip.visible: hovered || pressed
