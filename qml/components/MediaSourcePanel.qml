@@ -634,6 +634,31 @@ Item {
         }
     }
 
+    // Quick Fetch: files/folders dragged from Explorer import into the
+    // currently selected category.
+    DropArea {
+        id: libraryDropArea
+        anchors.fill: parent
+        enabled: root.currentView === "library"
+        z: -1   // pin chips / cards keep priority over this catch-all
+        keys: ["text/uri-list"]
+        onDropped: (drop) => {
+            if (!drop.hasUrls) return
+            let paths = []
+            for (let i = 0; i < drop.urls.length; i++) paths.push(drop.urls[i].toString())
+            MediaFlowBackend.importDroppedFiles(root.selectedCategory || "General", paths)
+        }
+    }
+    Rectangle {
+        anchors.fill: parent; anchors.margins: 2; radius: 8; z: 50
+        color: "#1A10B981"; border.color: Theme.accentEmerald; border.width: 2
+        visible: libraryDropArea.containsDrag
+        Label {
+            anchors.centerIn: parent; text: "DROP FILES OR A FOLDER TO IMPORT"
+            color: Theme.accentEmerald; font.bold: true; font.pixelSize: 12; font.letterSpacing: 1
+        }
+    }
+
     // Drop straight onto the empty pin-folder content area too, not just the chip.
     DropArea {
         anchors.fill: grid

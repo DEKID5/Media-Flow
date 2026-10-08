@@ -507,7 +507,7 @@ void BroadcastController::scanBgmFolder()
 
 void BroadcastController::addFilesToBgm(const QStringList &paths)
 {
-    static const QStringList audioExt = {"mp3", "m4a", "wav"};
+    static const QStringList audioExt = {"mp3", "m4a", "wav", "flac", "ogg", "aac", "wma"};
     const bool wasEmpty = m_bgmPlaylist.isEmpty();
 
     for (const QString &raw : paths) {
@@ -518,7 +518,7 @@ void BroadcastController::addFilesToBgm(const QStringList &paths)
         if (!info.exists()) continue;
 
         if (info.isDir()) {
-            QDirIterator it(localPath, {"*.mp3", "*.m4a", "*.wav"}, QDir::Files, QDirIterator::Subdirectories);
+            QDirIterator it(localPath, {"*.mp3", "*.m4a", "*.wav", "*.flac", "*.ogg", "*.aac", "*.wma"}, QDir::Files, QDirIterator::Subdirectories);
             while (it.hasNext()) {
                 const QString found = it.next();
                 if (!m_bgmPlaylist.contains(found)) m_bgmPlaylist.append(found);
@@ -1699,16 +1699,40 @@ void BroadcastController::browseAndAddFilesToPinnedFolder(const QString &folderI
     saveState();
 }
 
+QStringList BroadcastController::expandDroppedMedia(const QStringList &pathsOrUrls)
+{
+    static const QStringList mediaGlobs = {"*.mp4", "*.m4v", "*.mov", "*.mkv", "*.jpg", "*.jpeg", "*.png", "*.webp", "*.mp3", "*.m4a"};
+    QStringList out;
+    for (const QString &raw : pathsOrUrls) {
+        const QString path = normalizeDroppedPath(raw);
+        if (path.isEmpty() || !QFileInfo::exists(path)) continue;
+        if (QFileInfo(path).isDir()) {
+            QDirIterator it(path, mediaGlobs, QDir::Files, QDirIterator::Subdirectories);
+            while (it.hasNext()) out << it.next();
+        } else {
+            out << path;
+        }
+    }
+    return out;
+}
+
+void BroadcastController::importDroppedFiles(const QString &category, const QStringList &pathsOrUrls)
+{
+    const QStringList files = expandDroppedMedia(pathsOrUrls);
+    if (files.isEmpty()) return;
+    for (const QString &path : files) {
+        if (m_libraryModel->idOfPath(path).isEmpty())
+            importOneFile(path, category.isEmpty() ? QStringLiteral("General") : category);
+    }
+    saveState();
+}
+
 void BroadcastController::importFilesToPinnedFolder(const QString &folderId, const QStringList &pathsOrUrls)
 {
     if (pathsOrUrls.isEmpty()) return;
     const QString folderName = m_pinnedFolders->nameForFolder(folderId);
 
-    for (const QString &raw : pathsOrUrls) {
-        const QString path = normalizeDroppedPath(raw);
-        if (path.isEmpty() || !QFileInfo::exists(path) || QFileInfo(path).isDir())
-            continue;
-
+    for (const QString &path : expandDroppedMedia(pathsOrUrls)) {
         // Dropping a file MediaFlow already knows about just pins the existing
         // asset instead of duplicating it in the library.
         const QString existingId = m_libraryModel->idOfPath(path);

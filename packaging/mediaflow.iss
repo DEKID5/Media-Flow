@@ -9,7 +9,7 @@
 ; drivers\obs-virtualcam\THIRD_PARTY_NOTICES.txt for licensing.
 
 #define MyAppName "MediaFlow"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.0.35"
 #define MyAppPublisher "MediaFlow"
 #define MyAppExeName "MediaFlow.exe"
 
@@ -60,7 +60,7 @@ Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription
 ; DLL is harmless, so this always runs rather than pre-checking the registry.
 Filename: "{sys}\regsvr32.exe"; Parameters: "/i /s ""{app}\obs-virtualcam\obs-virtualcam-module32.dll"""; StatusMsg: "Registering virtual camera driver (32-bit)..."; Flags: runhidden
 Filename: "{sys}\regsvr32.exe"; Parameters: "/i /s ""{app}\obs-virtualcam\obs-virtualcam-module64.dll"""; StatusMsg: "Registering virtual camera driver (64-bit)..."; Flags: runhidden
-Filename: "{app}\{#MyAppExeName}"; Description: "Launch MediaFlow"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "Launch MediaFlow"; Flags: nowait postinstall skipifsilent runasoriginaluser
 
 [UninstallRun]
 ; Mirrors OBS Studio's own virtualcam-uninstall.bat.

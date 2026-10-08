@@ -307,6 +307,9 @@ public:
     Q_INVOKABLE void browseAndAddFilesToPinnedFolder(const QString &folderId);
     // For OS drag-and-drop: paths may be local paths or file:// URLs.
     Q_INVOKABLE void importFilesToPinnedFolder(const QString &folderId, const QStringList &pathsOrUrls);
+    // OS drag-and-drop onto Quick Fetch: imports files (and the media inside
+    // dropped folders) into the given category.
+    Q_INVOKABLE void importDroppedFiles(const QString &category, const QStringList &pathsOrUrls);
 
 signals:
     void selectedSegmentIdChanged();
@@ -363,6 +366,7 @@ private:
     // enqueues its thumbnail, and returns its new id. Shared by every
     // multi-file import path (browse dialogs and OS drag-and-drop).
     QString importOneFile(const QString &absolutePath, const QString &category);
+    static QStringList expandDroppedMedia(const QStringList &pathsOrUrls);
     static QString normalizeDroppedPath(const QString &pathOrUrl);
 
     QQmlApplicationEngine *m_engine;
