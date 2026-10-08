@@ -1,5 +1,7 @@
 #include "TimerController.h"
 #include <QDebug>
+#include <QSettings>
+#include <algorithm>
 
 TimerController::TimerController(QObject *parent)
     : QObject(parent)
@@ -7,6 +9,7 @@ TimerController::TimerController(QObject *parent)
 {
     m_tickTimer->setInterval(100);
     connect(m_tickTimer, &QTimer::timeout, this, &TimerController::onTick);
+    m_timerScale = std::clamp(QSettings().value(QStringLiteral("timer/scale"), 1.0).toDouble(), 0.5, 1.3);
 }
 
 QString TimerController::displayTime() const
@@ -50,6 +53,15 @@ void TimerController::setFullScreenTimer(bool full)
         m_fullScreenTimer = full;
         emit fullScreenTimerChanged();
     }
+}
+
+void TimerController::setTimerScale(double scale)
+{
+    scale = std::clamp(scale, 0.5, 1.3);
+    if (qFuzzyCompare(m_timerScale, scale)) return;
+    m_timerScale = scale;
+    QSettings().setValue(QStringLiteral("timer/scale"), scale);
+    emit timerScaleChanged();
 }
 
 void TimerController::start()
