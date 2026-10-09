@@ -3,8 +3,11 @@
 #include <QtConcurrent>
 #include <QOpenGLContext>
 #include <QImage>
+#include <QThread>
+#include <QMutexLocker>
 #include <QDebug>
 #include <algorithm>
+#include <cstring>
 
 namespace {
 // The OBS shared-memory queue's buffer size is fixed at creation time, so
@@ -14,6 +17,11 @@ namespace {
 constexpr int kTargetWidth = 1920;
 constexpr int kTargetHeight = 1080;
 constexpr double kTargetFps = 30.0;
+constexpr double kFrameIntervalMs = 1000.0 / kTargetFps;
+// Render ticks (e.g. 60 Hz vsync) rarely land exactly on the capture
+// deadline; without a little slack 33.29ms-vs-33.33ms misses would skip to the
+// following tick and quietly halve the frame rate.
+constexpr double kPacingSlackMs = 2.0;
 } // namespace
 
 VirtualCameraManager::VirtualCameraManager(QObject *parent)
@@ -34,11 +42,6 @@ bool VirtualCameraManager::isBroadcasting() const
 void VirtualCameraManager::start(QQuickWindow *window)
 {
     if (m_isBroadcasting || !window) return;
-    
-    m_window = window;
-    m_isBroadcasting = true;
-    m_pboIndex = 0;
-    m_hasPendingRead = false;
 
     m_writer = std::make_unique<ObsVirtualCamWriter>();
     if (!m_writer->start(kTargetWidth, kTargetHeight, kTargetFps)) {
@@ -48,9 +51,18 @@ void VirtualCameraManager::start(QQuickWindow *window)
         qWarning() << "VirtualCameraManager: failed to start OBS Virtual Camera producer "
                       "(is OBS Studio's own virtual camera already running?)";
         m_writer.reset();
-        m_isBroadcasting = false;
-        m_window = nullptr;
         return;
+    }
+
+    {
+        QMutexLocker lock(&m_mutex);
+        m_window = window;
+        m_pboIndex = 0;
+        m_hasPendingRead = false;
+        m_glReady = false;
+        m_nextCaptureMs = 0.0;
+        m_frameClock.start();
+        m_isBroadcasting = true;
     }
 
     connect(m_window.data(), &QQuickWindow::afterRendering, this, &VirtualCameraManager::onAfterRendering, Qt::DirectConnection);
@@ -59,14 +71,34 @@ void VirtualCameraManager::start(QQuickWindow *window)
 void VirtualCameraManager::stop()
 {
     if (!m_isBroadcasting) return;
-    m_isBroadcasting = false;
-    if (m_window) {
-        disconnect(m_window.data(), &QQuickWindow::afterRendering, this, &VirtualCameraManager::onAfterRendering);
+
+    QFuture<void> pending;
+    {
+        // Taking the lock waits out any onAfterRendering() already running on
+        // the render thread; once m_isBroadcasting is false under it, no
+        // further worker can be started, so `pending` is the last one.
+        QMutexLocker lock(&m_mutex);
+        m_isBroadcasting = false;
+        if (m_window)
+            disconnect(m_window.data(), &QQuickWindow::afterRendering, this, &VirtualCameraManager::onAfterRendering);
+        pending = m_processFuture;
+
+        if (m_pbo[0].isCreated()) m_pbo[0].destroy();
+        if (m_pbo[1].isCreated()) m_pbo[1].destroy();
+
+        // Without this, a restart's first onAfterRendering() sees an unchanged
+        // window size and skips PBO reallocation (see the m_lastSize check
+        // below), leaving the freshly-recreated-but-never-allocated PBOs from
+        // just above in place -- glReadPixels into an unallocated PBO silently
+        // produces no usable frame, so the feed never resumes after a
+        // stop/start cycle even though start() reports success.
+        m_lastSize = QSize();
+        m_hasPendingRead = false;
+        m_glReady = false;
     }
-    
-    if (m_processFuture.isRunning()) {
-        m_processFuture.waitForFinished();
-    }
+
+    if (pending.isRunning())
+        pending.waitForFinished();
 
     // Without this, Zoom (or any other consumer) just keeps showing the
     // last frame we ever wrote -- the shared-memory ring buffer has no
@@ -89,34 +121,37 @@ void VirtualCameraManager::stop()
     }
 
     m_writer.reset();
-
-    if (m_pbo[0].isCreated()) m_pbo[0].destroy();
-    if (m_pbo[1].isCreated()) m_pbo[1].destroy();
-
-    // Without this, a restart's first onAfterRendering() sees an unchanged
-    // window size and skips PBO reallocation (see the m_lastSize check
-    // below), leaving the freshly-recreated-but-never-allocated PBOs from
-    // just above in place -- glReadPixels into an unallocated PBO silently
-    // produces no usable frame, so the feed never resumes after a
-    // stop/start cycle even though start() reports success.
-    m_lastSize = QSize();
-    m_hasPendingRead = false;
 }
 
 void VirtualCameraManager::onAfterRendering()
 {
+    // Held for the whole callback so stop() (GUI thread) can't tear down the
+    // PBOs or race the worker start underneath it. The callback is short.
+    QMutexLocker lock(&m_mutex);
+
     if (!m_isBroadcasting || !m_window || !QOpenGLContext::currentContext()) return;
 
-    initializeOpenGLFunctions();
+    // Cap capture at kTargetFps. The window may render faster (60 fps video,
+    // the 33ms keep-alive timer), and every capture costs a full-frame
+    // readback + copy + colour conversion. Returns before touching the PBO
+    // ping-pong state so skipped ticks don't disturb it.
+    const double now = static_cast<double>(m_frameClock.nsecsElapsed()) / 1.0e6;
+    if (now + kPacingSlackMs < m_nextCaptureMs) return;
+    m_nextCaptureMs = std::max(m_nextCaptureMs + kFrameIntervalMs, now);
 
-    if (!m_pbo[0].isCreated()) m_pbo[0].create();
-    if (!m_pbo[1].isCreated()) m_pbo[1].create();
+    if (!m_glReady) {
+        initializeOpenGLFunctions();
+        m_glReady = true;
+    }
+
+    if (!m_pbo[0].isCreated()) { m_pbo[0].create(); m_pbo[0].setUsagePattern(QOpenGLBuffer::StreamRead); }
+    if (!m_pbo[1].isCreated()) { m_pbo[1].create(); m_pbo[1].setUsagePattern(QOpenGLBuffer::StreamRead); }
 
     QSize size = m_window->size() * m_window->devicePixelRatio();
     int dataSize = size.width() * size.height() * 4; // GL_RGBA = 4 bytes/pixel
 
     m_pbo[m_pboIndex].bind();
-    
+
     if (m_lastSize != size) {
         m_pbo[m_pboIndex].allocate(dataSize);
         m_pbo[1 - m_pboIndex].bind();
@@ -131,18 +166,22 @@ void VirtualCameraManager::onAfterRendering()
     m_pbo[m_pboIndex].release();
 
     int nextIndex = 1 - m_pboIndex;
-    if (m_hasPendingRead) {
+    // Only map + copy when a worker is free to take the frame; if it's still
+    // busy with the previous one, this frame is simply dropped (the PBO gets
+    // overwritten by a later read), saving the map and a full-frame memcpy.
+    if (m_hasPendingRead && !m_processFuture.isRunning()) {
         m_pbo[nextIndex].bind();
-        GLubyte* ptr = static_cast<GLubyte*>(m_pbo[nextIndex].map(QOpenGLBuffer::ReadOnly));
+        const GLubyte* ptr = static_cast<const GLubyte*>(m_pbo[nextIndex].map(QOpenGLBuffer::ReadOnly));
         if (ptr) {
-            // Copy data off GPU mapped memory quickly
-            QByteArray frameData(reinterpret_cast<const char*>(ptr), dataSize);
+            // Copy data off GPU mapped memory quickly (into a reused buffer)
+            if (m_frameBuf.size() != dataSize)
+                m_frameBuf.resize(dataSize);
+            std::memcpy(m_frameBuf.data(), ptr, static_cast<size_t>(dataSize));
             m_pbo[nextIndex].unmap();
-            
+            m_frameSize = size;
+
             // Dispatch to worker thread to avoid stuttering QML render thread
-            if (!m_processFuture.isRunning()) {
-                m_processFuture = QtConcurrent::run(&VirtualCameraManager::processFrame, this, frameData, size);
-            }
+            m_processFuture = QtConcurrent::run(&VirtualCameraManager::processFrame, this);
         }
         m_pbo[nextIndex].release();
     }
@@ -151,19 +190,28 @@ void VirtualCameraManager::onAfterRendering()
     m_pboIndex = nextIndex;
 }
 
-void VirtualCameraManager::processFrame(const QByteArray &rgbaData, const QSize &size)
+void VirtualCameraManager::processFrame()
 {
     if (!m_writer) return;
 
-    QImage img(reinterpret_cast<const uchar *>(rgbaData.data()), size.width(), size.height(), QImage::Format_RGBA8888);
-    QImage flipped = img.mirrored(false, true); // OpenGL readback is bottom-up
+    const int w = kTargetWidth;
+    const int h = kTargetHeight;
 
-    QImage frame = flipped;
-    if (frame.width() != kTargetWidth || frame.height() != kTargetHeight)
-        frame = flipped.scaled(kTargetWidth, kTargetHeight, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-    // Format_RGBA8888 is always 4 bytes/pixel, so Qt never pads rows for it,
-    // and .scaled() preserves the format -- safe to treat both as tightly
-    // packed (bytesPerLine == width*4).
+    // The GL readback is bottom-up RGBA8888 (always 4 bytes/pixel, rows tightly
+    // packed). Output row j is read from source row (h-1-j), which does the
+    // vertical flip for free instead of via a separate mirrored() copy.
+    const uchar *base = reinterpret_cast<const uchar *>(m_frameBuf.constData());
+    qsizetype stride = static_cast<qsizetype>(m_frameSize.width()) * 4;
+    QImage scaled;
+    if (m_frameSize.width() != w || m_frameSize.height() != h) {
+        // Window isn't exactly 1920x1080 in device pixels (see
+        // BroadcastController::openZoomWindow, which normally makes it so).
+        // Scaling is orientation-agnostic, so it can happen before the flip.
+        const QImage img(base, m_frameSize.width(), m_frameSize.height(), QImage::Format_RGBA8888);
+        scaled = img.scaled(w, h, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+        base = scaled.constBits();
+        stride = scaled.bytesPerLine();
+    }
 
     // Convert to NV12 (Y plane followed by interleaved U/V), which is what
     // OBS's shared-memory queue expects. Reads raw scanline bytes directly
@@ -171,43 +219,58 @@ void VirtualCameraManager::processFrame(const QByteArray &rgbaData, const QSize 
     // to QRgb* and using qRed/qGreen/qBlue -- those assume ARGB32 packing,
     // not RGBA8888's literal byte layout, which was a real bug in an earlier
     // version of this conversion (silently swapped/misread channels).
-    const int w = kTargetWidth;
-    const int h = kTargetHeight;
-    QByteArray nv12(static_cast<int>(w * h * 3 / 2), Qt::Uninitialized);
-    auto *y = reinterpret_cast<uint8_t *>(nv12.data());
-    uint8_t *uv = y + (w * h);
+    m_nv12.resize(static_cast<size_t>(w) * h * 3 / 2);
+    uint8_t *yPlane = m_nv12.data();
+    uint8_t *uvPlane = yPlane + static_cast<size_t>(w) * h;
 
-    for (int j = 0; j < h; ++j) {
-        const uchar *line = frame.constScanLine(j);
-        for (int i = 0; i < w; ++i) {
-            const uchar *px = line + i * 4;
-            const int r = px[0], g = px[1], b = px[2];
+    // j0/j1 are even: each iteration handles two luma rows plus their one
+    // chroma row. BT.601 limited range; the integer results stay within
+    // [16,235] (Y) and [16,240] (U/V) so no clamping is needed, which also
+    // lets the compiler vectorize the luma loop (it has no branches).
+    auto convertRows = [&](int j0, int j1) {
+        for (int j = j0; j < j1; j += 2) {
+            const uchar *r0 = base + static_cast<qsizetype>(h - 1 - j) * stride;
+            const uchar *r1 = base + static_cast<qsizetype>(h - 2 - j) * stride;
+            uint8_t *y0 = yPlane + static_cast<size_t>(j) * w;
+            uint8_t *y1 = y0 + w;
 
-            const int yVal = ((66 * r + 129 * g + 25 * b + 128) >> 8) + 16;
-            y[j * w + i] = static_cast<uint8_t>(std::clamp(yVal, 0, 255));
+            for (int i = 0; i < w; ++i) {
+                const uchar *p0 = r0 + i * 4;
+                const uchar *p1 = r1 + i * 4;
+                y0[i] = static_cast<uint8_t>(((66 * p0[0] + 129 * p0[1] + 25 * p0[2] + 128) >> 8) + 16);
+                y1[i] = static_cast<uint8_t>(((66 * p1[0] + 129 * p1[1] + 25 * p1[2] + 128) >> 8) + 16);
+            }
 
-            if ((j % 2) == 0 && (i % 2) == 0) {
-                // Average all 4 pixels in this 2x2 block rather than just
-                // sampling the top-left one -- point-sampling aliases color
-                // edges (sharp-colored text/logos) more than a proper box
-                // filter does; w/h are always even (kTargetWidth/Height), so
-                // the +1 row/col reads are safe.
-                const uchar *lineBelow = frame.constScanLine(j + 1);
-                const uchar *pxRight = px + 4;
-                const uchar *pxBelow = lineBelow + i * 4;
-                const uchar *pxBelowRight = lineBelow + (i + 1) * 4;
-                const int rAvg = (r + pxRight[0] + pxBelow[0] + pxBelowRight[0] + 2) / 4;
-                const int gAvg = (g + pxRight[1] + pxBelow[1] + pxBelowRight[1] + 2) / 4;
-                const int bAvg = (b + pxRight[2] + pxBelow[2] + pxBelowRight[2] + 2) / 4;
-
-                const int uVal = ((-38 * rAvg - 74 * gAvg + 112 * bAvg + 128) >> 8) + 128;
-                const int vVal = ((112 * rAvg - 94 * gAvg - 18 * bAvg + 128) >> 8) + 128;
-                const int uvIdx = (j / 2) * w + i;
-                uv[uvIdx] = static_cast<uint8_t>(std::clamp(uVal, 0, 255));
-                uv[uvIdx + 1] = static_cast<uint8_t>(std::clamp(vVal, 0, 255));
+            // Average all 4 pixels in each 2x2 block rather than just
+            // sampling the top-left one -- point-sampling aliases color
+            // edges (sharp-colored text/logos) more than a proper box
+            // filter does.
+            uint8_t *uv = uvPlane + static_cast<size_t>(j / 2) * w;
+            for (int i = 0; i < w; i += 2) {
+                const uchar *a = r0 + i * 4;
+                const uchar *b = r1 + i * 4;
+                const int rAvg = (a[0] + a[4] + b[0] + b[4] + 2) >> 2;
+                const int gAvg = (a[1] + a[5] + b[1] + b[5] + 2) >> 2;
+                const int bAvg = (a[2] + a[6] + b[2] + b[6] + 2) >> 2;
+                uv[i]     = static_cast<uint8_t>(((-38 * rAvg - 74 * gAvg + 112 * bAvg + 128) >> 8) + 128);
+                uv[i + 1] = static_cast<uint8_t>(((112 * rAvg - 94 * gAvg - 18 * bAvg + 128) >> 8) + 128);
             }
         }
-    }
+    };
 
-    m_writer->writeFrame(reinterpret_cast<const uint8_t *>(nv12.constData()));
+    // Split into horizontal bands (each an even number of rows) and convert
+    // them in parallel; leaves a core free on small machines.
+    const int pairs = h / 2;
+    const int bandCount = std::clamp(QThread::idealThreadCount() - 1, 1, 4);
+    // Uses QtConcurrent::run (header-only) rather than blockingMap: blockingMap
+    // needs Qt6Concurrent.dll at runtime, which this app doesn't deploy.
+    auto bandRows = [&](int b) { convertRows((pairs * b / bandCount) * 2, (pairs * (b + 1) / bandCount) * 2); };
+    QList<QFuture<void>> running;
+    for (int b = 1; b < bandCount; ++b)
+        running.append(QtConcurrent::run(bandRows, b));
+    bandRows(0); // this worker thread takes the first band itself
+    for (QFuture<void> &f : running)
+        f.waitForFinished();
+
+    m_writer->writeFrame(m_nv12.data());
 }

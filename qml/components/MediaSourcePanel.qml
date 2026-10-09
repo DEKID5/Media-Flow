@@ -514,11 +514,22 @@ Item {
                     Behavior on opacity { NumberAnimation { duration: 200 } }
                 }
 
+                // The spinner is an endless animation that forces a re-render
+                // every frame, so give up after a while (thumbnail generation
+                // can fail for audio/corrupt files) and just show the
+                // placeholder image underneath; a late thumbnail still replaces it.
                 BusyIndicator {
+                    id: thumbSpinner
+                    property bool gaveUp: false
                     anchors.centerIn: parent
                     width: 32; height: 32
-                    visible: model.thumbnailPath === "" && model.type !== "image"
-                    running: visible
+                    visible: model.thumbnailPath === "" && model.type !== "image" && !gaveUp
+                    running: visible && Window.active
+                    Timer {
+                        interval: 20000
+                        running: thumbSpinner.visible
+                        onTriggered: thumbSpinner.gaveUp = true
+                    }
                 }
 
                 Rectangle {

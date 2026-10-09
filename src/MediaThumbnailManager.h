@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QHash>
 #include <QRunnable>
 #include <QThreadPool>
 #include <QFileInfo>
@@ -80,4 +81,5 @@ private:
     QThreadPool m_pool;
     NativeThumbnailGenerator *m_native;
     bool m_hasFfmpeg = false;
+    QHash<QString, QString> m_failMarkers; // id -> failure-marker path for in-flight jobs
 };

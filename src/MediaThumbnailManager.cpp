@@ -142,6 +142,18 @@ MediaThumbnailManager::MediaThumbnailManager(QObject *parent) : QObject(parent) 
     connect(m_native, &NativeThumbnailGenerator::finished, this, &MediaThumbnailManager::thumbnailReady);
     connect(m_native, &NativeThumbnailGenerator::failed, this, &MediaThumbnailManager::thumbnailFailed);
 
+    // Remember failures on disk so a file that can't be thumbnailed isn't
+    // retried (up to 8 s of background playback each) on every launch.
+    connect(this, &MediaThumbnailManager::thumbnailReady, this, [this](const QString &id) {
+        m_failMarkers.remove(id);
+    });
+    connect(this, &MediaThumbnailManager::thumbnailFailed, this, [this](const QString &id) {
+        const QString marker = m_failMarkers.take(id);
+        if (marker.isEmpty()) return;
+        QFile f(marker);
+        if (f.open(QIODevice::WriteOnly)) f.close();
+    });
+
     // Check for ffmpeg once
     QProcess check;
     runHidden(check);
@@ -167,6 +179,14 @@ void MediaThumbnailManager::enqueue(const QString &id, const QString &path, cons
         emit thumbnailReady(id, cachePath);
         return;
     }
+
+    // Keyed to whether ffmpeg is available, so installing it later retries.
+    const QString failMarker = cachePath + (m_hasFfmpeg ? ".failff" : ".failnative");
+    if (QFile::exists(failMarker)) {
+        emit thumbnailFailed(id);
+        return;
+    }
+    m_failMarkers.insert(id, failMarker);
 
     if (type == "video" && !m_hasFfmpeg) {
         m_native->enqueue(id, path, cachePath);
@@ -210,6 +230,7 @@ void NativeThumbnailGenerator::processNext() {
     QTimer::singleShot(8000, this, [this, generation](){
         if (m_processing && generation == m_generation) {
             qWarning() << "NativeThumbnailGenerator: Timeout/Failed for" << m_current.path;
+            emit failed(m_current.id);
             m_processing = false;
             m_player->stop();
             processNext();
