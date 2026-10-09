@@ -1,4 +1,4 @@
-; MediaFlow installer.
+﻿; MediaFlow installer.
 ;
 ; Bundles the app (via windeployqt, staged into dist\ by build_installer.ps1)
 ; together with the OBS Virtual Camera DirectShow driver files
@@ -9,7 +9,7 @@
 ; drivers\obs-virtualcam\THIRD_PARTY_NOTICES.txt for licensing.
 
 #define MyAppName "MediaFlow"
-#define MyAppVersion "1.0.37"
+#define MyAppVersion "1.0.38"
 #define MyAppPublisher "MediaFlow"
 #define MyAppExeName "MediaFlow.exe"
 
