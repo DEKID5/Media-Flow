@@ -200,9 +200,10 @@ Window {
             target: activeIsA ? videoOutA : videoOutB
             property: "opacity"; from: 1.0; to: 0.0; duration: 2000; easing.type: Easing.InOutQuad
         }
-        onFinished: {
-            activeIsA = !activeIsA
-        }
+        // No local flip here: BroadcastEngine's own A/B flag is the single
+        // source of truth (onProgramActiveIsAChanged below). A Cut mid-
+        // crossfade cancels the engine's flip but not this animation, so a
+        // local flip would desync and show the layer that gets no frames.
     }
 
     // =====================================================================
@@ -210,6 +211,10 @@ Window {
     // =====================================================================
     Connections {
         target: (MediaFlowBackend || {}).broadcastEngine || null
+
+        function onProgramActiveIsAChanged() {
+            activeIsA = MediaFlowBackend.broadcastEngine.programActiveIsA
+        }
 
         function onCutExecuted() {
             let a = MediaFlowBackend.broadcastEngine.programAsset

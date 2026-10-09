@@ -346,14 +346,25 @@ Rectangle {
             property: "opacity"; from: 1.0; to: 0.0
             duration: 2000; easing.type: Easing.InOutQuad
         }
+        // The LIVE instance follows BroadcastEngine's own A/B flag (see
+        // onProgramActiveIsAChanged below) instead of flipping locally: if the
+        // operator Cuts mid-crossfade the engine never flips (its flip timer is
+        // cancelled) but this animation still finishes, so a local flip would
+        // leave the next Take showing the layer that receives no frames --
+        // black video with the sound still playing.
         onFinished: {
-            activeIsA = !activeIsA
+            if (!monitor.isLive)
+                activeIsA = !activeIsA
         }
     }
 
     // ── Engine signal handlers ──
     Connections {
         target: (isLive && MediaFlowBackend && MediaFlowBackend.broadcastEngine) ? MediaFlowBackend.broadcastEngine : null
+
+        function onProgramActiveIsAChanged() {
+            activeIsA = MediaFlowBackend.broadcastEngine.programActiveIsA
+        }
 
         function onCutExecuted() {
             let a = MediaFlowBackend.broadcastEngine.programAsset
