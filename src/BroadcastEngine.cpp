@@ -49,11 +49,11 @@ BroadcastEngine::BroadcastEngine(QObject *parent)
     // registered window sink instead of pointing them at one sink object.
     connect(m_programSinkA, &QVideoSink::videoFrameChanged, this, [this](const QVideoFrame &frame) {
         for (const QPointer<QVideoSink> &out : m_outputSinksA)
-            if (out) out->setVideoFrame(frame);
+            if (out) pushFrame(out, frame);
     });
     connect(m_programSinkB, &QVideoSink::videoFrameChanged, this, [this](const QVideoFrame &frame) {
         for (const QPointer<QVideoSink> &out : m_outputSinksB)
-            if (out) out->setVideoFrame(frame);
+            if (out) pushFrame(out, frame);
     });
 
     // These durations mirror each output window's own crossfade (2000ms)
@@ -69,6 +69,28 @@ BroadcastEngine::BroadcastEngine(QObject *parent)
     m_clearFinishTimer->setSingleShot(true);
     m_clearFinishTimer->setInterval(500);
     connect(m_clearFinishTimer, &QTimer::timeout, this, &BroadcastEngine::finishClear);
+}
+
+void BroadcastEngine::limitOutputFrameRate(QVideoSink *outputSink, int maxFps)
+{
+    if (!outputSink) return;
+    if (maxFps > 0) m_minPushIntervalMs.insert(outputSink, 1000 / maxFps);
+    else m_minPushIntervalMs.remove(outputSink);
+}
+
+void BroadcastEngine::pushFrame(QVideoSink *out, const QVideoFrame &frame)
+{
+    const auto it = m_minPushIntervalMs.constFind(out);
+    if (it != m_minPushIntervalMs.constEnd()) {
+        if (!m_pushClock.isValid()) m_pushClock.start();
+        const qint64 now = m_pushClock.elapsed();
+        qint64 &last = m_lastPushMs[out];
+        // 3ms slack: a 30 fps cap on a 30 fps source (33ms apart, jittery)
+        // must not drop every other frame to ~15 fps.
+        if (last != 0 && now - last < it.value() - 3) return;
+        last = now ? now : 1;
+    }
+    out->setVideoFrame(frame);
 }
 
 void BroadcastEngine::registerProgramOutputs(QVideoSink *outputSinkA, QVideoSink *outputSinkB)

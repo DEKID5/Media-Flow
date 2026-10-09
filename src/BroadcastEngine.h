@@ -9,6 +9,8 @@
 #include <QTimer>
 #include <QPointer>
 #include <QVector>
+#include <QHash>
+#include <QElapsedTimer>
 #include "MediaAsset.h"
 
 /**
@@ -62,6 +64,11 @@ public:
     // registered sinks -- this is how one shared decode fans out to
     // however many windows are currently open.
     Q_INVOKABLE void registerProgramOutputs(QVideoSink *outputSinkA, QVideoSink *outputSinkB);
+
+    // Caps how often decoded frames are pushed into one output sink. Used for
+    // the Zoom capture window, which is only sampled at 30 fps anyway -- every
+    // extra frame pushed into it is a full extra render of a 1080p window.
+    Q_INVOKABLE void limitOutputFrameRate(QVideoSink *outputSink, int maxFps);
 
 public slots:
     void setPreviewAsset(const MediaAsset &asset);
@@ -139,6 +146,11 @@ private:
     // sink just drops out silently instead of needing explicit unregister.
     QVector<QPointer<QVideoSink>> m_outputSinksA;
     QVector<QPointer<QVideoSink>> m_outputSinksB;
+
+    void pushFrame(QVideoSink *out, const QVideoFrame &frame);
+    QHash<const QVideoSink *, qint64> m_minPushIntervalMs; // only sinks with a fps cap
+    QHash<const QVideoSink *, qint64> m_lastPushMs;
+    QElapsedTimer m_pushClock;
 
     // Matches the 2000ms ParallelAnimation crossfade / 500ms fade-out
     // duration every output window already animates on its own side --

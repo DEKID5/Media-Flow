@@ -49,9 +49,11 @@ Rectangle {
             // Webcam must never show on the LIVE instance -- Zoom's fallback
             // (VirtualCameraWindow.qml) is the only place a webcam is meant
             // to actually render; this instance only ever shows Program
-            // content or the standby card. Preview keeps its existing
-            // tap-to-preview-the-webcam-card behavior.
-            active: !monitor.isLive && (!monitor.asset || !monitor.asset.absolutePath || monitor.asset.type === "input")
+            // content or the standby card. Preview only opens the webcam when
+            // a camera ("input") card is staged -- an empty Preview shows the
+            // standby card instead of silently streaming the default webcam,
+            // which kept the GPU/CPU busy (and the camera light on) at idle.
+            active: !monitor.isLive && !!monitor.asset && monitor.asset.type === "input"
         }
         videoOutput: monitorCameraOut
     }
@@ -449,7 +451,9 @@ Rectangle {
         Row {
             id: badgeRow; anchors.centerIn: parent; spacing: 6
             Rectangle { width: 6; height: 6; radius: 3; color: "white"; visible: isLive
-                SequentialAnimation on opacity { running: isLive; loops: Animation.Infinite
+                // Only pulse while something is actually going out; an endless
+                // animation forces the whole window to re-render every frame.
+                SequentialAnimation on opacity { running: isLive && ((MediaFlowBackend || {}).vcamEnabled || (MediaFlowBackend || {}).feedExtended); loops: Animation.Infinite
                     NumberAnimation { to: 0.3; duration: 800 }
                     NumberAnimation { to: 1.0; duration: 800 }
                 }

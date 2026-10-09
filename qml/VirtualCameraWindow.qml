@@ -27,8 +27,18 @@ Window {
     // VirtualCameraManager's afterRendering-driven capture, freezing Zoom on
     // a stale frame instead of switching to what's actually live. Forcing a
     // steady repaint keeps capture flowing regardless of content.
+    //
+    // While a video is actively playing its own frames already trigger a
+    // render ~30 times a second, so the timer only needs to be a slow
+    // safety net there; running it at full rate on top just adds extra,
+    // out-of-phase renders of a 1080p window.
+    readonly property bool videoPlaying: {
+        const e = (MediaFlowBackend || {}).broadcastEngine
+        return !!e && !!e.programAsset && e.programAsset.type === "video" && !e.programPaused
+    }
     Timer {
-        interval: 33; running: zoomRoot.visible; repeat: true
+        interval: zoomRoot.videoPlaying ? 250 : 33
+        running: zoomRoot.visible; repeat: true
         onTriggered: zoomRoot.update()
     }
 
@@ -84,6 +94,10 @@ Window {
     Component.onCompleted: {
         if (MediaFlowBackend && MediaFlowBackend.broadcastEngine) {
             MediaFlowBackend.broadcastEngine.registerProgramOutputs(videoOutA.videoSink, videoOutB.videoSink)
+            // Capture is sampled at 30 fps (VirtualCameraManager), so don't
+            // re-render this 1080p window for every frame of 50/60 fps video.
+            MediaFlowBackend.broadcastEngine.limitOutputFrameRate(videoOutA.videoSink, 30)
+            MediaFlowBackend.broadcastEngine.limitOutputFrameRate(videoOutB.videoSink, 30)
         }
     }
 

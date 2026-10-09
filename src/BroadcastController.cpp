@@ -1029,7 +1029,13 @@ bool BroadcastController::openZoomWindow()
     // frame was ever captured, regardless of the shared-memory protocol
     // underneath). WindowStaysOnBottomHint (set in VirtualCameraWindow.qml)
     // keeps it out of the operator's way while still rendering.
-    m_zoomWindow->setGeometry(0, 0, 1920, 1080);
+    //
+    // Sized so the window is exactly 1920x1080 *device* pixels: the capture
+    // reads back size()*devicePixelRatio(), so a plain 1920x1080 logical
+    // window on a 125%/150% display would be 2400x1350/2880x1620 pixels and
+    // need a slow CPU downscale on every frame.
+    const qreal zoomDpr = qMax<qreal>(1.0, m_zoomWindow->devicePixelRatio());
+    m_zoomWindow->setGeometry(0, 0, qRound(1920 / zoomDpr), qRound(1080 / zoomDpr));
     m_zoomWindow->show();
     m_zoomWindow->lower();
 
