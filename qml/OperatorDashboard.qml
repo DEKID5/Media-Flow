@@ -716,79 +716,123 @@ Item {
                                         Layout.fillWidth: true; Layout.preferredHeight: 46; spacing: Theme.space2 + 2
                                         visible: isSelected || (typeof associatedMediaIds !== "undefined" && associatedMediaIds && associatedMediaIds.length > 0)
 
-                                        Repeater {
-                                            model: (typeof associatedMediaIds !== "undefined") ? associatedMediaIds : []
-                                            delegate: Rectangle {
-                                                width: 64; height: 36; radius: Theme.radiusSm; color: "black"; clip: true
-                                                property var asset: (MediaFlowBackend || {}).mediaLibrary ? MediaFlowBackend.mediaLibrary.getRowById(modelData) : ({})
+                                        // Horizontally-scrollable thumbnail strip -- takes whatever
+                                        // width is left after the Add button cluster below reserves
+                                        // its own, so a long list of linked media never pushes those
+                                        // buttons out of the panel's clipped (and otherwise
+                                        // non-scrollable) bounds. Mirrors the pinList pattern in
+                                        // MediaSourcePanel.qml.
+                                        Item {
+                                            id: thumbViewport
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 36
+                                            Layout.alignment: Qt.AlignVCenter
+                                            clip: true
 
-                                                Image {
-                                                    anchors.fill: parent; fillMode: Image.PreserveAspectCrop
-                                                    source: asset.thumbnailPath || "qrc:/MediaFlow/qml/assets/video_placeholder.png"
-                                                    opacity: 0.8
-                                                }
+                                            ListView {
+                                                id: thumbList
+                                                anchors.fill: parent
+                                                orientation: ListView.Horizontal
+                                                spacing: Theme.space2
+                                                model: (typeof associatedMediaIds !== "undefined") ? associatedMediaIds : []
+                                                delegate: Rectangle {
+                                                    width: 64; height: 36; radius: Theme.radiusSm; color: "black"; clip: true
+                                                    property var asset: (MediaFlowBackend || {}).mediaLibrary ? MediaFlowBackend.mediaLibrary.getRowById(modelData) : ({})
 
-                                                // Unlink button
-                                                Rectangle {
-                                                    anchors.top: parent.top; anchors.right: parent.right; anchors.margins: 2
-                                                    width: 15; height: 15; radius: 7.5; color: Theme.accentRed
-                                                    Label { text: "×"; anchors.centerIn: parent; color: "white"; font.pixelSize: Theme.textSm; font.bold: true }
-                                                    MouseArea {
-                                                        anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                                                        onClicked: (MediaFlowBackend || {}).removeMediaFromSequence(segmentDelegate.segmentId, modelData)
+                                                    Image {
+                                                        anchors.fill: parent; fillMode: Image.PreserveAspectCrop
+                                                        source: asset.thumbnailPath || "qrc:/MediaFlow/qml/assets/video_placeholder.png"
+                                                        opacity: 0.8
+                                                    }
+
+                                                    // Unlink button
+                                                    Rectangle {
+                                                        anchors.top: parent.top; anchors.right: parent.right; anchors.margins: 2
+                                                        width: 15; height: 15; radius: 7.5; color: Theme.accentRed
+                                                        Label { text: "×"; anchors.centerIn: parent; color: "white"; font.pixelSize: Theme.textSm; font.bold: true }
+                                                        MouseArea {
+                                                            anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                                            onClicked: (MediaFlowBackend || {}).removeMediaFromSequence(segmentDelegate.segmentId, modelData)
+                                                        }
                                                     }
                                                 }
                                             }
-                                        }
 
-                                        // ADD VIDEO BUTTON
-                                        Rectangle {
-                                            visible: isSelected && model.type !== "song"
-                                            width: 60; height: 36; radius: Theme.radiusSm; color: "#0D3B82F6"; border.color: Theme.accentBlue
-                                            Row {
-                                                anchors.centerIn: parent; spacing: Theme.space1
-                                                BroadcastIcon { anchors.verticalCenter: parent.verticalCenter; name: "video"; color: Theme.accentBlue; iconSize: 13 }
-                                                Label { text: "VIDEO"; color: Theme.accentBlue; font.pixelSize: Theme.textXs - 1; font.bold: true }
-                                            }
-                                            MouseArea {
-                                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                                                onClicked: {
-                                                    if (MediaFlowBackend) MediaFlowBackend.addMediaToSegment(model.id, "video")
+                                            // Right-edge fade -- only shown while there's actually
+                                            // more to scroll to, so it never masks the last tile once
+                                            // fully scrolled.
+                                            Rectangle {
+                                                anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.right: parent.right
+                                                width: 18
+                                                visible: thumbList.contentWidth > thumbList.width + 1 && !thumbList.atXEnd
+                                                gradient: Gradient {
+                                                    orientation: Gradient.Horizontal
+                                                    GradientStop { position: 0.0; color: "#00000000" }
+                                                    GradientStop { position: 1.0; color: "#80000000" }
                                                 }
                                             }
                                         }
 
-                                        // ADD JW IMAGE BUTTON
-                                        Rectangle {
-                                            visible: isSelected && model.type !== "song"
-                                            width: 60; height: 36; radius: Theme.radiusSm; color: "#0D10B981"; border.color: Theme.accentEmerald
-                                            Row {
-                                                anchors.centerIn: parent; spacing: Theme.space1
-                                                BroadcastIcon { anchors.verticalCenter: parent.verticalCenter; name: "image"; color: Theme.accentEmerald; iconSize: 13 }
-                                                Label { text: "IMAGE"; color: Theme.accentEmerald; font.pixelSize: Theme.textXs - 1; font.bold: true }
-                                            }
-                                            MouseArea {
-                                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                                                onClicked: {
-                                                    if (MediaFlowBackend) MediaFlowBackend.addMediaToSegment(model.id, "image")
+                                        // Trailing button cluster -- sized to its own content (no
+                                        // Layout.fillWidth), so it's always fully reachable at the
+                                        // row's trailing edge regardless of thumbnail count. Still a
+                                        // RowLayout (not a plain Row) so the mutually-exclusive
+                                        // visible bindings below keep collapsing to zero space
+                                        // exactly as before.
+                                        RowLayout {
+                                            id: addButtonCluster
+                                            spacing: Theme.space1
+                                            Layout.alignment: Qt.AlignVCenter
+
+                                            // ADD VIDEO BUTTON
+                                            Rectangle {
+                                                visible: isSelected && model.type !== "song"
+                                                width: 60; height: 36; radius: Theme.radiusSm; color: "#0D3B82F6"; border.color: Theme.accentBlue
+                                                Row {
+                                                    anchors.centerIn: parent; spacing: Theme.space1
+                                                    BroadcastIcon { anchors.verticalCenter: parent.verticalCenter; name: "video"; color: Theme.accentBlue; iconSize: 13 }
+                                                    Label { text: "VIDEO"; color: Theme.accentBlue; font.pixelSize: Theme.textXs - 1; font.bold: true }
+                                                }
+                                                MouseArea {
+                                                    anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                                    onClicked: {
+                                                        if (MediaFlowBackend) MediaFlowBackend.addMediaToSegment(model.id, "video")
+                                                    }
                                                 }
                                             }
-                                        }
 
-                                        // ADD SONG BUTTON
-                                        Rectangle {
-                                            width: 72; height: 36; radius: Theme.radiusSm; color: "#0D3B82F6"; border.color: Theme.accentBlue
-                                            visible: isSelected && model.type === "song"
-                                            Row {
-                                                anchors.centerIn: parent; spacing: Theme.space1
-                                                BroadcastIcon { anchors.verticalCenter: parent.verticalCenter; name: "music"; color: Theme.accentBlue; iconSize: 13 }
-                                                Label { text: "SONG"; color: Theme.accentBlue; font.pixelSize: Theme.textXs - 1; font.bold: true }
+                                            // ADD JW IMAGE BUTTON
+                                            Rectangle {
+                                                visible: isSelected && model.type !== "song"
+                                                width: 60; height: 36; radius: Theme.radiusSm; color: "#0D10B981"; border.color: Theme.accentEmerald
+                                                Row {
+                                                    anchors.centerIn: parent; spacing: Theme.space1
+                                                    BroadcastIcon { anchors.verticalCenter: parent.verticalCenter; name: "image"; color: Theme.accentEmerald; iconSize: 13 }
+                                                    Label { text: "IMAGE"; color: Theme.accentEmerald; font.pixelSize: Theme.textXs - 1; font.bold: true }
+                                                }
+                                                MouseArea {
+                                                    anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                                    onClicked: {
+                                                        if (MediaFlowBackend) MediaFlowBackend.addMediaToSegment(model.id, "image")
+                                                    }
+                                                }
                                             }
-                                            MouseArea {
-                                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                                                onClicked: {
-                                                    manualSongSegmentId = model.id
-                                                    manualSongSelector.open()
+
+                                            // ADD SONG BUTTON
+                                            Rectangle {
+                                                width: 72; height: 36; radius: Theme.radiusSm; color: "#0D3B82F6"; border.color: Theme.accentBlue
+                                                visible: isSelected && model.type === "song"
+                                                Row {
+                                                    anchors.centerIn: parent; spacing: Theme.space1
+                                                    BroadcastIcon { anchors.verticalCenter: parent.verticalCenter; name: "music"; color: Theme.accentBlue; iconSize: 13 }
+                                                    Label { text: "SONG"; color: Theme.accentBlue; font.pixelSize: Theme.textXs - 1; font.bold: true }
+                                                }
+                                                MouseArea {
+                                                    anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                                    onClicked: {
+                                                        manualSongSegmentId = model.id
+                                                        manualSongSelector.open()
+                                                    }
                                                 }
                                             }
                                         }
