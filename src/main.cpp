@@ -44,6 +44,25 @@ int main(int argc, char *argv[])
     // 1ms resolution for the process's whole lifetime is the standard fix.
     // Paired with timeEndPeriod(1) just before returning, below.
     timeBeginPeriod(1);
+
+    // Still wasn't enough on its own: stutter was reported specifically
+    // while *scrolling* in another app -- the kind of burst of foreground
+    // compositor/input activity that Windows' Process Power Throttling
+    // (EcoQoS) is designed to react to by throttling CPU scheduling/
+    // frequency for processes it judges unimportant, i.e. anything that
+    // isn't currently foregrounded. MediaFlow still needs to keep decoding
+    // and feeding audio smoothly in exactly that situation, so explicitly
+    // opt this process out of execution-speed throttling regardless of
+    // focus state -- the documented mechanism for "don't throttle me just
+    // because I'm in the background" (the same one browsers/media apps use
+    // to avoid audio glitches while backgrounded).
+    {
+        PROCESS_POWER_THROTTLING_STATE throttlingState = {};
+        throttlingState.Version = PROCESS_POWER_THROTTLING_CURRENT_VERSION;
+        throttlingState.ControlMask = PROCESS_POWER_THROTTLING_EXECUTION_SPEED;
+        throttlingState.StateMask = 0; // 0 = not throttled, for every bit covered by ControlMask
+        SetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling, &throttlingState, sizeof(throttlingState));
+    }
 #endif
 
     // Must run before QApplication is constructed -- Qt locks in the RHI
