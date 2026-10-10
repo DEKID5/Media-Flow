@@ -5,6 +5,7 @@
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QQuickWindow>
+#include <QSurfaceFormat>
 
 #include "BroadcastController.h"
 #include "MediaLibraryModel.h"
@@ -89,6 +90,34 @@ int main(int argc, char *argv[])
     // or moving Zoom capture into a separate process -- both larger,
     // riskier changes than this pass attempted.
     QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+
+    // Desktop OpenGL's SwapBuffers goes through the same present/flip queue
+    // DWM arbitrates for the whole desktop -- with the default swap
+    // interval (vsync-on), a burst of composition activity from an
+    // unrelated window (confirmed repro: just moving the mouse or
+    // scrolling in another app, no focus or interaction with MediaFlow
+    // itself) can stall our own present call waiting for a composition
+    // slot. MediaFlow's own windows also animate continuously while a
+    // broadcast is live (the pulsing LIVE badge, etc. -- see
+    // OperatorDashboard.qml/MonitorView.qml/AudienceWindow.qml), so this
+    // isn't a rare edge case; it's presenting frames the whole time a
+    // meeting is live. A stalled present on the Quick render thread
+    // backs up that window's GUI-thread sync point, and from there can
+    // delay whatever else the GUI thread needed to get to -- plausibly
+    // including audio buffer delivery, matching the reported stutter.
+    // Disabling vsync (swap interval 0) stops present calls from blocking
+    // on compositor timing at all. Trade-off: possible visible tearing on
+    // these windows, and higher GPU usage since frames render as fast as
+    // possible instead of pacing to the display refresh -- judged an
+    // acceptable trade for a broadcast tool where audio glitches are far
+    // more disruptive than occasional tearing on an operator monitor.
+    // Must be set before QApplication is constructed, same as
+    // setGraphicsApi above.
+    {
+        QSurfaceFormat format = QSurfaceFormat::defaultFormat();
+        format.setSwapInterval(0);
+        QSurfaceFormat::setDefaultFormat(format);
+    }
 
     QApplication app(argc, argv);
 
