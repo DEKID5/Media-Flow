@@ -513,6 +513,14 @@ Item {
         RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
+            // Without this, giving the DOCK row below a real minimumHeight
+            // (so it can grow in full screen -- see that section) left this
+            // row with no floor of its own: MonitorView has no intrinsic
+            // implicitHeight, so Qt Quick Layouts' surplus distribution
+            // between the two competing fillHeight rows could squeeze this
+            // one down to 0 -- confirmed live: both monitors vanished
+            // entirely, not just shrank.
+            Layout.minimumHeight: 200
             spacing: Theme.space6
             anchors.margins: Theme.space6
 
