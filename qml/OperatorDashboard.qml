@@ -513,13 +513,15 @@ Item {
         RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            // Without this, giving the DOCK row below a real minimumHeight
-            // (so it can grow in full screen -- see that section) left this
-            // row with no floor of its own: MonitorView has no intrinsic
-            // implicitHeight, so Qt Quick Layouts' surplus distribution
-            // between the two competing fillHeight rows could squeeze this
-            // one down to 0 -- confirmed live: both monitors vanished
-            // entirely, not just shrank.
+            // Explicit 50/50 split with the DOCK row below -- both carry the
+            // same preferredHeight binding (half of whatever's left after
+            // the fixed top bar), so Qt Quick Layouts' surplus distribution
+            // has no asymmetry to resolve arbitrarily between them. Without
+            // an explicit floor, this row has no intrinsic implicitHeight of
+            // its own (MonitorView reports none), so it could still be
+            // squeezed to 0 at extreme sizes -- confirmed live previously
+            // when only the DOCK row had a minimumHeight.
+            Layout.preferredHeight: (parent.height - 64) / 2
             Layout.minimumHeight: 200
             spacing: Theme.space6
             anchors.margins: Theme.space6
@@ -550,8 +552,11 @@ Item {
         Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.preferredHeight: 400
-            Layout.minimumHeight: 400
+            // Mirrors the MONITOR row's preferredHeight binding exactly --
+            // same "half of what's left" expression -- so the two split the
+            // window evenly instead of one dominating.
+            Layout.preferredHeight: (parent.height - 64) / 2
+            Layout.minimumHeight: 200
             color: "transparent"
             Rectangle { anchors.top: parent.top; width: parent.width; height: 1; color: Theme.panelBorder }
 
