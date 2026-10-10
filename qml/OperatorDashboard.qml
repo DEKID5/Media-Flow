@@ -89,6 +89,12 @@ Item {
 
     ColumnLayout {
         anchors.fill: parent
+        // Without a bottom margin, the DOCK row (now able to grow much
+        // taller since the 50/50 split with MONITOR) extends all the way to
+        // the window's own bottom edge, leaving Background Music's transport
+        // buttons with no breathing room above the footer bar -- they end up
+        // looking crowded/"buried" right against it.
+        anchors.bottomMargin: Theme.space3
         spacing: 0
 
         // --- TOP BAR ---
