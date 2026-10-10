@@ -541,7 +541,9 @@ Item {
         // --- DOCK ---
         Rectangle {
             Layout.fillWidth: true
+            Layout.fillHeight: true
             Layout.preferredHeight: 400
+            Layout.minimumHeight: 400
             color: "transparent"
             Rectangle { anchors.top: parent.top; width: parent.width; height: 1; color: Theme.panelBorder }
 
@@ -589,6 +591,13 @@ Item {
                         id: sList
                         anchors.fill: parent
                         spacing: Theme.space3; clip: true
+                        // Without this, the viewport can come to rest at any
+                        // fractional scroll offset -- its top edge slicing
+                        // straight through the middle of a row instead of
+                        // stopping at a row boundary (confirmed live: a
+                        // segment's header text rendered with its top half
+                        // cut off after scrolling).
+                        snapMode: ListView.SnapToItem
                         model: (MediaFlowBackend || {}).meetingSchedule
                         delegate: Item {
                             id: segmentDelegate
@@ -601,8 +610,11 @@ Item {
 
                             // Critically-damped spring, not a fixed-duration curve — clicking
                             // another segment mid-animation redirects smoothly instead of
-                            // restarting or jumping.
-                            Behavior on height { SpringAnimation { spring: 3; damping: 0.6 } }
+                            // restarting or jumping. Critical damping for spring:3 (mass
+                            // defaults to 1.0) is 2*sqrt(3) ≈ 3.46 -- the previous 0.6 was
+                            // heavily underdamped, overshooting past 110/160 before settling
+                            // instead of actually being critically damped as this comment claims.
+                            Behavior on height { SpringAnimation { spring: 3; damping: 3.46 } }
 
                             Rectangle {
                                 anchors.fill: parent; anchors.margins: 4
