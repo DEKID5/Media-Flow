@@ -13,6 +13,7 @@
 #ifdef Q_OS_WIN
 #include <windows.h>
 #include <shlobj.h>
+#include <timeapi.h>
 #endif
 
 #include <QFile>
@@ -31,6 +32,19 @@ void myMessageHandler(QtMsgType type, const QMessageLogContext &context, const Q
 int main(int argc, char *argv[])
 {
     qInstallMessageHandler(myMessageHandler);
+
+#ifdef Q_OS_WIN
+    // Windows' default system timer resolution (~15.6ms) is coarse enough
+    // that losing foreground focus -- which can let Windows deprioritize
+    // this process's scheduling -- is enough to starve the audio pipeline
+    // and cause audible buffer-underrun stutter, even with no Zoom
+    // broadcasting or other heavy work going on (confirmed: reported
+    // stutter persisted while multitasking with a lightweight app). This is
+    // a long-documented class of issue for Windows media apps; requesting a
+    // 1ms resolution for the process's whole lifetime is the standard fix.
+    // Paired with timeEndPeriod(1) just before returning, below.
+    timeBeginPeriod(1);
+#endif
 
     // Must run before QApplication is constructed -- Qt locks in the RHI
     // backend (Direct3D11 by default on Windows) as part of QGuiApplication
@@ -104,5 +118,11 @@ int main(int argc, char *argv[])
     if (engine.rootObjects().isEmpty())
         return -1;
 
-    return app.exec();
+    const int result = app.exec();
+
+#ifdef Q_OS_WIN
+    timeEndPeriod(1); // matches timeBeginPeriod(1) above
+#endif
+
+    return result;
 }

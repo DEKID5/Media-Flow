@@ -116,7 +116,10 @@ target_link_libraries(mediaflow PRIVATE
 )
 
 if(WIN32)
-    target_link_libraries(mediaflow PRIVATE user32 Shell32 Ole32)
+    # winmm: timeBeginPeriod/timeEndPeriod (see main.cpp -- 1ms timer
+    # resolution for the app's lifetime, to avoid audio stutter when the
+    # process loses foreground focus).
+    target_link_libraries(mediaflow PRIVATE user32 Shell32 Ole32 winmm)
 endif()
 
 include(GNUInstallDirs)
