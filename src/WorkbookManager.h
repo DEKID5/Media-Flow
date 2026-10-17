@@ -45,9 +45,9 @@ public:
 
     Q_INVOKABLE void refreshNow();
 
-    // All week-start dates found across every locally downloaded mwb/w
-    // publication for the current language, each as {"label", "iso"} --
-    // powers the week-picker dropdown. Sorted ascending.
+    // Remaining current-year week starts, merged with weeks found in local
+    // publications for the current language, each as {"label", "iso"}.
+    // Weeks without a local workbook are fetched when selected.
     QVariantList availableWeeks() const;
     // Pins the workbook to a specific week (from availableWeeks) instead of
     // "closest to today", and re-runs the lookup immediately. An invalid

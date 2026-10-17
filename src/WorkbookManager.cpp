@@ -616,13 +616,22 @@ QVariantList WorkbookManager::availableWeeks() const
     }
 
     QList<QDate> sorted = dates.values();
-    std::sort(sorted.begin(), sorted.end());
     const QDate today = QDate::currentDate();
     const QDate monthStart(today.year(), today.month(), 1);
+    const QDate yearEnd(today.year(), 12, 31);
+    const int daysUntilMonday = (8 - monthStart.dayOfWeek()) % 7;
+    for (QDate weekStart = monthStart.addDays(daysUntilMonday);
+         weekStart <= yearEnd;
+         weekStart = weekStart.addDays(7)) {
+        dates.insert(weekStart);
+    }
+
+    sorted = dates.values();
+    std::sort(sorted.begin(), sorted.end());
 
     QVariantList result;
     for (const QDate &start : sorted) {
-        if (start < monthStart)
+        if (start < monthStart || start > yearEnd)
             continue;
         QVariantMap entry;
         entry["iso"] = start.toString(Qt::ISODate);
