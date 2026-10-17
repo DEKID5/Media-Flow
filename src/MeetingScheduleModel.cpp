@@ -266,7 +266,6 @@ void MeetingScheduleModel::setWorkbookScheduleRows(const QVariantList &workbookR
     QHash<QString, MeetingRow> existing;
     for (const MeetingRow &row : m_midweekRows)
         existing.insert(row.id, row);
-    const QVector<MeetingRow> previousRows = m_midweekRows;
 
     auto manualMedia = [&existing](const QString &id) {
         QStringList ids;
@@ -274,29 +273,6 @@ void MeetingScheduleModel::setWorkbookScheduleRows(const QVariantList &workbookR
         for (const QString &mediaId : row.linkedMediaIds) {
             if (!row.workbookMediaIds.contains(mediaId))
                 ids.append(mediaId);
-        }
-        return ids;
-    };
-    auto manualMediaForGroup = [&previousRows, &manualMedia](const QString &group) {
-        QStringList ids;
-        for (const MeetingRow &row : previousRows) {
-            bool belongsToGroup = row.id == (group == QStringLiteral("apply")
-                ? QStringLiteral("m6") : group == QStringLiteral("living")
-                    ? QStringLiteral("m8") : QStringLiteral("m9"));
-            if (row.id.startsWith(QStringLiteral("mwb_"))) {
-                bool numberOk = false;
-                const int number = row.id.section(QLatin1Char('_'), -1).toInt(&numberOk);
-                belongsToGroup = numberOk && (group == QStringLiteral("apply")
-                    ? number >= 4 && number <= 6
-                    : group == QStringLiteral("living") ? number == 7
-                    : number == 8 || number == 9);
-            }
-            if (!belongsToGroup)
-                continue;
-            for (const QString &mediaId : manualMedia(row.id)) {
-                if (!ids.contains(mediaId))
-                    ids.append(mediaId);
-            }
         }
         return ids;
     };
@@ -334,9 +310,6 @@ void MeetingScheduleModel::setWorkbookScheduleRows(const QVariantList &workbookR
                 return aNumber < bNumber;
             return a.id < b.id;
         });
-        if (!groupRows.isEmpty()) {
-            groupRows.first().linkedMediaIds = manualMediaForGroup(group);
-        }
     }
 
     QVector<MeetingRow> rebuilt;
@@ -351,10 +324,7 @@ void MeetingScheduleModel::setWorkbookScheduleRows(const QVariantList &workbookR
             if (workbookRows.isEmpty()
                 && (row.id == QStringLiteral("m6") || row.id == QStringLiteral("m8")
                     || row.id == QStringLiteral("m9"))) {
-                const QString group = row.id == QStringLiteral("m6")
-                    ? QStringLiteral("apply") : row.id == QStringLiteral("m8")
-                        ? QStringLiteral("living") : QStringLiteral("bibleStudy");
-                row.linkedMediaIds = manualMediaForGroup(group);
+                row.linkedMediaIds = manualMedia(row.id);
             }
             if (row.id != QStringLiteral("m6") && row.id != QStringLiteral("m8")
                 && row.id != QStringLiteral("m9")) {

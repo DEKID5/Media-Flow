@@ -260,6 +260,7 @@ public:
     QString ensureWorkbookMedia(const QString &path);
     void setWorkbookMediaForSegment(const QString &segmentId, const QStringList &mediaIds);
     void setWorkbookScheduleRows(const QVariantList &rows);
+    void clearWorkbookSongLinks();
     // Lets WorkbookManager tell us which on-disk folder holds the current
     // week's matched publication (mwb, w, or the standalone Congregation
     // Bible Study book), so addMediaToSegment can default the file picker

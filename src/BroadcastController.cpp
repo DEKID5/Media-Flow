@@ -454,6 +454,18 @@ void BroadcastController::setWorkbookScheduleRows(const QVariantList &rows)
     saveState();
 }
 
+void BroadcastController::clearWorkbookSongLinks()
+{
+    for (const QString &segmentId : {QStringLiteral("m1"), QStringLiteral("m7"),
+                                     QStringLiteral("m11")}) {
+        m_meetingModel->setSongNumberForId(segmentId, 0);
+        m_meetingModel->setLinkedMediaForId(segmentId, {});
+        if (segmentId == m_selectedSegmentId)
+            selectSegment(segmentId);
+    }
+    saveState();
+}
+
 void BroadcastController::removeMediaFromSequence(const QString &seqId, const QString &mediaId)
 {
     int row = m_meetingModel->rowOfId(seqId);

@@ -448,7 +448,7 @@ int monthNumberFromWord(const QString &word)
 // word isn't recognized -- callers fall back to position-based selection.
 QDate parseWeekStart(const QString &text, int fallbackYear)
 {
-    static const QRegularExpression re(R"(([A-Za-zÀ-ÿ]+)\s+(\d{1,2}))");
+    static const QRegularExpression re(R"(([A-Za-zÀ-ÿ]+)\s+(\d{1,2})(?!\d))");
     const QRegularExpressionMatch m = re.match(text);
     if (!m.hasMatch()) return {};
     const int month = monthNumberFromWord(m.captured(1));
@@ -545,6 +545,7 @@ void WorkbookManager::refreshNow()
     const QDate targetDate = m_selectedDate.isValid() ? m_selectedDate : QDate::currentDate();
     if (m_applyPartsLanguage != lang || m_applyPartsDate != targetDate) {
         m_controller->setWorkbookScheduleRows({});
+        m_controller->clearWorkbookSongLinks();
         for (const QString &segmentId : {QStringLiteral("m3"), QStringLiteral("m6"),
                                          QStringLiteral("m8"), QStringLiteral("m9")}) {
             m_controller->setWorkbookMediaForSegment(segmentId, {});
@@ -616,9 +617,13 @@ QVariantList WorkbookManager::availableWeeks() const
 
     QList<QDate> sorted = dates.values();
     std::sort(sorted.begin(), sorted.end());
+    const QDate today = QDate::currentDate();
+    const QDate monthStart(today.year(), today.month(), 1);
 
     QVariantList result;
     for (const QDate &start : sorted) {
+        if (start < monthStart)
+            continue;
         QVariantMap entry;
         entry["iso"] = start.toString(Qt::ISODate);
         entry["label"] = start.toString(QStringLiteral("MMM d")) + QStringLiteral(" – ")

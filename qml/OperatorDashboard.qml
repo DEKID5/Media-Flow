@@ -175,7 +175,13 @@ Item {
                             Layout.fillWidth: true
                             flat: true
                             textRole: "label"
+                            property string loadedMonthKey: ""
                             model: ListModel { id: weekModel }
+
+                            function currentMonthKey() {
+                                const now = new Date()
+                                return now.getFullYear() + "-" + (now.getMonth() + 1)
+                            }
 
                             function reload() {
                                 weekModel.clear()
@@ -184,9 +190,23 @@ Item {
                                 for (let i = 0; i < weeks.length; i++)
                                     weekModel.append(weeks[i])
                                 currentIndex = 0
+                                loadedMonthKey = currentMonthKey()
                             }
 
                             Component.onCompleted: reload()
+
+                            Timer {
+                                interval: 60 * 60 * 1000
+                                repeat: true
+                                running: true
+                                onTriggered: {
+                                    if (weekCombo.loadedMonthKey !== weekCombo.currentMonthKey()) {
+                                        weekCombo.reload()
+                                        if (MediaFlowBackend)
+                                            MediaFlowBackend.selectWorkbookWeek("")
+                                    }
+                                }
+                            }
 
                             onActivated: (index) => {
                                 if (MediaFlowBackend) MediaFlowBackend.selectWorkbookWeek(weekModel.get(index).iso)
