@@ -535,7 +535,7 @@ Rectangle {
         Rectangle {
             visible: showTransitions && asset && asset.absolutePath
             width: 90; height: 36; radius: Theme.radius
-            color: cutMa.containsMouse ? "#33EF4444" : "transparent"
+            color: cutMa.containsMouse ? "#33EF4444" : "#14EF4444"
             border.color: cutMa.containsMouse ? Theme.accentRed : "#80EF4444"; border.width: 1.5
             Behavior on color { ColorAnimation { duration: Theme.durationFast } }
             scale: cutMa.pressed ? 0.95 : 1.0
@@ -555,7 +555,7 @@ Rectangle {
         Rectangle {
             visible: showTransitions && asset && asset.absolutePath
             width: 90; height: 36; radius: Theme.radius
-            color: takeMa.containsMouse ? "#33FFFFFF" : Theme.surfaceRaised
+            color: takeMa.containsMouse ? "#33FFFFFF" : "#1AFFFFFF"
             border.color: takeMa.containsMouse ? "#55FFFFFF" : Theme.panelBorder; border.width: 1
             Behavior on color { ColorAnimation { duration: Theme.durationFast } }
             scale: takeMa.pressed ? 0.95 : 1.0

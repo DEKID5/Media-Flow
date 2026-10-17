@@ -955,6 +955,43 @@ bool WorkbookManager::applyFromLocalWatchtower(const QString &lang, const QDate 
                     "ORDER BY dm.MultimediaId LIMIT 2"));
                 sq.addBindValue(best.docId);
                 if (sq.exec()) { while (sq.next()) songNumbers.append(sq.value(0).toInt()); }
+                else {
+                    qWarning() << "WorkbookManager: couldn't read Watchtower song references:"
+                               << sq.lastError().text();
+                }
+            }
+            {
+                QSqlQuery imageQuery(db);
+                imageQuery.prepare(QStringLiteral(
+                    "SELECT m.FilePath FROM DocumentMultimedia dm "
+                    "JOIN Multimedia m ON dm.MultimediaId = m.MultimediaId "
+                    "WHERE dm.DocumentId = ? AND LOWER(m.MimeType) LIKE 'image/%' "
+                    "ORDER BY dm.DocumentMultimediaId"));
+                imageQuery.addBindValue(best.docId);
+                if (imageQuery.exec()) {
+                    while (imageQuery.next()) {
+                        QString path = imageQuery.value(0).toString();
+                        if (path.isEmpty())
+                            continue;
+                        if (QDir::isRelativePath(path))
+                            path = QDir(best.folder).filePath(path);
+                        const QFileInfo imageInfo(path);
+                        if (!imageInfo.exists() || !imageInfo.isFile()) {
+                            qWarning() << "WorkbookManager: Watchtower illustration is unavailable:"
+                                       << imageInfo.absoluteFilePath();
+                            continue;
+                        }
+                        images.append({
+                            QStringLiteral("wtimg_%1_%2")
+                                .arg(best.docId)
+                                .arg(imageInfo.fileName()),
+                            imageInfo.absoluteFilePath()
+                        });
+                    }
+                } else {
+                    qWarning() << "WorkbookManager: couldn't read Watchtower image references:"
+                               << imageQuery.lastError().text();
+                }
             }
             db.close();
         }
@@ -962,19 +999,6 @@ bool WorkbookManager::applyFromLocalWatchtower(const QString &lang, const QDate 
     }
     if (songNumbers.size() != 2) {
         qWarning() << "WorkbookManager: expected 2 songs (middle/closing) in Watchtower document, found" << songNumbers.size();
-    }
-
-    // Auto-link just the magazine cover as a placeholder thumbnail, not the
-    // article's own in-content photos -- the operator adds whichever of
-    // those they actually want for this week's Study themselves via "ADD JW
-    // IMAGE", which already opens straight into this same folder.
-    {
-        const QDir folderDir(best.folder);
-        const QStringList covers = folderDir.entryList({QStringLiteral("*_cvr.jpg")}, QDir::Files);
-        if (!covers.isEmpty()) {
-            images.append({QStringLiteral("wtimg_cover_%1").arg(covers.first()),
-                            folderDir.absoluteFilePath(covers.first())});
-        }
     }
 
     // The Watchtower Study article carries exactly two of the meeting's
@@ -989,6 +1013,8 @@ bool WorkbookManager::applyFromLocalWatchtower(const QString &lang, const QDate 
         m_controller->meetingSchedule()->updateSegmentTitle(QStringLiteral("w4"), best.title.toUpper());
 
     commitWatchtowerImages(images);
+    qInfo() << "WorkbookManager: linked" << images.size()
+            << "downloaded Watchtower article images for" << best.title;
 
     setStatus(tr("Watchtower Study loaded: %1").arg(best.title.isEmpty() ? tr("(untitled)") : best.title));
     return true;
@@ -1326,27 +1352,20 @@ void WorkbookManager::commitWatchtowerImages(const QList<QPair<QString, QString>
     m_lastWatchtowerImageIds.clear();
 
     QStringList newIds;
-    int index = 0;
+    QStringList newOwnedIds;
     for (const auto &pair : idPathPairs) {
-        const QString &id = pair.first;
         const QString &path = pair.second;
-        if (m_controller->mediaLibrary()->idOfPath(path).isEmpty()) {
-            QVariantMap m;
-            m["id"] = id;
-            m["name"] = tr("Watchtower Study Image %1").arg(index + 1);
-            m["type"] = "image";
-            m["absolutePath"] = path;
-            m["thumbnailPath"] = path;
-            m["isStaged"] = false;
-            m["isImported"] = true;
-            m["category"] = tr("Watchtower Study");
-            m_controller->mediaLibrary()->appendFromVariantList({m});
-        }
-        newIds.append(id);
-        ++index;
+        const bool alreadyIndexed = m_controller->mediaLibrary()->containsPath(path);
+        const QString mediaId = m_controller->ensureWorkbookMedia(path);
+        if (mediaId.isEmpty())
+            continue;
+        m_controller->mediaLibrary()->markImported(mediaId, tr("Watchtower Study"));
+        newIds.append(mediaId);
+        if (!alreadyIndexed)
+            newOwnedIds.append(mediaId);
     }
 
     m_controller->meetingSchedule()->setLinkedMediaForId(QStringLiteral("w4"), newIds);
-    m_lastWatchtowerImageIds = newIds;
+    m_lastWatchtowerImageIds = newOwnedIds;
     m_controller->persistWorkbookChanges();
 }

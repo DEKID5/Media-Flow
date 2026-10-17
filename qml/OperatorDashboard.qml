@@ -736,6 +736,13 @@ Item {
                                                 color: Theme.textPrimary; font.pixelSize: Theme.textMd; font.bold: true; horizontalAlignment: TextInput.AlignHCenter
                                                 inputMethodHints: Qt.ImhDigitsOnly
 
+                                                function submitSong() {
+                                                    if (MediaFlowBackend && text !== "") {
+                                                        MediaFlowBackend.findAndStageSong(parseInt(text), MediaFlowBackend.currentLanguageCode || "E", model.id)
+                                                    }
+                                                    focus = false
+                                                }
+
                                                 Text {
                                                     text: "Song #"
                                                     anchors.centerIn: parent
@@ -744,11 +751,7 @@ Item {
                                                     font: songInput.font
                                                 }
 
-                                                onAccepted: {
-                                                    if (MediaFlowBackend && text !== "") {
-                                                        MediaFlowBackend.findAndStageSong(parseInt(text), MediaFlowBackend.currentLanguageCode || "E", model.id)
-                                                    }
-                                                }
+                                                onAccepted: submitSong()
                                             }
                                         }
 
@@ -757,11 +760,7 @@ Item {
                                             BroadcastIcon { anchors.centerIn: parent; name: "check"; color: "white"; iconSize: 14 }
                                             MouseArea {
                                                 anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                                                onClicked: {
-                                                    if (MediaFlowBackend && songInput.text !== "") {
-                                                        MediaFlowBackend.findAndStageSong(parseInt(songInput.text), MediaFlowBackend.currentLanguageCode || "E", model.id)
-                                                    }
-                                                }
+                                                onClicked: songInput.submitSong()
                                             }
                                         }
 
