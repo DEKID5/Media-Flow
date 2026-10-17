@@ -19,10 +19,7 @@ ApplicationWindow {
     // standard 1920-wide display's half-screen Windows Snap slot (960px).
     minimumWidth: 950
     minimumHeight: 700
-    // Stays hidden until the splash screen signals it's done (see below) --
-    // showing this immediately let the operator see an empty dashboard
-    // flash while the startup library scan was still running.
-    visible: false
+    visible: true
     title: qsTr("MediaFlow — Broadcast Suite")
     color: "#050505"
 
@@ -38,16 +35,6 @@ ApplicationWindow {
         Qt.quit()
     }
 
-    SplashScreen {
-        id: splash
-        onFinished: {
-            operatorRoot.visible = true
-            operatorRoot.raise()
-            operatorRoot.requestActivate()
-            splash.destroy()
-        }
-    }
-
     Rectangle {
         anchors.fill: parent
         color: "#050505"
@@ -60,5 +47,15 @@ ApplicationWindow {
 
     SettingsWindow {
         id: settingsWindow
+    }
+
+    SplashScreen {
+        id: splash
+        z: 1000
+        onFinished: {
+            operatorRoot.raise()
+            operatorRoot.requestActivate()
+            splash.destroy()
+        }
     }
 }

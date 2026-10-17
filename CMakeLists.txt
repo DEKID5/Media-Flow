@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(MediaFlow VERSION 1.0.42 LANGUAGES CXX C) # C needed for vendored third_party/miniz
+project(MediaFlow VERSION 1.0.43 LANGUAGES CXX C) # C needed for vendored third_party/miniz
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -90,10 +90,12 @@ qt_add_qml_module(mediaflow
         qml/components/ThemedDialog.qml
         qml/components/TimerPanel.qml
         qml/components/BackgroundMusicPanel.qml
+    RESOURCES
         qml/assets/cam_placeholder.png
         qml/assets/meeting_placeholder.png
         qml/assets/video_placeholder.png
         qml/assets/logo.png
+        qml/assets/splash_background.jpg
 )
 
 target_include_directories(mediaflow PRIVATE
