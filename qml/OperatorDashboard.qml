@@ -630,7 +630,8 @@ Item {
                         model: (MediaFlowBackend || {}).meetingSchedule
                         delegate: Item {
                             id: segmentDelegate
-                            width: sList.width; height: isSelected ? 160 : 110
+                            width: sList.width
+                            height: isSelected ? 160 : 110
                             property bool isSelected: (MediaFlowBackend || {}).selectedSegmentId === model.id
                             // Captured here because the nested Repeater below has its own
                             // "model" (associatedMediaIds), which shadows this segment's model.id.

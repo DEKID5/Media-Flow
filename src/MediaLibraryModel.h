@@ -57,6 +57,7 @@ public:
 
     void updateThumbnail(const QString &id, const QString &thumbnailData);
     void updateName(const QString &id, const QString &newName);
+    void markImported(const QString &id, const QString &category);
 
     /**
      * @brief Checks if a file path is already indexed.

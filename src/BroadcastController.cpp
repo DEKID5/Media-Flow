@@ -391,6 +391,69 @@ void BroadcastController::bindMediaToSequence(const QString &mediaId)
     }
 }
 
+QString BroadcastController::ensureWorkbookMedia(const QString &path)
+{
+    const QFileInfo fileInfo(path);
+    if (!fileInfo.exists() || !fileInfo.isFile()) {
+        qWarning() << "WorkbookManager: workbook media file is unavailable:" << path;
+        return {};
+    }
+
+    const QString absolutePath = fileInfo.absoluteFilePath();
+    QString mediaId = m_libraryModel->idOfPath(absolutePath);
+    if (!mediaId.isEmpty()) {
+        if (!m_libraryModel->getRowById(mediaId).value(QStringLiteral("isImported")).toBool()) {
+            m_libraryModel->markImported(mediaId, QStringLiteral("Meeting"));
+            saveState();
+        }
+        return mediaId;
+    }
+
+    const QString canonicalPath = fileInfo.canonicalFilePath();
+    if (!canonicalPath.isEmpty()) {
+        for (int row = 0; row < m_libraryModel->rowCount(); ++row) {
+            const QModelIndex index = m_libraryModel->index(row, 0);
+            const QString indexedPath = m_libraryModel->data(index, MediaLibraryModel::PathRole).toString();
+            if (QFileInfo(indexedPath).canonicalFilePath() != canonicalPath)
+                continue;
+            mediaId = m_libraryModel->data(index, MediaLibraryModel::IdRole).toString();
+            if (!m_libraryModel->getRowById(mediaId).value(QStringLiteral("isImported")).toBool()) {
+                m_libraryModel->markImported(mediaId, QStringLiteral("Meeting"));
+                saveState();
+            }
+            return mediaId;
+        }
+    }
+
+    return importOneFile(absolutePath, QStringLiteral("Meeting"));
+}
+
+void BroadcastController::setWorkbookMediaForSegment(const QString &segmentId,
+                                                       const QStringList &mediaIds)
+{
+    m_meetingModel->setWorkbookMediaForId(segmentId, mediaIds);
+    if (segmentId == m_selectedSegmentId)
+        selectSegment(segmentId);
+}
+
+void BroadcastController::setWorkbookScheduleRows(const QVariantList &rows)
+{
+    m_meetingModel->setWorkbookScheduleRows(rows);
+    if (m_meetingType != QStringLiteral("midweek"))
+        return;
+
+    if (!m_selectedSegmentId.isEmpty()
+        && m_meetingModel->rowOfId(m_selectedSegmentId) == -1)
+        m_selectedSegmentId.clear();
+    if (m_selectedSegmentId.isEmpty()) {
+        emit selectedSegmentIdChanged();
+        m_filterProxy->setStagedIds({});
+    } else {
+        selectSegment(m_selectedSegmentId);
+    }
+    saveState();
+}
+
 void BroadcastController::removeMediaFromSequence(const QString &seqId, const QString &mediaId)
 {
     int row = m_meetingModel->rowOfId(seqId);
@@ -1455,7 +1518,14 @@ QVariantMap BroadcastController::addMediaToSegment(const QString &segmentId, con
         // issue locally) so the operator lands directly among that week's
         // article images instead of the whole, unsorted Publications root.
         QString weekFolder;
-        if (segmentId == QStringLiteral("m9"))
+        bool isBibleStudySegment = segmentId == QStringLiteral("m9");
+        if (segmentId.startsWith(QStringLiteral("mwb_"))) {
+            bool numberOk = false;
+            const int assignmentNumber =
+                segmentId.section(QLatin1Char('_'), -1).toInt(&numberOk);
+            isBibleStudySegment = numberOk && assignmentNumber >= 8 && assignmentNumber <= 9;
+        }
+        if (isBibleStudySegment)
             weekFolder = m_cbsPublicationFolder;
         else if (segmentId.startsWith(QStringLiteral("m")))
             weekFolder = m_mwbPublicationFolder;

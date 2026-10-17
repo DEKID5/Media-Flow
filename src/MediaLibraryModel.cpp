@@ -177,3 +177,17 @@ void MediaLibraryModel::updateName(const QString &id, const QString &newName)
         }
     }
 }
+
+void MediaLibraryModel::markImported(const QString &id, const QString &category)
+{
+    for (int i = 0; i < m_rows.size(); ++i) {
+        if (m_rows[i].id != id)
+            continue;
+        if (m_rows[i].imported && m_rows[i].category == category)
+            return;
+        m_rows[i].imported = true;
+        m_rows[i].category = category;
+        emit dataChanged(index(i), index(i), {ImportedRole, CategoryRole});
+        return;
+    }
+}

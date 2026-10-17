@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(MediaFlow VERSION 1.0.0 LANGUAGES CXX C) # C needed for vendored third_party/miniz
+project(MediaFlow VERSION 1.0.39 LANGUAGES CXX C) # C needed for vendored third_party/miniz
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -119,7 +119,7 @@ if(WIN32)
     # winmm: timeBeginPeriod/timeEndPeriod (see main.cpp -- 1ms timer
     # resolution for the app's lifetime, to avoid audio stutter when the
     # process loses foreground focus).
-    target_link_libraries(mediaflow PRIVATE user32 Shell32 Ole32 winmm)
+    target_link_libraries(mediaflow PRIVATE user32 Shell32 Ole32 winmm bcrypt)
 endif()
 
 include(GNUInstallDirs)

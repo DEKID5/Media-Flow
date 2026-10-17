@@ -1,5 +1,7 @@
 #include "MeetingScheduleModel.h"
 #include <QDebug>
+#include <QTime>
+#include <algorithm>
 
 MeetingScheduleModel::MeetingScheduleModel(QObject *parent)
     : QAbstractListModel(parent)
@@ -60,6 +62,12 @@ void MeetingScheduleModel::ensurePopulated(const QString &type)
     auto &rows = (type == "midweek") ? m_midweekRows : m_weekendRows;
     if (!rows.isEmpty()) return;
 
+    rows = defaultRows(type);
+}
+
+QVector<MeetingScheduleModel::MeetingRow> MeetingScheduleModel::defaultRows(const QString &type)
+{
+    QVector<MeetingRow> rows;
     // durationMinutes for each non-song segment is just the gap to the next
     // segment's own scheduled time above -- e.g. Public Talk (10:05 -> 10:35)
     // is 30 min, Watchtower Study (10:40 -> 11:40) is 60 min -- so it can
@@ -81,6 +89,7 @@ void MeetingScheduleModel::ensurePopulated(const QString &type)
              << MeetingRow{.id = "w5", .time = "11:40", .title = "CONCLUDING COMMENTS", .type = "talk", .durationMinutes = 3}
              << MeetingRow{.id = "w6", .time = "11:43", .title = "CLOSING SONG", .type = "song", .isSong = true, .durationMinutes = 0};
     }
+    return rows;
 }
 
 void MeetingScheduleModel::addLinkedMedia(int row, const QString &mediaId)
@@ -167,8 +176,8 @@ void MeetingScheduleModel::moveLinkedMedia(int row, int fromIndex, int toIndex)
 void MeetingScheduleModel::clearAllMedia()
 {
     beginResetModel();
-    for (auto &r : m_midweekRows) { r.linkedMediaIds.clear(); r.isLive = false; r.songNumber = 0; }
-    for (auto &r : m_weekendRows) { r.linkedMediaIds.clear(); r.isLive = false; r.songNumber = 0; }
+    for (auto &r : m_midweekRows) { r.linkedMediaIds.clear(); r.workbookMediaIds.clear(); r.isLive = false; r.songNumber = 0; }
+    for (auto &r : m_weekendRows) { r.linkedMediaIds.clear(); r.workbookMediaIds.clear(); r.isLive = false; r.songNumber = 0; }
     endResetModel();
 }
 
@@ -220,6 +229,177 @@ void MeetingScheduleModel::setSongNumberForId(const QString &id, int songNum)
     }
 }
 
+void MeetingScheduleModel::setWorkbookMediaForId(const QString &id, const QStringList &mediaIds)
+{
+    ensurePopulated(QStringLiteral("midweek"));
+    ensurePopulated(QStringLiteral("weekend"));
+
+    auto update = [this, &id, &mediaIds](QVector<MeetingRow> &rows, const QString &type) {
+        for (int i = 0; i < rows.size(); ++i) {
+            MeetingRow &row = rows[i];
+            if (row.id != id)
+                continue;
+
+            for (const QString &previousId : row.workbookMediaIds)
+                row.linkedMediaIds.removeAll(previousId);
+            row.workbookMediaIds = mediaIds;
+            for (const QString &mediaId : mediaIds) {
+                if (!row.linkedMediaIds.contains(mediaId))
+                    row.linkedMediaIds.append(mediaId);
+            }
+            if (m_activeType == type)
+                emit dataChanged(index(i), index(i), {AssociatedMediaIdsRole});
+            return true;
+        }
+        return false;
+    };
+
+    if (update(m_midweekRows, QStringLiteral("midweek")))
+        return;
+    update(m_weekendRows, QStringLiteral("weekend"));
+}
+
+void MeetingScheduleModel::setWorkbookScheduleRows(const QVariantList &workbookRows)
+{
+    ensurePopulated(QStringLiteral("midweek"));
+
+    QHash<QString, MeetingRow> existing;
+    for (const MeetingRow &row : m_midweekRows)
+        existing.insert(row.id, row);
+    const QVector<MeetingRow> previousRows = m_midweekRows;
+
+    auto manualMedia = [&existing](const QString &id) {
+        QStringList ids;
+        const MeetingRow row = existing.value(id);
+        for (const QString &mediaId : row.linkedMediaIds) {
+            if (!row.workbookMediaIds.contains(mediaId))
+                ids.append(mediaId);
+        }
+        return ids;
+    };
+    auto manualMediaForGroup = [&previousRows, &manualMedia](const QString &group) {
+        QStringList ids;
+        for (const MeetingRow &row : previousRows) {
+            bool belongsToGroup = row.id == (group == QStringLiteral("apply")
+                ? QStringLiteral("m6") : group == QStringLiteral("living")
+                    ? QStringLiteral("m8") : QStringLiteral("m9"));
+            if (row.id.startsWith(QStringLiteral("mwb_"))) {
+                bool numberOk = false;
+                const int number = row.id.section(QLatin1Char('_'), -1).toInt(&numberOk);
+                belongsToGroup = numberOk && (group == QStringLiteral("apply")
+                    ? number >= 4 && number <= 6
+                    : group == QStringLiteral("living") ? number == 7
+                    : number == 8 || number == 9);
+            }
+            if (!belongsToGroup)
+                continue;
+            for (const QString &mediaId : manualMedia(row.id)) {
+                if (!ids.contains(mediaId))
+                    ids.append(mediaId);
+            }
+        }
+        return ids;
+    };
+
+    QHash<QString, QVector<MeetingRow>> assignments;
+    for (const QVariant &value : workbookRows) {
+        const QVariantMap map = value.toMap();
+        const int number = map.value(QStringLiteral("number")).toInt();
+        if (number < 4 || number > 9)
+            continue;
+
+        MeetingRow row;
+        row.id = map.value(QStringLiteral("id")).toString();
+        row.title = map.value(QStringLiteral("title")).toString();
+        row.type = QStringLiteral("talk");
+        row.durationMinutes = qMax(0, map.value(QStringLiteral("durationMinutes")).toInt());
+        row.linkedMediaIds = manualMedia(row.id);
+        if (row.id.isEmpty() || row.title.isEmpty())
+            continue;
+
+        const QString group = number <= 6 ? QStringLiteral("apply")
+            : number == 7 ? QStringLiteral("living") : QStringLiteral("bibleStudy");
+        assignments[group].append(row);
+    }
+
+    for (const QString &group : {QStringLiteral("apply"), QStringLiteral("living"),
+                                 QStringLiteral("bibleStudy")}) {
+        QVector<MeetingRow> &groupRows = assignments[group];
+        std::sort(groupRows.begin(), groupRows.end(), [](const MeetingRow &a, const MeetingRow &b) {
+            bool aOk = false;
+            bool bOk = false;
+            const int aNumber = a.id.section(QLatin1Char('_'), -1).toInt(&aOk);
+            const int bNumber = b.id.section(QLatin1Char('_'), -1).toInt(&bOk);
+            if (aOk && bOk && aNumber != bNumber)
+                return aNumber < bNumber;
+            return a.id < b.id;
+        });
+        if (!groupRows.isEmpty()) {
+            groupRows.first().linkedMediaIds = manualMediaForGroup(group);
+        }
+    }
+
+    QVector<MeetingRow> rebuilt;
+    const QVector<MeetingRow> defaults = defaultRows(QStringLiteral("midweek"));
+    for (MeetingRow row : defaults) {
+        const auto old = existing.constFind(row.id);
+        if (old != existing.cend()) {
+            row.songNumber = old->songNumber;
+            row.isLive = old->isLive;
+            if (row.id == QStringLiteral("m12"))
+                row.title = old->title;
+            if (workbookRows.isEmpty()
+                && (row.id == QStringLiteral("m6") || row.id == QStringLiteral("m8")
+                    || row.id == QStringLiteral("m9"))) {
+                const QString group = row.id == QStringLiteral("m6")
+                    ? QStringLiteral("apply") : row.id == QStringLiteral("m8")
+                        ? QStringLiteral("living") : QStringLiteral("bibleStudy");
+                row.linkedMediaIds = manualMediaForGroup(group);
+            }
+            if (row.id != QStringLiteral("m6") && row.id != QStringLiteral("m8")
+                && row.id != QStringLiteral("m9")) {
+                for (const QString &mediaId : old->linkedMediaIds) {
+                    if (!old->workbookMediaIds.contains(mediaId)
+                        && !row.linkedMediaIds.contains(mediaId))
+                        row.linkedMediaIds.append(mediaId);
+                }
+            }
+        }
+
+        if (row.id == QStringLiteral("m6")) {
+            rebuilt += assignments.value(QStringLiteral("apply"));
+            if (workbookRows.isEmpty())
+                rebuilt.append(row);
+            continue;
+        }
+        if (row.id == QStringLiteral("m8")) {
+            rebuilt += assignments.value(QStringLiteral("living"));
+            if (workbookRows.isEmpty())
+                rebuilt.append(row);
+            continue;
+        }
+        if (row.id == QStringLiteral("m9")) {
+            rebuilt += assignments.value(QStringLiteral("bibleStudy"));
+            if (workbookRows.isEmpty())
+                rebuilt.append(row);
+            continue;
+        }
+        rebuilt.append(row);
+    }
+
+    QTime meetingTime(19, 0);
+    for (MeetingRow &row : rebuilt) {
+        row.time = meetingTime.toString(QStringLiteral("HH:mm"));
+        const int slotMinutes = row.isSong ? 5 : row.durationMinutes;
+        if (slotMinutes > 0)
+            meetingTime = meetingTime.addSecs(slotMinutes * 60);
+    }
+
+    beginResetModel();
+    m_midweekRows = rebuilt;
+    endResetModel();
+}
+
 void MeetingScheduleModel::setIsLive(int row, bool live)
 {
     auto &rows = activeRows();
@@ -247,8 +427,13 @@ QVariantList MeetingScheduleModel::getFullState(const QString &type) const
         QVariantMap m;
         m.insert("id", s.id);
         m.insert("mediaIds", s.linkedMediaIds);
+        m.insert("workbookMediaIds", s.workbookMediaIds);
         m.insert("songNumber", s.songNumber);
         m.insert("durationMinutes", s.durationMinutes);
+        m.insert("title", s.title);
+        m.insert("time", s.time);
+        m.insert("type", s.type);
+        m.insert("isSong", s.isSong);
         list.append(m);
     }
     return list;
@@ -258,22 +443,47 @@ void MeetingScheduleModel::setFullState(const QString &type, const QVariantList 
 {
     ensurePopulated(type);
     auto &rows = (type == "midweek") ? m_midweekRows : m_weekendRows;
+    QHash<QString, MeetingRow> rowsById;
+    for (const MeetingRow &row : rows)
+        rowsById.insert(row.id, row);
+
+    QVector<MeetingRow> restored;
     for (const QVariant &v : data) {
         QVariantMap m = v.toMap();
-        QString id = m["id"].toString();
-        for (auto &r : rows) {
-            if (r.id == id) {
-                r.linkedMediaIds = m["mediaIds"].toStringList();
-                r.songNumber = m["songNumber"].toInt();
-                // Older saved states won't have this key -- keep
-                // ensurePopulated's default duration rather than zeroing it.
-                if (m.contains("durationMinutes"))
-                    r.durationMinutes = m["durationMinutes"].toInt();
-                break;
-            }
+        const QString id = m.value(QStringLiteral("id")).toString();
+        if (id.isEmpty())
+            continue;
+        MeetingRow row = rowsById.value(id);
+        if (row.id.isEmpty() && type == QStringLiteral("midweek")
+            && id.startsWith(QStringLiteral("mwb_"))) {
+            row.id = id;
+            row.title = m.value(QStringLiteral("title")).toString();
+            row.time = m.value(QStringLiteral("time")).toString();
+            row.type = m.value(QStringLiteral("type"), QStringLiteral("talk")).toString();
         }
+        if (row.id.isEmpty())
+            continue;
+
+        row.linkedMediaIds = m.value(QStringLiteral("mediaIds")).toStringList();
+        row.workbookMediaIds = m.value(QStringLiteral("workbookMediaIds")).toStringList();
+        row.songNumber = m.value(QStringLiteral("songNumber")).toInt();
+        if (m.contains(QStringLiteral("durationMinutes")))
+            row.durationMinutes = m.value(QStringLiteral("durationMinutes")).toInt();
+        if (m.contains(QStringLiteral("title")))
+            row.title = m.value(QStringLiteral("title")).toString();
+        if (m.contains(QStringLiteral("time")))
+            row.time = m.value(QStringLiteral("time")).toString();
+        restored.append(row);
     }
-    if (m_activeType == type) emit dataChanged(index(0), index(rows.size() - 1));
+    for (const MeetingRow &row : rows) {
+        if (std::none_of(restored.cbegin(), restored.cend(), [&row](const MeetingRow &saved) {
+                return saved.id == row.id;
+            }))
+            restored.append(row);
+    }
+    beginResetModel();
+    rows = restored;
+    endResetModel();
 }
 
 QVector<MeetingScheduleModel::MeetingRow> &MeetingScheduleModel::activeRows() { return (m_activeType == "midweek") ? m_midweekRows : m_weekendRows; }
