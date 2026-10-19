@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(MediaFlow VERSION 1.0.43 LANGUAGES CXX C) # C needed for vendored third_party/miniz
+project(MediaFlow VERSION 1.0.44 LANGUAGES CXX C) # C needed for vendored third_party/miniz
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -9,6 +9,8 @@ find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Qml Quick QuickControl
 
 set(MFQ_SOURCES
     src/main.cpp
+    src/AppUpdater.cpp
+    src/AppUpdater.h
     src/BroadcastController.cpp
     src/BroadcastController.h
     src/MediaExtractor.cpp
@@ -60,6 +62,7 @@ endif()
 # stdout/stderr, so nothing depends on having a console.
 qt_add_executable(mediaflow ${MFQ_SOURCES})
 set_target_properties(mediaflow PROPERTIES OUTPUT_NAME "MediaFlow" WIN32_EXECUTABLE TRUE)
+target_compile_definitions(mediaflow PRIVATE MEDIAFLOW_VERSION="${PROJECT_VERSION}")
 
 # Must be set BEFORE qt_add_qml_module() -- Qt's qmldir generator reads this
 # property when the module is declared, not retroactively. Setting it after

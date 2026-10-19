@@ -21,6 +21,7 @@
 #include "MediaAsset.h"
 #include "VirtualCameraManager.h"
 #include "PinnedFolderModel.h"
+#include "AppUpdater.h"
 
 class MediaExtractor;
 class MediaThumbnailManager;
@@ -118,6 +119,7 @@ class BroadcastController final : public QObject
     Q_PROPERTY(int bgmDurationMs READ bgmDurationMs NOTIFY bgmDurationChanged)
     Q_PROPERTY(QSortFilterProxyModel* stagedMediaProxy READ stagedMediaProxy CONSTANT)
     Q_PROPERTY(PinnedFolderModel* pinnedFolders READ pinnedFolders CONSTANT)
+    Q_PROPERTY(AppUpdater* updater READ updater CONSTANT)
 
 public:
     explicit BroadcastController(QQmlApplicationEngine *engine, QObject *parent = nullptr);
@@ -130,6 +132,7 @@ public:
     BroadcastEngine *broadcastEngine() const { return m_broadcastEngine; }
     QSortFilterProxyModel *stagedMediaProxy() const { return m_filterProxy; }
     PinnedFolderModel *pinnedFolders() const { return m_pinnedFolders; }
+    AppUpdater *updater() const { return m_updater; }
     QCameraDevice programCameraDevice() const { return m_programCameraDevice; }
     QAudioDevice roomAudioOutputDevice() const { return m_roomAudioOutputDevice; }
 
@@ -381,6 +384,7 @@ private:
     BroadcastEngine *m_broadcastEngine;
     VirtualCameraManager *m_vcamManager;
     PinnedFolderModel *m_pinnedFolders = nullptr;
+    AppUpdater *m_updater = nullptr;
 
     QString m_selectedSegmentId;
     QString m_meetingType = "midweek";

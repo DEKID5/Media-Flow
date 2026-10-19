@@ -9,7 +9,7 @@
 ; drivers\obs-virtualcam\THIRD_PARTY_NOTICES.txt for licensing.
 
 #define MyAppName "MediaFlow"
-#define MyAppVersion "1.0.43"
+#define MyAppVersion "1.0.44"
 #define MyAppPublisher "DEKID5"
 #define MyAppExeName "MediaFlow.exe"
 
@@ -30,6 +30,8 @@ PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 WizardStyle=modern
+CloseApplications=yes
+CloseApplicationsFilter=MediaFlow.exe
 SetupIconFile=..\qml\assets\icon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 

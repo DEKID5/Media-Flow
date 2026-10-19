@@ -1,4 +1,5 @@
 #include "BroadcastController.h"
+#include "AppUpdater.h"
 #include "WorkbookManager.h"
 #include "JwLibraryPaths.h"
 #include "MediaExtractor.h"
@@ -238,6 +239,7 @@ BroadcastController::BroadcastController(QQmlApplicationEngine *engine, QObject 
     , m_vcamManager(new VirtualCameraManager(this))
     , m_pinnedFolders(new PinnedFolderModel(this))
 {
+    m_updater = new AppUpdater(QStringLiteral(MEDIAFLOW_VERSION), this);
     m_programCameraDevice = QMediaDevices::defaultVideoInput();
     m_roomAudioOutputDevice = QMediaDevices::defaultAudioOutput();
     m_filterProxy->setSourceModel(m_libraryModel);
