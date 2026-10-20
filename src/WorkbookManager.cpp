@@ -391,7 +391,7 @@ BookStudyAssignment parseBookStudyAssignment(const QString &chapterHtml,
         QRegularExpression::CaseInsensitiveOption | QRegularExpression::DotMatchesEverythingOption);
     static const QRegularExpression numberRe(QStringLiteral(R"(^\s*(\d+)\s*[.)]\s*)"));
     static const QRegularExpression chapterRe(
-        QStringLiteral(R"(\bwcg\b[^0-9]{0,40}\bchap(?:ter)?s?\.?\s*(\d{1,3})(?:\s*(?:-|–|—|,|and|&|to)\s*(\d{1,3}))?)"),
+        QStringLiteral(R"(\bwcg\b[^0-9]{0,40}?(?:\bchap(?:ter)?s?\.?\s*)?(\d{1,3})(?:\s*(?:-|–|—|,|and|&|to)\s*(\d{1,3}))?)"),
         QRegularExpression::CaseInsensitiveOption);
 
     QList<QRegularExpressionMatch> headings;
@@ -711,27 +711,41 @@ QVariantList WorkbookManager::availableWeeks() const
 bool WorkbookManager::applyFromLocalBookStudy(const QString &lang)
 {
     m_bookStudyPublicationFolder.clear();
-    const QString folderName = QStringLiteral("wcg_") + lang;
+    QList<QFileInfo> candidates;
     for (const QString &root : publicationsRoots()) {
         QDir rootDir(root);
         if (!rootDir.exists()) continue;
         const QFileInfoList entries = rootDir.entryInfoList(
-            {folderName}, QDir::Dirs | QDir::NoDotAndDotDot);
-        for (const QFileInfo &fi : entries) {
-            QFile manifest(fi.absoluteFilePath() + QStringLiteral("/manifest.json"));
-            if (!manifest.open(QIODevice::ReadOnly)) continue;
+            {QStringLiteral("wcg_*")}, QDir::Dirs | QDir::NoDotAndDotDot);
+        candidates.append(entries);
+    }
+    const QString preferredFolder = QStringLiteral("wcg_") + lang;
+    std::stable_sort(candidates.begin(), candidates.end(),
+                     [&preferredFolder](const QFileInfo &left, const QFileInfo &right) {
+        return left.fileName().compare(preferredFolder, Qt::CaseInsensitive) == 0
+            && right.fileName().compare(preferredFolder, Qt::CaseInsensitive) != 0;
+    });
 
-            const QJsonObject pub = QJsonDocument::fromJson(manifest.readAll())
-                .object().value(QStringLiteral("publication")).toObject();
-            if (pub.value(QStringLiteral("publicationType")).toString() != QStringLiteral("Book")
-                || pub.value(QStringLiteral("uniqueEnglishSymbol")).toString()
-                    != QStringLiteral("wcg"))
-                continue;
+    for (const QFileInfo &fi : candidates) {
+        QFile manifest(fi.absoluteFilePath() + QStringLiteral("/manifest.json"));
+        if (!manifest.open(QIODevice::ReadOnly))
+            continue;
 
-            m_bookStudyPublicationFolder = fi.absoluteFilePath();
-            m_controller->setWorkbookPublicationFolder(QStringLiteral("cbs"), fi.absoluteFilePath());
-            return true;
+        const QJsonObject pub = QJsonDocument::fromJson(manifest.readAll())
+            .object().value(QStringLiteral("publication")).toObject();
+        if (pub.value(QStringLiteral("publicationType")).toString() != QStringLiteral("Book")
+            || pub.value(QStringLiteral("uniqueEnglishSymbol")).toString()
+                != QStringLiteral("wcg"))
+            continue;
+
+        m_bookStudyPublicationFolder = fi.absoluteFilePath();
+        m_controller->setWorkbookPublicationFolder(QStringLiteral("cbs"), fi.absoluteFilePath());
+        if (fi.fileName().compare(preferredFolder, Qt::CaseInsensitive) != 0) {
+            qInfo() << "WorkbookManager: using locally downloaded WCG edition"
+                    << fi.fileName() << "for selected app language" << lang
+                    << "because no matching-language edition is installed";
         }
+        return true;
     }
 
     m_controller->setWorkbookPublicationFolder(QStringLiteral("cbs"), {});
@@ -1419,6 +1433,7 @@ void WorkbookManager::applyMwbEpub(const QByteArray &epubData, bool supplemental
             studyAssignment.segmentId,
             bookStudyImages(lang, studyAssignment.chapters, studyAssignment.segmentId));
     } else if (!studyAssignment.segmentId.isEmpty()) {
+        m_controller->setWorkbookMediaForSegment(studyAssignment.segmentId, {});
         qWarning() << "WorkbookManager: couldn't identify a WCG chapter in Bible Study assignment"
                    << studyAssignment.segmentId << "for" << weeks[bestIndex].text;
     }

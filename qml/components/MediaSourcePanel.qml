@@ -28,6 +28,15 @@ Item {
         function onModelReset() { root.refreshPinMediaIds() }
     }
 
+    Connections {
+        target: (MediaFlowBackend || {}).mediaLibrary || null
+        function onCategoriesChanged() {
+            const categories = MediaFlowBackend.mediaLibrary.categories
+            if (root.selectedCategory && categories.indexOf(root.selectedCategory) === -1)
+                root.selectedCategory = categories.length > 0 ? categories[0] : ""
+        }
+    }
+
     function openPinFolder(folderId) {
         selectedPinFolderId = folderId
         currentView = "pins"
@@ -289,7 +298,7 @@ Item {
         title: "Delete Pin Folder"
         acceptText: "DELETE"; acceptColor: Theme.accentRed
         contentItem: Label {
-            text: "Delete “" + deletePinDialog.folderName + "”? This only removes the pin folder — the media files themselves aren’t deleted."
+            text: "Delete “" + deletePinDialog.folderName + "”? Its Quick Fetch category will be removed. The media files themselves will stay on disk."
             color: "white"; font.pixelSize: 12; wrapMode: Text.WordWrap; width: 280
             leftPadding: 20; rightPadding: 20; topPadding: 4; bottomPadding: 12
         }
@@ -347,7 +356,7 @@ Item {
             id: categoryList
             anchors.fill: parent; anchors.leftMargin: 15; anchors.rightMargin: 15
             orientation: ListView.Horizontal; spacing: 10
-            model: (MediaFlowBackend && MediaFlowBackend.mediaLibrary) ? MediaFlowBackend.mediaLibrary.categories() : ["General"]
+            model: (MediaFlowBackend && MediaFlowBackend.mediaLibrary) ? MediaFlowBackend.mediaLibrary.categories : ["General"]
             delegate: Rectangle {
                 width: catLabel.contentWidth + 24; height: 26; radius: 13
                 color: root.selectedCategory === modelData ? Theme.accentEmerald : (catMa.containsMouse ? "#1AFFFFFF" : "#0DFFFFFF")

@@ -62,6 +62,7 @@ void MediaLibraryModel::appendFromVariantList(const QVariantList &list)
         m_rows.append(r);
     }
     endInsertRows();
+    emit categoriesChanged();
 }
 
 void MediaLibraryModel::updateThumbnail(const QString &id, const QString &path)
@@ -125,12 +126,16 @@ QVariantList MediaLibraryModel::toVariantList() const
 void MediaLibraryModel::renameCategory(const QString &oldName, const QString &newName)
 {
     if (oldName == newName) return;
+    bool changed = false;
     for (int i = 0; i < m_rows.size(); ++i) {
         if (m_rows[i].category == oldName) {
             m_rows[i].category = newName;
             emit dataChanged(index(i), index(i), {CategoryRole});
+            changed = true;
         }
     }
+    if (changed)
+        emit categoriesChanged();
 }
 
 void MediaLibraryModel::removeMedia(const QString &id)
@@ -140,6 +145,7 @@ void MediaLibraryModel::removeMedia(const QString &id)
             beginRemoveRows(QModelIndex(), i, i);
             m_rows.removeAt(i);
             endRemoveRows();
+            emit categoriesChanged();
             return;
         }
     }
@@ -151,6 +157,7 @@ void MediaLibraryModel::clear()
     beginResetModel();
     m_rows.clear();
     endResetModel();
+    emit categoriesChanged();
 }
 
 bool MediaLibraryModel::containsPath(const QString &path) const
@@ -186,8 +193,11 @@ void MediaLibraryModel::markImported(const QString &id, const QString &category)
         if (m_rows[i].imported && m_rows[i].category == category)
             return;
         m_rows[i].imported = true;
+        const bool categoryChanged = m_rows[i].category != category;
         m_rows[i].category = category;
         emit dataChanged(index(i), index(i), {ImportedRole, CategoryRole});
+        if (categoryChanged)
+            emit categoriesChanged();
         return;
     }
 }

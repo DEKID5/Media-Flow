@@ -13,6 +13,7 @@
 class MediaLibraryModel : public QAbstractListModel
 {
     Q_OBJECT
+    Q_PROPERTY(QStringList categories READ categories NOTIFY categoriesChanged)
 
 public:
     struct Row {
@@ -67,7 +68,7 @@ public:
     /**
      * @brief Returns a list of unique categories.
      */
-    Q_INVOKABLE QStringList categories() const;
+    QStringList categories() const;
 
     /**
      * @brief Batch updates categories.
@@ -79,6 +80,8 @@ public:
      */
     Q_INVOKABLE void removeMedia(const QString &id);
 
+signals:
+    void categoriesChanged();
 
 private:
     QVector<Row> m_rows;

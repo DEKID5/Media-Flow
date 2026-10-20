@@ -1768,7 +1768,12 @@ void BroadcastController::renamePinnedFolder(const QString &folderId, const QStr
 
 void BroadcastController::deletePinnedFolder(const QString &folderId)
 {
+    const QString folderName = m_pinnedFolders->nameForFolder(folderId);
+    if (folderName.isEmpty())
+        return;
+
     m_pinnedFolders->deleteFolder(folderId);
+    m_libraryModel->renameCategory(folderName, QStringLiteral("General"));
     saveState();
 }
 
