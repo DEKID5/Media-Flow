@@ -74,6 +74,8 @@ private:
     // normal auto-refresh, or the operator's manual pick from selectWeek().
     bool applyFromLocalMwb(const QString &lang, const QDate &targetDate);
     bool applyFromLocalWatchtower(const QString &lang, const QDate &targetDate);
+    QStringList bookStudyImages(const QString &lang, const QList<int> &chapters,
+                                const QString &segmentId);
     // The Congregation Bible Study book has no weekly issue to match --
     // it's whichever locally downloaded publication is a standalone "Book"
     // (per JW Library's own manifest.json), as opposed to the Bible,
@@ -97,4 +99,5 @@ private:
     // the previous run -- removed from the library if a later run picks a
     // different article, so stale images don't pile up week after week.
     QStringList m_lastWatchtowerImageIds;
+    QString m_bookStudyPublicationFolder;
 };

@@ -283,6 +283,11 @@ struct WorkbookAssignmentData {
     QList<WorkbookAssignmentSpan> spans;
 };
 
+struct BookStudyAssignment {
+    QString segmentId;
+    QList<int> chapters;
+};
+
 WorkbookAssignmentData parseWorkbookAssignmentData(const QString &chapterHtml,
                                                     const QString &languageCode,
                                                     const QDate &weekStart)
@@ -368,6 +373,70 @@ WorkbookAssignmentData parseWorkbookAssignmentData(const QString &chapterHtml,
             {QStringLiteral("title"), title},
             {QStringLiteral("durationMinutes"), durationMinutes}
         });
+    }
+    return result;
+}
+
+BookStudyAssignment parseBookStudyAssignment(const QString &chapterHtml,
+                                             const WorkbookAssignmentData &assignmentData)
+{
+    const auto studySpan = std::find_if(
+        assignmentData.spans.cbegin(), assignmentData.spans.cend(),
+        [](const WorkbookAssignmentSpan &span) { return span.number == 9; });
+    if (studySpan == assignmentData.spans.cend())
+        return {};
+
+    static const QRegularExpression headingRe(
+        QStringLiteral(R"(<h([23])\b([^>]*)>(.*?)</h\1\s*>)"),
+        QRegularExpression::CaseInsensitiveOption | QRegularExpression::DotMatchesEverythingOption);
+    static const QRegularExpression numberRe(QStringLiteral(R"(^\s*(\d+)\s*[.)]\s*)"));
+    static const QRegularExpression chapterRe(
+        QStringLiteral(R"(\bwcg\b[^0-9]{0,40}\bchap(?:ter)?s?\.?\s*(\d{1,3})(?:\s*(?:-|–|—|,|and|&|to)\s*(\d{1,3}))?)"),
+        QRegularExpression::CaseInsensitiveOption);
+
+    QList<QRegularExpressionMatch> headings;
+    auto it = headingRe.globalMatch(chapterHtml);
+    while (it.hasNext())
+        headings.append(it.next());
+
+    BookStudyAssignment result;
+    result.segmentId = studySpan->segmentId;
+    for (int i = 0; i < headings.size(); ++i) {
+        const QRegularExpressionMatch &heading = headings.at(i);
+        if (heading.captured(1).toInt() != 3)
+            continue;
+        const QRegularExpressionMatch numberMatch =
+            numberRe.match(plainTextFromHtml(heading.captured(3)));
+        if (!numberMatch.hasMatch() || numberMatch.captured(1).toInt() != 9)
+            continue;
+
+        int nextHeading = i + 1;
+        while (nextHeading < headings.size()
+               && headings.at(nextHeading).captured(1).toInt() != 2
+               && headings.at(nextHeading).captured(1).toInt() != 3) {
+            ++nextHeading;
+        }
+        const qsizetype sectionEnd = nextHeading < headings.size()
+            ? headings.at(nextHeading).capturedStart() : chapterHtml.size();
+        const QString sectionText = plainTextFromHtml(
+            heading.captured(3) + QLatin1Char(' ')
+            + chapterHtml.mid(heading.capturedEnd(), sectionEnd - heading.capturedEnd()));
+        const QRegularExpressionMatch chapterMatch = chapterRe.match(sectionText);
+        if (!chapterMatch.hasMatch())
+            return result;
+
+        const int firstChapter = chapterMatch.captured(1).toInt();
+        const int lastChapter = chapterMatch.captured(2).isEmpty()
+            ? firstChapter : chapterMatch.captured(2).toInt();
+        if (firstChapter < 1 || lastChapter < firstChapter
+            || lastChapter - firstChapter > 4) {
+            qWarning() << "WorkbookManager: invalid WCG chapter range in Bible Study assignment:"
+                       << chapterMatch.captured(0);
+            return result;
+        }
+        for (int chapter = firstChapter; chapter <= lastChapter; ++chapter)
+            result.chapters.append(chapter);
+        return result;
     }
     return result;
 }
@@ -554,6 +623,7 @@ void WorkbookManager::refreshNow()
         m_applyPartsDate = targetDate;
         m_applyPartsLoaded = false;
     }
+    applyFromLocalBookStudy(lang);
     // Prefer the local workbook database for song linking, week matching, and
     // the timed Apply Yourself assignments when its content can be decoded.
     const bool hasLocalMwb = applyFromLocalMwb(lang, targetDate);
@@ -563,10 +633,6 @@ void WorkbookManager::refreshNow()
         fetchPublication(QStringLiteral("mwb"), hasLocalMwb);
     if (!applyFromLocalWatchtower(lang, targetDate) && !m_selectedDate.isValid())
         fetchPublication(QStringLiteral("w"));
-    // No network fallback here -- the Congregation Bible Study book isn't
-    // published via the mwb/w EPUB endpoints at all, so this only ever
-    // works when it's already downloaded locally in JW Library.
-    applyFromLocalBookStudy(lang);
 }
 
 void WorkbookManager::selectWeek(const QDate &date)
@@ -644,6 +710,7 @@ QVariantList WorkbookManager::availableWeeks() const
 
 bool WorkbookManager::applyFromLocalBookStudy(const QString &lang)
 {
+    m_bookStudyPublicationFolder.clear();
     const QString folderName = QStringLiteral("wcg_") + lang;
     for (const QString &root : publicationsRoots()) {
         QDir rootDir(root);
@@ -661,12 +728,151 @@ bool WorkbookManager::applyFromLocalBookStudy(const QString &lang)
                     != QStringLiteral("wcg"))
                 continue;
 
+            m_bookStudyPublicationFolder = fi.absoluteFilePath();
             m_controller->setWorkbookPublicationFolder(QStringLiteral("cbs"), fi.absoluteFilePath());
             return true;
         }
     }
 
+    m_controller->setWorkbookPublicationFolder(QStringLiteral("cbs"), {});
     return false;
+}
+
+QStringList WorkbookManager::bookStudyImages(const QString &lang,
+                                             const QList<int> &chapters,
+                                             const QString &segmentId)
+{
+    QStringList mediaIds;
+    if (chapters.isEmpty())
+        return mediaIds;
+    if (m_bookStudyPublicationFolder.isEmpty()) {
+        qWarning() << "WorkbookManager: cannot link WCG chapter images; publication is not downloaded for"
+                   << lang;
+        return mediaIds;
+    }
+
+    const QStringList dbFiles = QDir(m_bookStudyPublicationFolder)
+        .entryList({QStringLiteral("wcg_*.db")}, QDir::Files);
+    if (dbFiles.isEmpty()) {
+        qWarning() << "WorkbookManager: WCG publication database is missing from"
+                   << m_bookStudyPublicationFolder;
+        return mediaIds;
+    }
+
+    const QString dbPath = QDir(m_bookStudyPublicationFolder).absoluteFilePath(dbFiles.first());
+    const QString connectionName = QUuid::createUuid().toString();
+    QSet<QString> seenPaths;
+    int linkedImageCount = 0;
+    int missingImageCount = 0;
+    {
+        QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
+        db.setDatabaseName(dbPath);
+        if (!db.open()) {
+            qWarning() << "WorkbookManager: couldn't open WCG publication database:"
+                       << db.lastError().text();
+        } else {
+            for (const int chapter : chapters) {
+                int documentId = -1;
+                qint64 mepsDocumentId = 0;
+                {
+                    QSqlQuery documentQuery(db);
+                    documentQuery.prepare(QStringLiteral(
+                        "SELECT d.DocumentId, d.MepsDocumentId "
+                        "FROM Document d JOIN Publication p ON p.PublicationId = d.PublicationId "
+                        "WHERE d.ChapterNumber = ? AND LOWER(p.UniqueEnglishSymbol) = 'wcg' "
+                        "ORDER BY d.DocumentId LIMIT 1"));
+                    documentQuery.addBindValue(chapter);
+                    if (documentQuery.exec() && documentQuery.next()) {
+                        documentId = documentQuery.value(0).toInt();
+                        mepsDocumentId = documentQuery.value(1).toLongLong();
+                    } else if (documentQuery.lastError().isValid()) {
+                        qWarning() << "WorkbookManager: couldn't find WCG chapter" << chapter
+                                   << "in the local publication:"
+                                   << documentQuery.lastError().text();
+                    }
+                }
+                if (documentId < 0 || mepsDocumentId <= 0) {
+                    qWarning() << "WorkbookManager: WCG chapter" << chapter
+                               << "is unavailable in the local publication";
+                    continue;
+                }
+
+                QSqlQuery imageQuery(db);
+                imageQuery.prepare(QStringLiteral(
+                    "SELECT m.FilePath, m.MimeType FROM DocumentMultimedia dm "
+                    "JOIN Multimedia m ON m.MultimediaId = dm.MultimediaId "
+                    "WHERE dm.DocumentId = ? AND LOWER(m.MimeType) LIKE 'image/%' "
+                    "ORDER BY dm.DocumentMultimediaId"));
+                imageQuery.addBindValue(documentId);
+                if (!imageQuery.exec()) {
+                    qWarning() << "WorkbookManager: couldn't read WCG chapter image references:"
+                               << imageQuery.lastError().text();
+                    continue;
+                }
+
+                while (imageQuery.next()) {
+                    const QString relativePath = imageQuery.value(0).toString();
+                    const QString mimeType = imageQuery.value(1).toString();
+                    const QFileInfo relativeInfo(relativePath);
+                    const QString suffix = relativeInfo.suffix().toLower();
+                    if (!mimeType.startsWith(QStringLiteral("image/"), Qt::CaseInsensitive)
+                        || (suffix != QStringLiteral("jpg")
+                            && suffix != QStringLiteral("jpeg")
+                            && suffix != QStringLiteral("png")
+                            && suffix != QStringLiteral("webp"))) {
+                        continue;
+                    }
+
+                    // WCG's chapter-specific illustrations carry the chapter
+                    // document's MEPS id in their filename. The DB also
+                    // associates some shared publication media with each
+                    // chapter, so exclude those rather than showing them as
+                    // if they belonged to the selected chapter.
+                    const QString expectedPrefix =
+                        QString::number(mepsDocumentId) + QLatin1Char('_');
+                    if (!relativeInfo.fileName().startsWith(expectedPrefix))
+                        continue;
+
+                    QString path = relativePath;
+                    if (QDir::isRelativePath(path))
+                        path = QDir(m_bookStudyPublicationFolder).filePath(path);
+                    const QFileInfo imageInfo(path);
+                    const QString absolutePath = imageInfo.absoluteFilePath();
+                    if (seenPaths.contains(absolutePath))
+                        continue;
+                    seenPaths.insert(absolutePath);
+                    if (!imageInfo.exists() || !imageInfo.isFile()) {
+                        ++missingImageCount;
+                        qWarning() << "WorkbookManager: WCG chapter illustration is unavailable:"
+                                   << absolutePath;
+                        continue;
+                    }
+
+                    const QString mediaId = m_controller->ensureWorkbookMedia(absolutePath);
+                    if (!mediaId.isEmpty() && !mediaIds.contains(mediaId)) {
+                        mediaIds.append(mediaId);
+                        ++linkedImageCount;
+                    }
+                }
+            }
+            db.close();
+        }
+        QSqlDatabase::removeDatabase(connectionName);
+    }
+
+    if (linkedImageCount == 0) {
+        qWarning() << "WorkbookManager: no supported local images were linked for WCG chapter(s)"
+                   << chapters << "to segment" << segmentId;
+    } else {
+        qInfo() << "WorkbookManager: linked" << linkedImageCount
+                << "chapter-specific WCG images for chapter(s)" << chapters
+                << "to segment" << segmentId;
+    }
+    if (missingImageCount > 0) {
+        qWarning() << "WorkbookManager:" << missingImageCount
+                   << "WCG chapter image file(s) were missing on disk";
+    }
+    return mediaIds;
 }
 
 bool WorkbookManager::applyFromLocalMwb(const QString &lang, const QDate &targetDate)
@@ -869,6 +1075,21 @@ bool WorkbookManager::applyFromLocalMwb(const QString &lang, const QDate &target
             QStringList segmentIds{QStringLiteral("m3")};
             for (const QVariant &rowValue : assignmentData.scheduleRows)
                 segmentIds.append(rowValue.toMap().value(QStringLiteral("id")).toString());
+
+            const BookStudyAssignment studyAssignment =
+                parseBookStudyAssignment(chapterHtml, assignmentData);
+            if (!studyAssignment.chapters.isEmpty()) {
+                const QStringList chapterMedia = bookStudyImages(
+                    lang, studyAssignment.chapters, studyAssignment.segmentId);
+                for (const QString &mediaId : chapterMedia) {
+                    if (!linkedMedia[studyAssignment.segmentId].contains(mediaId))
+                        linkedMedia[studyAssignment.segmentId].append(mediaId);
+                }
+            } else if (!studyAssignment.segmentId.isEmpty()) {
+                qWarning() << "WorkbookManager: couldn't identify a WCG chapter in Bible Study assignment"
+                           << studyAssignment.segmentId << "for" << best.title;
+            }
+
             for (const QString &segmentId : segmentIds) {
                 m_controller->setWorkbookMediaForSegment(segmentId, linkedMedia.value(segmentId));
             }
@@ -1192,6 +1413,15 @@ void WorkbookManager::applyMwbEpub(const QByteArray &epubData, bool supplemental
     const WorkbookAssignmentData assignmentData =
         parseWorkbookAssignmentData(html, lang, weekStart);
     m_controller->setWorkbookScheduleRows(assignmentData.scheduleRows);
+    const BookStudyAssignment studyAssignment = parseBookStudyAssignment(html, assignmentData);
+    if (!studyAssignment.chapters.isEmpty()) {
+        m_controller->setWorkbookMediaForSegment(
+            studyAssignment.segmentId,
+            bookStudyImages(lang, studyAssignment.chapters, studyAssignment.segmentId));
+    } else if (!studyAssignment.segmentId.isEmpty()) {
+        qWarning() << "WorkbookManager: couldn't identify a WCG chapter in Bible Study assignment"
+                   << studyAssignment.segmentId << "for" << weeks[bestIndex].text;
+    }
     qInfo() << "WorkbookManager: generated" << assignmentData.scheduleRows.size()
             << "independent timed meeting rows from" << weeks[bestIndex].text;
     m_applyPartsLoaded = true;
