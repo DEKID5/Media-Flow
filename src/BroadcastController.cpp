@@ -305,6 +305,13 @@ BroadcastController::BroadcastController(QQmlApplicationEngine *engine, QObject 
     m_duckingExemptionTimer = new QTimer(this);
     m_duckingExemptionTimer->setInterval(2000);
     connect(m_duckingExemptionTimer, &QTimer::timeout, this, [] { exemptProcessAudioFromDucking(); });
+    m_workbookRefreshTimer = new QTimer(this);
+    m_workbookRefreshTimer->setSingleShot(true);
+    m_workbookRefreshTimer->setInterval(100);
+    connect(m_workbookRefreshTimer, &QTimer::timeout, this, [this]() {
+        if (m_workbookManager)
+            m_workbookManager->refreshNow();
+    });
 
     // ── Media Thumbnail Manager (Async/Hash-cached) ──
     m_thumbManager = new MediaThumbnailManager(this);
@@ -1417,8 +1424,27 @@ void BroadcastController::loadState()
     }
     const QVariantList importedMedia = root["importedMedia"].toArray().toVariantList();
     m_libraryModel->appendFromVariantList(importedMedia);
-    for (const QVariant &item : importedMedia)
-        indexMediaAsset(item.toMap());
+    for (const QVariant &item : importedMedia) {
+        const QVariantMap media = item.toMap();
+        const QString id = media.value(QStringLiteral("id")).toString();
+        const QString path = media.value(QStringLiteral("absolutePath")).toString();
+        const QString type = media.value(QStringLiteral("type")).toString();
+        indexMediaAsset(media);
+        if (type != QStringLiteral("video") && type != QStringLiteral("audio"))
+            continue;
+
+        const QUrl thumbnailUrl(media.value(QStringLiteral("thumbnailPath")).toString());
+        const QString thumbnailPath = thumbnailUrl.isLocalFile()
+            ? thumbnailUrl.toLocalFile()
+            : media.value(QStringLiteral("thumbnailPath")).toString();
+        if (!QFileInfo::exists(thumbnailPath))
+            m_libraryModel->updateThumbnail(id, {});
+        if (QFileInfo::exists(path) && m_thumbManager)
+            m_thumbManager->enqueue(id, path, type);
+        else
+            qWarning() << "BroadcastController: skipping thumbnail regeneration for unavailable imported media:"
+                       << path;
+    }
     m_pinnedFolders->setFullState(root["pinnedFolders"].toArray().toVariantList());
     m_meetingModel->setFullState("midweek", root["midweek"].toArray().toVariantList());
     m_meetingModel->setFullState("weekend", root["weekend"].toArray().toVariantList());
@@ -1655,7 +1681,8 @@ void BroadcastController::applyLanguageCode(const QString &languageCode, bool pe
             // into are matched from a specific language's own local
             // publication folder -- re-run the whole workbook lookup so all
             // of that also moves over to the newly selected language.
-            if (m_workbookManager) m_workbookManager->refreshNow();
+            if (m_workbookRefreshTimer)
+                m_workbookRefreshTimer->start();
         }
     }
 
@@ -1668,7 +1695,9 @@ QString BroadcastController::languageName(const QString &languageCode) const
     return SongSearchUtils::languageNameForCode(languageCode);
 }
 
-QString BroadcastController::resolveSongToSegment(int songNumber, const QString &languageCode, const QString &targetSegmentId, bool warnOnMissing)
+QString BroadcastController::resolveSongToSegment(int songNumber, const QString &languageCode,
+                                                  const QString &targetSegmentId, bool warnOnMissing,
+                                                  bool persistState)
 {
     const QString code = SongSearchUtils::normalizeLanguageCode(languageCode);
     const QVariantMap result = getSong(songNumber, code);
@@ -1688,7 +1717,8 @@ QString BroadcastController::resolveSongToSegment(int songNumber, const QString 
         m_meetingModel->setLinkedMediaForId(targetSegmentId, {});
         if (targetSegmentId == m_selectedSegmentId)
             selectSegment(targetSegmentId);
-        saveState();
+        if (persistState)
+            saveState();
         if (warnOnMissing) {
             emit songNotFoundInLanguage(songNumber, SongSearchUtils::languageNameForCode(code));
         }
@@ -1715,7 +1745,8 @@ QString BroadcastController::resolveSongToSegment(int songNumber, const QString 
     m_meetingModel->setSongNumberForId(targetSegmentId, songNumber);
     if (targetSegmentId == m_selectedSegmentId)
         selectSegment(targetSegmentId);
-    saveState();
+    if (persistState)
+        saveState();
 
     return id;
 }
@@ -1735,8 +1766,9 @@ void BroadcastController::reResolveSongSegmentsForCurrentLanguage()
             continue;
 
         const QString segmentId = m_meetingModel->data(idx, MeetingScheduleModel::IdRole).toString();
-        resolveSongToSegment(songNumber, m_languageCode, segmentId, true);
+        resolveSongToSegment(songNumber, m_languageCode, segmentId, true, false);
     }
+    saveState();
 }
 
 // ──────────────────────────────────────────────────────────────────

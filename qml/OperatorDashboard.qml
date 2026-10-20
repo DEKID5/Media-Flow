@@ -798,10 +798,17 @@ Item {
                                                 model: (typeof associatedMediaIds !== "undefined") ? associatedMediaIds : []
                                                 delegate: Rectangle {
                                                     width: 64; height: 36; radius: Theme.radiusSm; color: "black"; clip: true
-                                                    property var asset: (MediaFlowBackend || {}).mediaLibrary ? MediaFlowBackend.mediaLibrary.getRowById(modelData) : ({})
+                                                    readonly property var mediaLibrary: (MediaFlowBackend || {}).mediaLibrary || null
+                                                    readonly property var asset: {
+                                                        if (!mediaLibrary)
+                                                            return ({})
+                                                        const revision = mediaLibrary.thumbnailRevision
+                                                        return mediaLibrary.getRowById(modelData)
+                                                    }
 
                                                     Image {
                                                         anchors.fill: parent; fillMode: Image.PreserveAspectCrop
+                                                        cache: false
                                                         source: asset.thumbnailPath || "qrc:/MediaFlow/qml/assets/video_placeholder.png"
                                                         opacity: 0.8
                                                     }
@@ -908,8 +915,11 @@ Item {
                                         // Public Talk -> 30:00, Watchtower Study -> 60:00) so the
                                         // dedicated full-screen timer reflects it immediately --
                                         // skipped for songs, which have no duration set.
-                                        if (TimerBackend && model.durationMinutes > 0)
+                                        if (TimerBackend && model.durationMinutes > 0) {
+                                            TimerBackend.reset()
                                             TimerBackend.targetDurationSeconds = model.durationMinutes * 60
+                                            TimerBackend.start()
+                                        }
                                     }
                                 }
                             }

@@ -18,14 +18,17 @@ jobs:
           arch: win64_msvc2022_64
           modules: qtshadertools
 
+      - name: Set up MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Configure
-        run: cmake -B build -S . -G "Visual Studio 17 2022" -A x64
+        run: cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
-        run: cmake --build build --config Release --target mediaflow
+        run: cmake --build build --target mediaflow
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: MediaFlow-Windows-Release
-          path: build/Release/MediaFlow.exe
+          path: build/MediaFlow.exe

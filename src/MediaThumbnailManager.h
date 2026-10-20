@@ -16,7 +16,8 @@ class ThumbnailJob : public QObject, public QRunnable
 {
     Q_OBJECT
 public:
-    ThumbnailJob(const QString &id, const QString &path, const QString &type);
+    ThumbnailJob(const QString &id, const QString &path, const QString &type,
+                 const QString &ffmpegPath = {});
     void run() override;
 
 signals:
@@ -24,13 +25,15 @@ signals:
     void failed(const QString &id);
 
 private:
-    bool extractVideoFrame(const QString &input, const QString &output);
+    bool extractVideoFrame(const QString &input, const QString &output,
+                           const QString &ffmpegPath);
     bool scaleImage(const QString &input, const QString &output);
     bool extractAudioArt(const QString &input, const QString &output);
 
     QString m_id;
     QString m_path;
     QString m_type;
+    QString m_ffmpegPath;
 };
 
 #include <QVideoSink>
@@ -80,6 +83,6 @@ signals:
 private:
     QThreadPool m_pool;
     NativeThumbnailGenerator *m_native;
-    bool m_hasFfmpeg = false;
+    QString m_ffmpegPath;
     QHash<QString, QString> m_failMarkers; // id -> failure-marker path for in-flight jobs
 };

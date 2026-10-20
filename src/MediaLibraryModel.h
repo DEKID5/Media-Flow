@@ -14,6 +14,7 @@ class MediaLibraryModel : public QAbstractListModel
 {
     Q_OBJECT
     Q_PROPERTY(QStringList categories READ categories NOTIFY categoriesChanged)
+    Q_PROPERTY(quint64 thumbnailRevision READ thumbnailRevision NOTIFY thumbnailRevisionChanged)
 
 public:
     struct Row {
@@ -69,6 +70,7 @@ public:
      * @brief Returns a list of unique categories.
      */
     QStringList categories() const;
+    quint64 thumbnailRevision() const { return m_thumbnailRevision; }
 
     /**
      * @brief Batch updates categories.
@@ -82,7 +84,9 @@ public:
 
 signals:
     void categoriesChanged();
+    void thumbnailRevisionChanged();
 
 private:
     QVector<Row> m_rows;
+    quint64 m_thumbnailRevision = 0;
 };

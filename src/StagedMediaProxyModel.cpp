@@ -2,7 +2,6 @@
 #include "MediaLibraryModel.h"
 #include "SongSearchUtils.h"
 
-#include <QFileInfo>
 #include <QRegularExpression>
 
 StagedMediaProxyModel::StagedMediaProxyModel(QObject *parent)
@@ -28,6 +27,16 @@ void StagedMediaProxyModel::setStagedIds(const QStringList &ids)
 {
     if (m_stagedIds != ids) {
         m_stagedIds = ids;
+        m_stagedIdSet.clear();
+        m_stagedPositions.clear();
+        m_stagedIdSet.reserve(ids.size());
+        m_stagedPositions.reserve(ids.size());
+        for (int i = 0; i < ids.size(); ++i) {
+            const QString &id = ids.at(i);
+            if (!m_stagedIdSet.contains(id))
+                m_stagedPositions.insert(id, i);
+            m_stagedIdSet.insert(id);
+        }
         // Full invalidate (not just invalidateFilter): the *order* encoded
         // in m_stagedIds can change (a reorder) without any row's pass/fail
         // filter result changing, and only invalidate() re-runs lessThan().
@@ -84,14 +93,19 @@ bool StagedMediaProxyModel::filterAcceptsRow(int source_row, const QModelIndex &
     const QString type = sourceModel()->data(idx, MediaLibraryModel::TypeRole).toString();
     const QString name = sourceModel()->data(idx, MediaLibraryModel::NameRole).toString();
     const QString path = sourceModel()->data(idx, MediaLibraryModel::PathRole).toString();
-    const QString fileName = QFileInfo(path).fileName();
+    const qsizetype fileNameStart =
+        qMax(path.lastIndexOf(QLatin1Char('/')), path.lastIndexOf(QLatin1Char('\\'))) + 1;
+    const QString fileName = path.mid(fileNameStart);
     const QString haystack = fileName.isEmpty() ? name : fileName;
 
     if ((type == QStringLiteral("video") || type == QStringLiteral("audio"))) {
         static const QRegularExpression languageMarker(QStringLiteral("_[A-Z]{1,3}_"));
-        if (languageMarker.match(haystack).hasMatch() || languageMarker.match(path).hasMatch()) {
+        const bool hasLanguageMarker = languageMarker.match(haystack).hasMatch()
+            || languageMarker.match(path).hasMatch();
+        if (hasLanguageMarker) {
             const QString required = QStringLiteral("_%1_").arg(m_languageCode);
-            if (!haystack.contains(required, Qt::CaseInsensitive) && !path.contains(required, Qt::CaseInsensitive))
+            if (!haystack.contains(required, Qt::CaseInsensitive)
+                && !path.contains(required, Qt::CaseInsensitive))
                 return false;
         }
     }
@@ -102,15 +116,15 @@ bool StagedMediaProxyModel::filterAcceptsRow(int source_row, const QModelIndex &
 
     if (m_filterType == "segment") {
         if (m_selectedSegmentId.isEmpty()) return false;
-        QString assetUuid = sourceModel()->data(idx, MediaLibraryModel::IdRole).toString();
-        return m_stagedIds.contains(assetUuid);
+        const QString assetUuid = sourceModel()->data(idx, MediaLibraryModel::IdRole).toString();
+        return m_stagedIdSet.contains(assetUuid);
     }
 
     if (m_filterType == "pinned") {
         // Reuses stagedIds (set to the selected pin folder's mediaIds) -- no
         // selectedSegmentId guard, since pin folders aren't tied to a segment.
-        QString assetUuid = sourceModel()->data(idx, MediaLibraryModel::IdRole).toString();
-        return m_stagedIds.contains(assetUuid);
+        const QString assetUuid = sourceModel()->data(idx, MediaLibraryModel::IdRole).toString();
+        return m_stagedIdSet.contains(assetUuid);
     }
 
     if (m_filterType == "imported") {
@@ -142,7 +156,7 @@ bool StagedMediaProxyModel::lessThan(const QModelIndex &left, const QModelIndex 
 
     const QString leftId = sourceModel()->data(left, MediaLibraryModel::IdRole).toString();
     const QString rightId = sourceModel()->data(right, MediaLibraryModel::IdRole).toString();
-    const int leftPos = m_stagedIds.indexOf(leftId);
-    const int rightPos = m_stagedIds.indexOf(rightId);
+    const int leftPos = m_stagedPositions.value(leftId, -1);
+    const int rightPos = m_stagedPositions.value(rightId, -1);
     return leftPos < rightPos;
 }

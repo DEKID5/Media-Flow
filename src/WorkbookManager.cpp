@@ -380,12 +380,6 @@ WorkbookAssignmentData parseWorkbookAssignmentData(const QString &chapterHtml,
 BookStudyAssignment parseBookStudyAssignment(const QString &chapterHtml,
                                              const WorkbookAssignmentData &assignmentData)
 {
-    const auto studySpan = std::find_if(
-        assignmentData.spans.cbegin(), assignmentData.spans.cend(),
-        [](const WorkbookAssignmentSpan &span) { return span.number == 9; });
-    if (studySpan == assignmentData.spans.cend())
-        return {};
-
     static const QRegularExpression headingRe(
         QStringLiteral(R"(<h([23])\b([^>]*)>(.*?)</h\1\s*>)"),
         QRegularExpression::CaseInsensitiveOption | QRegularExpression::DotMatchesEverythingOption);
@@ -400,14 +394,22 @@ BookStudyAssignment parseBookStudyAssignment(const QString &chapterHtml,
         headings.append(it.next());
 
     BookStudyAssignment result;
-    result.segmentId = studySpan->segmentId;
     for (int i = 0; i < headings.size(); ++i) {
         const QRegularExpressionMatch &heading = headings.at(i);
         if (heading.captured(1).toInt() != 3)
             continue;
-        const QRegularExpressionMatch numberMatch =
-            numberRe.match(plainTextFromHtml(heading.captured(3)));
-        if (!numberMatch.hasMatch() || numberMatch.captured(1).toInt() != 9)
+        const QString headingText = plainTextFromHtml(heading.captured(3));
+        const QRegularExpressionMatch numberMatch = numberRe.match(headingText);
+        if (!numberMatch.hasMatch())
+            continue;
+
+        const int assignmentNumber = numberMatch.captured(1).toInt();
+        const auto studySpan = std::find_if(
+            assignmentData.spans.cbegin(), assignmentData.spans.cend(),
+            [assignmentNumber](const WorkbookAssignmentSpan &span) {
+                return span.number == assignmentNumber;
+            });
+        if (studySpan == assignmentData.spans.cend())
             continue;
 
         int nextHeading = i + 1;
@@ -419,11 +421,11 @@ BookStudyAssignment parseBookStudyAssignment(const QString &chapterHtml,
         const qsizetype sectionEnd = nextHeading < headings.size()
             ? headings.at(nextHeading).capturedStart() : chapterHtml.size();
         const QString sectionText = plainTextFromHtml(
-            heading.captured(3) + QLatin1Char(' ')
+            headingText + QLatin1Char(' ')
             + chapterHtml.mid(heading.capturedEnd(), sectionEnd - heading.capturedEnd()));
         const QRegularExpressionMatch chapterMatch = chapterRe.match(sectionText);
         if (!chapterMatch.hasMatch())
-            return result;
+            continue;
 
         const int firstChapter = chapterMatch.captured(1).toInt();
         const int lastChapter = chapterMatch.captured(2).isEmpty()
@@ -436,6 +438,7 @@ BookStudyAssignment parseBookStudyAssignment(const QString &chapterHtml,
         }
         for (int chapter = firstChapter; chapter <= lastChapter; ++chapter)
             result.chapters.append(chapter);
+        result.segmentId = studySpan->segmentId;
         return result;
     }
     return result;
@@ -1095,6 +1098,9 @@ bool WorkbookManager::applyFromLocalMwb(const QString &lang, const QDate &target
             if (!studyAssignment.chapters.isEmpty()) {
                 const QStringList chapterMedia = bookStudyImages(
                     lang, studyAssignment.chapters, studyAssignment.segmentId);
+                qInfo() << "WorkbookManager: Bible Study images for week" << best.title
+                        << "chapter(s)" << studyAssignment.chapters << "segment"
+                        << studyAssignment.segmentId << ":" << chapterMedia.size();
                 for (const QString &mediaId : chapterMedia) {
                     if (!linkedMedia[studyAssignment.segmentId].contains(mediaId))
                         linkedMedia[studyAssignment.segmentId].append(mediaId);
@@ -1429,11 +1435,18 @@ void WorkbookManager::applyMwbEpub(const QByteArray &epubData, bool supplemental
     m_controller->setWorkbookScheduleRows(assignmentData.scheduleRows);
     const BookStudyAssignment studyAssignment = parseBookStudyAssignment(html, assignmentData);
     if (!studyAssignment.chapters.isEmpty()) {
+        const QStringList chapterMedia = bookStudyImages(
+            lang, studyAssignment.chapters, studyAssignment.segmentId);
         m_controller->setWorkbookMediaForSegment(
             studyAssignment.segmentId,
-            bookStudyImages(lang, studyAssignment.chapters, studyAssignment.segmentId));
+            chapterMedia);
+        m_controller->persistWorkbookChanges();
+        qInfo() << "WorkbookManager: Bible Study images for week" << weeks[bestIndex].text
+                << "chapter(s)" << studyAssignment.chapters << "segment"
+                << studyAssignment.segmentId << ":" << chapterMedia.size();
     } else if (!studyAssignment.segmentId.isEmpty()) {
         m_controller->setWorkbookMediaForSegment(studyAssignment.segmentId, {});
+        m_controller->persistWorkbookChanges();
         qWarning() << "WorkbookManager: couldn't identify a WCG chapter in Bible Study assignment"
                    << studyAssignment.segmentId << "for" << weeks[bestIndex].text;
     }

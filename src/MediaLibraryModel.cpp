@@ -69,8 +69,12 @@ void MediaLibraryModel::updateThumbnail(const QString &id, const QString &path)
 {
     for (int i = 0; i < m_rows.size(); ++i) {
         if (m_rows[i].id == id) {
+            if (m_rows[i].thumbnail == path)
+                return;
             m_rows[i].thumbnail = path;
+            ++m_thumbnailRevision;
             emit dataChanged(index(i), index(i), {ThumbnailRole});
+            emit thumbnailRevisionChanged();
             return;
         }
     }

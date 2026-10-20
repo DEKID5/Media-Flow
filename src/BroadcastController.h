@@ -367,7 +367,9 @@ private:
     void clearMediaIndexes();
     void applyLanguageCode(const QString &languageCode, bool persist, bool reResolveSongs);
     QString languageName(const QString &languageCode) const;
-    QString resolveSongToSegment(int songNumber, const QString &languageCode, const QString &targetSegmentId, bool warnOnMissing);
+    QString resolveSongToSegment(int songNumber, const QString &languageCode,
+                                 const QString &targetSegmentId, bool warnOnMissing,
+                                 bool persistState = true);
     void reResolveSongSegmentsForCurrentLanguage();
     // Builds a MediaAsset entry for one file, adds it to the library + index,
     // enqueues its thumbnail, and returns its new id. Shared by every
@@ -437,6 +439,7 @@ private:
     QPointer<QQuickWindow> m_zoomWindow;
     bool m_zoomWindowHidden = false;
     QTimer *m_duckingExemptionTimer = nullptr;
+    QTimer *m_workbookRefreshTimer = nullptr;
     QHash<QString, QVariantMap> m_mediaIndexByPath;
     QHash<QString, QVariantMap> m_songIndex;
 };

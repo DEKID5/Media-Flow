@@ -27,10 +27,42 @@ void runHidden(QProcess &process)
     Q_UNUSED(process);
 #endif
 }
+
+QStringList ffmpegCandidates()
+{
+    QStringList candidates;
+    const QString fromPath = QStandardPaths::findExecutable(QStringLiteral("ffmpeg"));
+    if (!fromPath.isEmpty())
+        candidates.append(fromPath);
+
+    candidates.append({
+        QCoreApplication::applicationDirPath() + QStringLiteral("/ffmpeg.exe"),
+        QStringLiteral("C:/ffmpeg/bin/ffmpeg.exe"),
+        QStringLiteral("C:/Program Files/ffmpeg/bin/ffmpeg.exe"),
+        QStringLiteral("C:/Program Files (x86)/ffmpeg/bin/ffmpeg.exe")
+    });
+    candidates.removeDuplicates();
+    return candidates;
+}
+
+QString availableFfmpeg()
+{
+    for (const QString &candidate : ffmpegCandidates()) {
+        QProcess check;
+        runHidden(check);
+        check.start(candidate, {QStringLiteral("-version")});
+        if (check.waitForStarted(500) && check.waitForFinished(1500)
+            && check.exitStatus() == QProcess::NormalExit && check.exitCode() == 0) {
+            return candidate;
+        }
+    }
+    return {};
+}
 } // namespace
 
-ThumbnailJob::ThumbnailJob(const QString &id, const QString &path, const QString &type)
-    : m_id(id), m_path(path), m_type(type) 
+ThumbnailJob::ThumbnailJob(const QString &id, const QString &path, const QString &type,
+                           const QString &ffmpegPath)
+    : m_id(id), m_path(path), m_type(type), m_ffmpegPath(ffmpegPath)
 {
     setAutoDelete(true);
 }
@@ -52,7 +84,7 @@ void ThumbnailJob::run() {
     }
 
     bool success = false;
-    if (m_type == "video") success = extractVideoFrame(m_path, cachePath);
+    if (m_type == "video") success = extractVideoFrame(m_path, cachePath, m_ffmpegPath);
     else if (m_type == "image") success = scaleImage(m_path, cachePath);
     else if (m_type == "audio") success = extractAudioArt(m_path, cachePath);
 
@@ -60,32 +92,10 @@ void ThumbnailJob::run() {
     else emit failed(m_id);
 }
 
-bool ThumbnailJob::extractVideoFrame(const QString &input, const QString &output) {
-    QString ffmpegPath = "ffmpeg"; // Default
-    
-    // Search in common Windows paths if default fails or to be sure
-    QStringList commonPaths = {
-        "ffmpeg.exe",
-        "C:/ffmpeg/bin/ffmpeg.exe",
-        "C:/Program Files/ffmpeg/bin/ffmpeg.exe",
-        "C:/Program Files (x86)/ffmpeg/bin/ffmpeg.exe",
-        QCoreApplication::applicationDirPath() + "/ffmpeg.exe"
-    };
-
-    bool found = false;
-    for (const QString &p : commonPaths) {
-        QProcess check;
-        runHidden(check);
-        check.start(p, {"-version"});
-        if (check.waitForFinished(500) && check.exitCode() == 0) {
-            ffmpegPath = p;
-            found = true;
-            break;
-        }
-    }
-
-    if (!found) {
-        qWarning() << "ThumbnailJob: ffmpeg NOT FOUND in PATH or common locations.";
+bool ThumbnailJob::extractVideoFrame(const QString &input, const QString &output,
+                                     const QString &ffmpegPath) {
+    if (ffmpegPath.isEmpty()) {
+        qWarning() << "ThumbnailJob: ffmpeg is unavailable for" << input;
         return false;
     }
 
@@ -154,17 +164,11 @@ MediaThumbnailManager::MediaThumbnailManager(QObject *parent) : QObject(parent) 
         if (f.open(QIODevice::WriteOnly)) f.close();
     });
 
-    // Check for ffmpeg once
-    QProcess check;
-    runHidden(check);
-    check.start("ffmpeg", {"-version"});
-    m_hasFfmpeg = check.waitForFinished(500) && check.exitCode() == 0;
-    if (!m_hasFfmpeg) {
-        QStringList extra = {"C:/ffmpeg/bin/ffmpeg.exe", "C:/Program Files/ffmpeg/bin/ffmpeg.exe"};
-        for (const QString &p : extra) {
-            if (QFile::exists(p)) { m_hasFfmpeg = true; break; }
-        }
-    }
+    m_ffmpegPath = availableFfmpeg();
+    if (!m_ffmpegPath.isEmpty())
+        qInfo() << "MediaThumbnailManager: using FFmpeg at" << m_ffmpegPath;
+    else
+        qInfo() << "MediaThumbnailManager: FFmpeg is unavailable; using native video decoder";
 }
 
 void MediaThumbnailManager::enqueue(const QString &id, const QString &path, const QString &type) {
@@ -181,17 +185,18 @@ void MediaThumbnailManager::enqueue(const QString &id, const QString &path, cons
     }
 
     // Keyed to whether ffmpeg is available, so installing it later retries.
-    const QString failMarker = cachePath + (m_hasFfmpeg ? ".failff" : ".failnative");
+    const QString failMarker = cachePath
+        + (m_ffmpegPath.isEmpty() ? ".failnative" : ".failff");
     if (QFile::exists(failMarker)) {
         emit thumbnailFailed(id);
         return;
     }
     m_failMarkers.insert(id, failMarker);
 
-    if (type == "video" && !m_hasFfmpeg) {
+    if (type == "video" && m_ffmpegPath.isEmpty()) {
         m_native->enqueue(id, path, cachePath);
     } else {
-        auto job = new ThumbnailJob(id, path, type);
+        auto job = new ThumbnailJob(id, path, type, m_ffmpegPath);
         connect(job, &ThumbnailJob::finished, this, [this](const QString &id, const QString &path){
             emit thumbnailReady(id, path, ""); // No title from ThumbnailJob (ffmpeg) yet
         }, Qt::QueuedConnection);
