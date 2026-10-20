@@ -3,6 +3,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 jobs:
   build-windows:
@@ -16,7 +17,7 @@ jobs:
         with:
           version: '6.8.*'
           arch: win64_msvc2022_64
-          modules: qtshadertools
+          modules: qtmultimedia qtshadertools
 
       - name: Set up MSVC environment
         uses: ilammy/msvc-dev-cmd@v1
