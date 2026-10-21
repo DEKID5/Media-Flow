@@ -918,7 +918,6 @@ Item {
                                         if (TimerBackend && model.durationMinutes > 0) {
                                             TimerBackend.reset()
                                             TimerBackend.targetDurationSeconds = model.durationMinutes * 60
-                                            TimerBackend.start()
                                         }
                                     }
                                 }
