@@ -3,7 +3,6 @@
 #include <QObject>
 #include <QString>
 #include <QStringList>
-#include <QImage>
 #include <QDateTime>
 #include <QFileSystemWatcher>
 #include <QMutex>
@@ -37,7 +36,7 @@ public:
     Q_INVOKABLE void scanDirectory(const QString &dirPath);
 
 signals:
-    void mediaFound(MediaType type, const QString &name, const QString &absolutePath, const QImage &thumbnail, const QDateTime &creationDate);
+    void mediaFound(MediaType type, const QString &name, const QString &absolutePath, const QDateTime &creationDate);
     void scanFinished();
 
 private slots:
@@ -45,7 +44,6 @@ private slots:
 
 private:
     void processFile(const QString &filePath);
-    QImage extractThumbnail(const QString &filePath, MediaType type);
     void setupWatcher();
     void scanDir(const QString &dirPath);
 

@@ -33,7 +33,9 @@
 #include <QFile>
 #include <QSaveFile>
 #include <QRandomGenerator>
+#include <QSet>
 #include <QSettings>
+#include <QMediaMetaData>
 
 #include <mmdeviceapi.h>
 #include <audiopolicy.h>
@@ -300,6 +302,17 @@ BroadcastController::BroadcastController(QQmlApplicationEngine *engine, QObject 
             this, &BroadcastController::onBgmStatusChanged);
     connect(m_bgmPlayer, &QMediaPlayer::positionChanged, this, &BroadcastController::bgmPositionChanged);
     connect(m_bgmPlayer, &QMediaPlayer::durationChanged, this, &BroadcastController::bgmDurationChanged);
+    connect(m_bgmPlayer, &QMediaPlayer::metaDataChanged, this, [this]() {
+        if (m_bgmPlaylist.isEmpty() || m_bgmIndex >= m_bgmPlaylist.size())
+            return;
+        const QString title = m_bgmPlayer->metaData().value(QMediaMetaData::Title).toString().trimmed();
+        const QString path = m_bgmPlaylist.at(m_bgmIndex);
+        if (!title.isEmpty() && m_bgmTrackTitles.value(path) != title) {
+            m_bgmTrackTitles.insert(path, title);
+            emit bgmTrackMetadataUpdated(path, title, m_bgmThumbnailPaths.value(path));
+            emit bgmChanged();
+        }
+    });
 
     exemptProcessAudioFromDucking();
     m_duckingExemptionTimer = new QTimer(this);
@@ -316,6 +329,24 @@ BroadcastController::BroadcastController(QQmlApplicationEngine *engine, QObject 
     // ── Media Thumbnail Manager (Async/Hash-cached) ──
     m_thumbManager = new MediaThumbnailManager(this);
     connect(m_thumbManager, &MediaThumbnailManager::thumbnailReady, this, [this](const QString &id, const QString &cachePath, const QString &title) {
+        const QString bgmThumbnailPrefix = QStringLiteral("bgm-track:");
+        if (id.startsWith(bgmThumbnailPrefix)) {
+            const QString path = id.mid(bgmThumbnailPrefix.size());
+            QString thumbnailUrl;
+            if (!cachePath.isEmpty()) {
+                thumbnailUrl = QUrl::fromLocalFile(cachePath).toString();
+                m_bgmThumbnailPaths.insert(path, thumbnailUrl);
+                if (bgmPath() == path)
+                    m_bgmCoverArt = thumbnailUrl;
+            }
+            const QString trackTitle = title.trimmed();
+            if (!trackTitle.isEmpty())
+                m_bgmTrackTitles.insert(path, trackTitle);
+            emit bgmTrackMetadataUpdated(path, trackTitle, thumbnailUrl);
+            if (bgmPath() == path || !trackTitle.isEmpty())
+                emit bgmChanged();
+            return;
+        }
         if (id == QStringLiteral("bgm-cover")) {
             m_bgmCoverArt = QUrl::fromLocalFile(cachePath).toString();
             emit bgmChanged();
@@ -330,6 +361,7 @@ BroadcastController::BroadcastController(QQmlApplicationEngine *engine, QObject 
     });
 
     // ── Initial Load ──
+    m_bgmPlaylists.insert(m_currentBgmPlaylistName, {});
     loadState();
 
     // Startup prefetch: build the media/song indexes in the background without blocking launch.
@@ -575,18 +607,123 @@ void BroadcastController::scanBgmFolder()
         bgmDirs << home + "/Videos/JWLibrary";
     }
 
-    QStringList audioFilters = {"*.mp3", "*.m4a", "*.wav"};
+    const QStringList audioFilters = {
+        "*.mp3", "*.m4a", "*.wav", "*.flac", "*.ogg", "*.aac", "*.wma"
+    };
 
     for (const QString &dir : bgmDirs) {
         if (!QDir(dir).exists()) continue;
         QDirIterator it(dir, audioFilters, QDir::Files, QDirIterator::Subdirectories);
         while (it.hasNext()) {
-            m_bgmPlaylist.append(it.next());
+            const QString path = it.next();
+            if (!m_bgmLibraryPaths.contains(path))
+                m_bgmLibraryPaths.append(path);
+            if (!m_bgmPlaylist.contains(path))
+                m_bgmPlaylist.append(path);
         }
     }
 
+    storeActiveBgmPlaylist();
     if (!m_bgmPlaylist.isEmpty()) loadBgmTrack(0);
+    emit bgmPlaylistTracksChanged();
     emit bgmChanged();
+    emit bgmLibraryChanged();
+    saveState();
+}
+
+void BroadcastController::refreshBgmLibrary()
+{
+    if (m_bgmLibraryPaths.isEmpty())
+        scanBgmFolder();
+    else
+        emit bgmLibraryChanged();
+}
+
+bool BroadcastController::createBgmPlaylist(const QString &name)
+{
+    const QString playlistName = name.trimmed();
+    if (playlistName.isEmpty()) {
+        qWarning() << "BroadcastController: refusing to create a BGM playlist with an empty name";
+        return false;
+    }
+
+    for (auto it = m_bgmPlaylists.cbegin(); it != m_bgmPlaylists.cend(); ++it) {
+        if (it.key().compare(playlistName, Qt::CaseInsensitive) == 0) {
+            qWarning() << "BroadcastController: a BGM playlist already exists with this name:" << playlistName;
+            return false;
+        }
+    }
+
+    storeActiveBgmPlaylist();
+    m_bgmPlaylists.insert(playlistName, {});
+    m_currentBgmPlaylistName = playlistName;
+    m_bgmPlaylist.clear();
+    m_bgmIndex = 0;
+    m_bgmCoverArt.clear();
+    m_bgmPlayer->stop();
+    m_bgmPlayer->setSource({});
+    emit bgmPlaylistTracksChanged();
+    emit bgmChanged();
+    emit bgmLibraryChanged();
+    saveState();
+    return true;
+}
+
+void BroadcastController::selectBgmPlaylist(const QString &name)
+{
+    const auto playlist = m_bgmPlaylists.constFind(name);
+    if (playlist == m_bgmPlaylists.cend()) {
+        qWarning() << "BroadcastController: cannot select unknown BGM playlist:" << name;
+        return;
+    }
+
+    if (m_currentBgmPlaylistName == name)
+        return;
+
+    m_bgmPlayer->stop();
+    m_currentBgmPlaylistName = name;
+    m_bgmPlaylist = playlist.value();
+    m_bgmIndex = 0;
+    m_bgmShuffleHistory.clear();
+    if (m_bgmPlaylist.isEmpty()) {
+        m_bgmCoverArt.clear();
+        m_bgmPlayer->setSource({});
+    } else {
+        loadBgmTrack(0);
+    }
+    emit bgmPlaylistTracksChanged();
+    emit bgmChanged();
+    emit bgmLibraryChanged();
+    saveState();
+}
+
+void BroadcastController::addBgmTracksToPlaylist(const QStringList &paths)
+{
+    bool changed = false;
+    const bool wasEmpty = m_bgmPlaylist.isEmpty();
+    for (const QString &path : paths) {
+        if (!QFileInfo(path).isFile()) {
+            qWarning() << "BroadcastController: skipping unavailable BGM playlist track:" << path;
+            continue;
+        }
+        if (m_bgmPlaylist.contains(path))
+            continue;
+        m_bgmPlaylist.append(path);
+        if (!m_bgmLibraryPaths.contains(path))
+            m_bgmLibraryPaths.append(path);
+        changed = true;
+    }
+
+    if (!changed)
+        return;
+
+    storeActiveBgmPlaylist();
+    if (wasEmpty)
+        loadBgmTrack(0);
+    emit bgmPlaylistTracksChanged();
+    emit bgmChanged();
+    emit bgmLibraryChanged();
+    saveState();
 }
 
 void BroadcastController::addFilesToBgm(const QStringList &paths)
@@ -605,16 +742,86 @@ void BroadcastController::addFilesToBgm(const QStringList &paths)
             QDirIterator it(localPath, {"*.mp3", "*.m4a", "*.wav", "*.flac", "*.ogg", "*.aac", "*.wma"}, QDir::Files, QDirIterator::Subdirectories);
             while (it.hasNext()) {
                 const QString found = it.next();
+                if (!m_bgmLibraryPaths.contains(found))
+                    m_bgmLibraryPaths.append(found);
                 if (!m_bgmPlaylist.contains(found)) m_bgmPlaylist.append(found);
             }
         } else if (audioExt.contains(info.suffix().toLower())) {
             const QString abs = info.absoluteFilePath();
+            if (!m_bgmLibraryPaths.contains(abs))
+                m_bgmLibraryPaths.append(abs);
             if (!m_bgmPlaylist.contains(abs)) m_bgmPlaylist.append(abs);
         }
     }
 
+    storeActiveBgmPlaylist();
     if (wasEmpty && !m_bgmPlaylist.isEmpty()) loadBgmTrack(0);
+    emit bgmPlaylistTracksChanged();
     emit bgmChanged();
+    emit bgmLibraryChanged();
+    saveState();
+}
+
+void BroadcastController::playBgmTrack(int index)
+{
+    if (index < 0 || index >= m_bgmPlaylist.count())
+        return;
+    loadBgmTrack(index);
+    m_bgmPlayer->play();
+    emit bgmChanged();
+}
+
+void BroadcastController::playBgmFile(const QString &path)
+{
+    addFilesToBgm({path});
+    const int index = m_bgmPlaylist.indexOf(QFileInfo(path).absoluteFilePath());
+    if (index >= 0)
+        playBgmTrack(index);
+}
+
+void BroadcastController::removeBgmTrack(int index)
+{
+    if (index < 0 || index >= m_bgmPlaylist.count())
+        return;
+
+    const bool wasPlaying = isPlayingBgm();
+    const bool removingCurrent = index == m_bgmIndex;
+    if (removingCurrent)
+        m_bgmPlayer->stop();
+
+    m_bgmPlaylist.removeAt(index);
+    m_bgmShuffleHistory.clear();
+    if (m_bgmPlaylist.isEmpty()) {
+        m_bgmIndex = 0;
+        m_bgmCoverArt.clear();
+        m_bgmPlayer->setSource({});
+    } else if (removingCurrent) {
+        m_bgmIndex = qMin(index, m_bgmPlaylist.count() - 1);
+        loadBgmTrack(m_bgmIndex);
+        if (wasPlaying)
+            m_bgmPlayer->play();
+    } else {
+        if (index < m_bgmIndex)
+            --m_bgmIndex;
+    }
+
+    storeActiveBgmPlaylist();
+    emit bgmPlaylistTracksChanged();
+    emit bgmChanged();
+    emit bgmLibraryChanged();
+    saveState();
+}
+
+void BroadcastController::browseAndAddBgmFiles()
+{
+    const QString startDir = m_bgmCustomFolder.isEmpty()
+        ? QStandardPaths::writableLocation(QStandardPaths::MusicLocation)
+        : m_bgmCustomFolder;
+    const QStringList files = QFileDialog::getOpenFileNames(
+        nullptr, tr("Add Music"), startDir,
+        tr("Audio Files (*.mp3 *.m4a *.wav *.flac *.ogg *.aac *.wma)"));
+    if (!files.isEmpty())
+        addFilesToBgm(files);
 }
 
 void BroadcastController::setBgmUseCustomFolder(bool enabled)
@@ -690,10 +897,11 @@ void BroadcastController::loadBgmTrack(int index)
 {
     if (index < 0 || index >= m_bgmPlaylist.count()) return;
     m_bgmIndex = index;
-    m_bgmCoverArt.clear();
-    m_bgmPlayer->setSource(QUrl::fromLocalFile(m_bgmPlaylist.at(index)));
-    if (m_thumbManager)
-        m_thumbManager->enqueue(QStringLiteral("bgm-cover"), m_bgmPlaylist.at(index), QStringLiteral("audio"));
+    const QString path = m_bgmPlaylist.at(index);
+    m_bgmCoverArt = m_bgmThumbnailPaths.value(path);
+    m_bgmPlayer->setSource(QUrl::fromLocalFile(path));
+    requestBgmThumbnail(path);
+    emit bgmPlaylistTracksChanged();
     emit bgmChanged();
 }
 
@@ -761,6 +969,94 @@ int BroadcastController::bgmDurationMs() const
     return m_bgmPlayer ? static_cast<int>(m_bgmPlayer->duration()) : 0;
 }
 
+QVariantList BroadcastController::bgmPlaylistTracks() const
+{
+    QVariantList tracks;
+    tracks.reserve(m_bgmPlaylist.size());
+    for (int i = 0; i < m_bgmPlaylist.size(); ++i) {
+        const QString &path = m_bgmPlaylist.at(i);
+        tracks.append(QVariantMap{
+            {QStringLiteral("index"), i},
+            {QStringLiteral("name"), m_bgmTrackTitles.value(path, QFileInfo(path).completeBaseName())},
+            {QStringLiteral("path"), path},
+            {QStringLiteral("thumbnailPath"), m_bgmThumbnailPaths.value(path)},
+            {QStringLiteral("current"), i == m_bgmIndex}
+        });
+    }
+    return tracks;
+}
+
+QVariantList BroadcastController::bgmLibraryTracks() const
+{
+    QVariantList tracks;
+    QSet<QString> seenPaths;
+    const auto appendTrack = [this, &tracks, &seenPaths](const QString &path,
+                                                         const QString &fallbackName,
+                                                         const QString &fallbackThumbnail) {
+        if (path.isEmpty() || seenPaths.contains(path))
+            return;
+        seenPaths.insert(path);
+        QString name = fallbackName;
+        name = m_bgmTrackTitles.value(path, name);
+        QString thumbnail = fallbackThumbnail;
+        if (m_libraryModel) {
+            const QString id = m_libraryModel->idOfPath(path);
+            if (!id.isEmpty()) {
+                const QVariantMap metadata = m_libraryModel->getRowById(id);
+                if (!metadata.value(QStringLiteral("name")).toString().isEmpty())
+                    name = metadata.value(QStringLiteral("name")).toString();
+                if (!metadata.value(QStringLiteral("thumbnailPath")).toString().isEmpty())
+                    thumbnail = metadata.value(QStringLiteral("thumbnailPath")).toString();
+            }
+        }
+        name = m_bgmTrackTitles.value(path, name);
+        tracks.append(QVariantMap{
+            {QStringLiteral("id"), path},
+            {QStringLiteral("name"), name},
+            {QStringLiteral("path"), path},
+            {QStringLiteral("thumbnailPath"), m_bgmThumbnailPaths.value(path, thumbnail)},
+            {QStringLiteral("inPlaylist"), m_bgmPlaylist.contains(path)}
+        });
+    };
+
+    for (const QString &path : m_bgmLibraryPaths) {
+        if (QFileInfo::exists(path))
+            appendTrack(path, QFileInfo(path).completeBaseName(), {});
+    }
+
+    if (!m_libraryModel)
+        return tracks;
+
+    for (int i = 0; i < m_libraryModel->rowCount(); ++i) {
+        const QModelIndex index = m_libraryModel->index(i);
+        if (m_libraryModel->data(index, MediaLibraryModel::TypeRole).toString()
+            != QStringLiteral("audio")) {
+            continue;
+        }
+        appendTrack(m_libraryModel->data(index, MediaLibraryModel::PathRole).toString(),
+                    m_libraryModel->data(index, MediaLibraryModel::NameRole).toString(),
+                    m_libraryModel->data(index, MediaLibraryModel::ThumbnailRole).toString());
+    }
+    return tracks;
+}
+
+void BroadcastController::storeActiveBgmPlaylist()
+{
+    m_bgmPlaylists.insert(m_currentBgmPlaylistName, m_bgmPlaylist);
+}
+
+void BroadcastController::requestBgmThumbnail(const QString &path)
+{
+    if (!m_thumbManager || path.isEmpty() || !QFileInfo(path).isFile()
+        || m_bgmThumbnailPaths.contains(path) || m_bgmThumbnailRequests.contains(path)) {
+        return;
+    }
+
+    m_bgmThumbnailRequests.insert(path);
+    m_thumbManager->enqueue(QStringLiteral("bgm-track:") + path, path,
+                            QStringLiteral("audio"));
+}
+
 void BroadcastController::seekBgm(int ms)
 {
     if (!m_bgmPlayer || m_bgmPlaylist.isEmpty()) return;
@@ -778,7 +1074,8 @@ bool BroadcastController::isPlayingBgm() const {
 
 QString BroadcastController::bgmTrackName() const {
     if (m_bgmPlaylist.isEmpty() || m_bgmIndex >= m_bgmPlaylist.count()) return "NO TRACKS";
-    return QFileInfo(m_bgmPlaylist.at(m_bgmIndex)).baseName();
+    const QString path = m_bgmPlaylist.at(m_bgmIndex);
+    return m_bgmTrackTitles.value(path, QFileInfo(path).completeBaseName());
 }
 
 void BroadcastController::onBgmStatusChanged(QMediaPlayer::MediaStatus status) {
@@ -1311,9 +1608,9 @@ void BroadcastController::indexMediaAsset(const QVariantMap &asset)
     }
 }
 
-void BroadcastController::onMediaFound(MediaType type, const QString &name, const QString &absolutePath, const QImage &thumbnail, const QDateTime &creationDate)
+void BroadcastController::onMediaFound(MediaType type, const QString &name, const QString &absolutePath, const QDateTime &creationDate)
 {
-    Q_UNUSED(creationDate); Q_UNUSED(thumbnail);
+    Q_UNUSED(creationDate);
     if (m_libraryModel->containsPath(absolutePath)) {
         indexMediaAsset(m_libraryModel->getRowById(m_libraryModel->idOfPath(absolutePath)));
         return;
@@ -1365,6 +1662,7 @@ void BroadcastController::onScanFinished()
 {
     m_scanStatus = tr("Scan complete.");
     emit scanStatusChanged();
+    emit bgmLibraryChanged();
     if (!m_initialScanComplete) {
         m_initialScanComplete = true;
         emit initialScanCompleteChanged();
@@ -1397,6 +1695,13 @@ void BroadcastController::saveState()
     root["shortcutKeys"] = QJsonObject::fromVariantMap(m_shortcutKeys);
     root["bgmUseCustomFolder"] = m_bgmUseCustomFolder;
     root["bgmCustomFolder"] = m_bgmCustomFolder;
+    root["bgmPlaylist"] = QJsonArray::fromStringList(m_bgmPlaylist);
+    QJsonObject savedBgmPlaylists;
+    for (auto it = m_bgmPlaylists.cbegin(); it != m_bgmPlaylists.cend(); ++it)
+        savedBgmPlaylists.insert(it.key(), QJsonArray::fromStringList(it.value()));
+    root["bgmPlaylists"] = savedBgmPlaylists;
+    root["currentBgmPlaylist"] = m_currentBgmPlaylistName;
+    root["bgmLibrary"] = QJsonArray::fromStringList(m_bgmLibraryPaths);
     root["extendedFeedBackgroundPath"] = m_extendedFeedBackgroundPath;
     root["extendedFeedBackgroundType"] = m_extendedFeedBackgroundType;
     root["customLanguages"] = QJsonArray::fromVariantList(m_customLanguages);
@@ -1465,6 +1770,57 @@ void BroadcastController::loadState()
     }
     m_bgmUseCustomFolder = root["bgmUseCustomFolder"].toBool(false);
     m_bgmCustomFolder = root["bgmCustomFolder"].toString();
+    m_bgmPlaylists.clear();
+    const QJsonObject savedBgmPlaylists = root["bgmPlaylists"].toObject();
+    for (auto playlistIt = savedBgmPlaylists.constBegin();
+         playlistIt != savedBgmPlaylists.constEnd(); ++playlistIt) {
+        QStringList tracks;
+        for (const QJsonValue &value : playlistIt.value().toArray()) {
+            const QString trackPath = value.toString();
+            if (QFileInfo(trackPath).isFile() && !tracks.contains(trackPath))
+                tracks.append(trackPath);
+        }
+        m_bgmPlaylists.insert(playlistIt.key(), tracks);
+    }
+
+    m_currentBgmPlaylistName = root["currentBgmPlaylist"].toString();
+    if (m_currentBgmPlaylistName.isEmpty()
+        || !m_bgmPlaylists.contains(m_currentBgmPlaylistName)) {
+        QStringList savedLegacyPlaylist;
+        for (const QJsonValue &value : root["bgmPlaylist"].toArray())
+            savedLegacyPlaylist.append(value.toString());
+        QStringList legacyTracks;
+        for (const QString &trackPath : savedLegacyPlaylist) {
+            if (QFileInfo(trackPath).isFile() && !legacyTracks.contains(trackPath))
+                legacyTracks.append(trackPath);
+        }
+        if (!m_bgmPlaylists.isEmpty()) {
+            m_currentBgmPlaylistName = m_bgmPlaylists.firstKey();
+        } else {
+            m_currentBgmPlaylistName = QStringLiteral("My Playlist");
+            m_bgmPlaylists.insert(m_currentBgmPlaylistName, legacyTracks);
+        }
+    }
+
+    m_bgmPlaylist.clear();
+    m_bgmPlaylist = m_bgmPlaylists.value(m_currentBgmPlaylistName);
+    m_bgmLibraryPaths.clear();
+    const QJsonArray savedBgmLibrary = root["bgmLibrary"].toArray();
+    for (const QJsonValue &value : savedBgmLibrary) {
+        const QString trackPath = value.toString();
+        if (QFileInfo::exists(trackPath) && !m_bgmLibraryPaths.contains(trackPath))
+            m_bgmLibraryPaths.append(trackPath);
+    }
+    for (auto playlistIt = m_bgmPlaylists.cbegin();
+         playlistIt != m_bgmPlaylists.cend(); ++playlistIt) {
+        for (const QString &trackPath : playlistIt.value()) {
+            if (!m_bgmLibraryPaths.contains(trackPath))
+                m_bgmLibraryPaths.append(trackPath);
+        }
+    }
+    if (!m_bgmPlaylist.isEmpty())
+        loadBgmTrack(0);
+    emit bgmLibraryChanged();
     m_extendedFeedBackgroundPath = root["extendedFeedBackgroundPath"].toString();
     m_extendedFeedBackgroundType = root["extendedFeedBackgroundType"].toString();
     m_customLanguages = root["customLanguages"].toArray().toVariantList();

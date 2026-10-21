@@ -46,6 +46,7 @@ class NativeThumbnailGenerator : public QObject
 public:
     explicit NativeThumbnailGenerator(QObject *parent = nullptr);
     void enqueue(const QString &id, const QString &path, const QString &cachePath);
+    void enqueueAudio(const QString &id, const QString &path, const QString &cachePath);
 
 signals:
     void finished(const QString &id, const QString &cachePath, const QString &title);
@@ -53,11 +54,18 @@ signals:
 
 private slots:
     void processNext();
+    void onMetaDataChanged();
     void onFrameChanged(const QVideoFrame &frame);
     void onStatusChanged(QMediaPlayer::MediaStatus status);
 
 private:
-    struct Request { QString id; QString path; QString cachePath; };
+    struct Request {
+        QString id;
+        QString path;
+        QString cachePath;
+        bool audio = false;
+    };
+    bool finishAudioArtwork(bool allowTitleOnly = false);
     QList<Request> m_queue;
     QMediaPlayer *m_player;
     QVideoSink *m_sink;

@@ -129,6 +129,11 @@ bool ThumbnailJob::scaleImage(const QString &input, const QString &output) {
 }
 
 bool ThumbnailJob::extractAudioArt(const QString &input, const QString &output) {
+    if (m_ffmpegPath.isEmpty()) {
+        qWarning() << "ThumbnailJob: ffmpeg is unavailable for audio artwork" << input;
+        return false;
+    }
+
     QProcess ffmpeg;
     runHidden(ffmpeg);
     QStringList args;
@@ -141,13 +146,13 @@ bool ThumbnailJob::extractAudioArt(const QString &input, const QString &output) 
     args << "-i" << input << "-an"
          << "-vf" << "scale=320:180:force_original_aspect_ratio=increase,crop=320:180"
          << "-y" << output;
-    ffmpeg.start("ffmpeg", args);
+    ffmpeg.start(m_ffmpegPath, args);
     if (!ffmpeg.waitForFinished(3000)) { ffmpeg.kill(); return false; }
     return ffmpeg.exitCode() == 0 && QFile::exists(output);
 }
 
 MediaThumbnailManager::MediaThumbnailManager(QObject *parent) : QObject(parent) {
-    m_pool.setMaxThreadCount(qMax(1, QThread::idealThreadCount() - 1));
+    m_pool.setMaxThreadCount(qMax(1, qMin(2, QThread::idealThreadCount())));
     m_native = new NativeThumbnailGenerator(this);
     connect(m_native, &NativeThumbnailGenerator::finished, this, &MediaThumbnailManager::thumbnailReady);
     connect(m_native, &NativeThumbnailGenerator::failed, this, &MediaThumbnailManager::thumbnailFailed);
@@ -179,21 +184,29 @@ void MediaThumbnailManager::enqueue(const QString &id, const QString &path, cons
     QString hash = QCryptographicHash::hash(hashInput.toUtf8(), QCryptographicHash::Md5).toHex();
     QString cachePath = cacheDir + "/" + hash + ".jpg";
 
-    if (QFile::exists(cachePath)) {
-        emit thumbnailReady(id, cachePath);
-        return;
+    const bool hasCachedThumbnail = QFile::exists(cachePath);
+    if (hasCachedThumbnail) {
+        QTimer::singleShot(0, this, [this, id, cachePath]() {
+            emit thumbnailReady(id, cachePath);
+        });
+        if (type != QStringLiteral("audio"))
+            return;
     }
 
     // Keyed to whether ffmpeg is available, so installing it later retries.
     const QString failMarker = cachePath
-        + (m_ffmpegPath.isEmpty() ? ".failnative" : ".failff");
-    if (QFile::exists(failMarker)) {
+        + (type == QStringLiteral("audio")
+               ? (m_ffmpegPath.isEmpty() ? ".failnative-audio" : ".failff-audio")
+               : (m_ffmpegPath.isEmpty() ? ".failnative" : ".failff"));
+    if (QFile::exists(failMarker) && !(type == QStringLiteral("audio") && hasCachedThumbnail)) {
         emit thumbnailFailed(id);
         return;
     }
     m_failMarkers.insert(id, failMarker);
 
-    if (type == "video" && m_ffmpegPath.isEmpty()) {
+    if (type == QStringLiteral("audio")) {
+        m_native->enqueueAudio(id, path, cachePath);
+    } else if (type == "video" && m_ffmpegPath.isEmpty()) {
         m_native->enqueue(id, path, cachePath);
     } else {
         auto job = new ThumbnailJob(id, path, type, m_ffmpegPath);
@@ -212,10 +225,16 @@ NativeThumbnailGenerator::NativeThumbnailGenerator(QObject *parent) : QObject(pa
     m_player->setVideoOutput(m_sink);
     connect(m_sink, &QVideoSink::videoFrameChanged, this, &NativeThumbnailGenerator::onFrameChanged);
     connect(m_player, &QMediaPlayer::mediaStatusChanged, this, &NativeThumbnailGenerator::onStatusChanged);
+    connect(m_player, &QMediaPlayer::metaDataChanged, this, &NativeThumbnailGenerator::onMetaDataChanged);
 }
 
 void NativeThumbnailGenerator::enqueue(const QString &id, const QString &path, const QString &cachePath) {
-    m_queue.append({id, path, cachePath});
+    m_queue.append({id, path, cachePath, false});
+    if (!m_processing) processNext();
+}
+
+void NativeThumbnailGenerator::enqueueAudio(const QString &id, const QString &path, const QString &cachePath) {
+    m_queue.append({id, path, cachePath, true});
     if (!m_processing) processNext();
 }
 
@@ -227,7 +246,8 @@ void NativeThumbnailGenerator::processNext() {
 
     qDebug() << "NativeThumbnailGenerator: Processing" << m_current.path;
     m_player->setSource(QUrl::fromLocalFile(m_current.path));
-    m_player->play();
+    if (!m_current.audio)
+        m_player->play();
 
     // Safety timeout. Guarded by generation so a timeout left over from a
     // previous (already-finished-or-abandoned) job can't stop whatever job
@@ -241,6 +261,44 @@ void NativeThumbnailGenerator::processNext() {
             processNext();
         }
     });
+}
+
+void NativeThumbnailGenerator::onMetaDataChanged()
+{
+    if (m_processing && m_current.audio)
+        finishAudioArtwork();
+}
+
+bool NativeThumbnailGenerator::finishAudioArtwork(bool allowTitleOnly)
+{
+    if (!m_processing || !m_current.audio)
+        return false;
+
+    const QMediaMetaData metadata = m_player->metaData();
+    QImage cover = metadata.value(QMediaMetaData::CoverArtImage).value<QImage>();
+    if (cover.isNull())
+        cover = metadata.value(QMediaMetaData::ThumbnailImage).value<QImage>();
+    const QString title = metadata.value(QMediaMetaData::Title).toString().trimmed();
+    if (cover.isNull() && (!allowTitleOnly || title.isEmpty()))
+        return false;
+
+    QString thumbnailPath;
+    if (!cover.isNull()) {
+        const QSize targetSize(320, 320);
+        cover = cover.scaled(targetSize, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
+        const QRect cropRect((cover.width() - targetSize.width()) / 2,
+                             (cover.height() - targetSize.height()) / 2,
+                             targetSize.width(), targetSize.height());
+        if (!cover.copy(cropRect).save(m_current.cachePath, "JPG", 90))
+            return false;
+        thumbnailPath = m_current.cachePath;
+    }
+
+    emit finished(m_current.id, thumbnailPath, title);
+    m_processing = false;
+    m_player->stop();
+    QTimer::singleShot(100, this, &NativeThumbnailGenerator::processNext);
+    return true;
 }
 
 void NativeThumbnailGenerator::onFrameChanged(const QVideoFrame &frame) {
@@ -274,6 +332,25 @@ void NativeThumbnailGenerator::onFrameChanged(const QVideoFrame &frame) {
 
 void NativeThumbnailGenerator::onStatusChanged(QMediaPlayer::MediaStatus status) {
     if (status == QMediaPlayer::LoadedMedia) {
+        if (m_current.audio) {
+            if (finishAudioArtwork(true))
+                return;
+
+            const quint64 generation = m_generation;
+            QTimer::singleShot(750, this, [this, generation]() {
+                if (!m_processing || generation != m_generation || !m_current.audio)
+                    return;
+                if (finishAudioArtwork(true))
+                    return;
+
+                emit failed(m_current.id);
+                m_processing = false;
+                m_player->stop();
+                QTimer::singleShot(100, this, &NativeThumbnailGenerator::processNext);
+            });
+            return;
+        }
+
         const qint64 duration = m_player->duration();
         const qint64 targetPosition = duration > 0 ? qMin<qint64>(2000, duration / 10) : 500;
         m_player->setPosition(targetPosition);

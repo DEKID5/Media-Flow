@@ -18,7 +18,7 @@ Item {
         onTriggered: splashRoot.minTimeElapsed = true
     }
     Timer {
-        interval: 30000
+        interval: 10000
         running: true
         onTriggered: splashRoot.requestClose()
     }
