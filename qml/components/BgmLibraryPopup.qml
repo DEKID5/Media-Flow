@@ -9,24 +9,53 @@ Popup {
     property string activeTab: "library"
     property var backend: MediaFlowBackend || ({})
     property var selectedTrackPaths: []
-    readonly property var libraryTracks: {
-        const tracks = backend.bgmLibraryTracks || []
-        const query = searchField.text.trim().toLowerCase()
-        if (!query)
-            return tracks
-        return tracks.filter(function(track) {
-            return (track.name || "").toLowerCase().includes(query)
-                || (track.path || "").toLowerCase().includes(query)
+    property var librarySourceTracks: []
+    property var playlistSourceTracks: []
+    property var languageOptions: [{ name: "All languages", code: "" }]
+    property string languageFilterCode: ""
+    property string appliedSearchQuery: ""
+    readonly property var libraryTracks: filterTracks(librarySourceTracks, true)
+    readonly property var playlistTracks: filterTracks(playlistSourceTracks, false)
+
+    function prepareTracks(tracks) {
+        return tracks.map(function(track) {
+            const name = track.name || ""
+            const path = track.path || ""
+            return Object.assign({}, track, {
+                searchText: (name + " " + path).toLowerCase(),
+                normalizedPath: path.toLowerCase()
+            })
         })
     }
-    readonly property var playlistTracks: {
-        const tracks = backend.bgmPlaylistTracks || []
-        const query = searchField.text.trim().toLowerCase()
-        if (!query)
+    function refreshTrackSnapshots() {
+        librarySourceTracks = prepareTracks(backend.bgmLibraryTracks || [])
+        playlistSourceTracks = prepareTracks(backend.bgmPlaylistTracks || [])
+    }
+    function refreshLanguageOptions() {
+        const options = [{ name: "All languages", code: "" }]
+        if (backend.getSupportedLanguages) {
+            const languages = backend.getSupportedLanguages()
+            for (let i = 0; i < languages.length; ++i)
+                options.push(languages[i])
+        }
+        languageOptions = options
+        let selectedLanguageAvailable = languageFilterCode === ""
+        for (let i = 0; i < options.length; ++i) {
+            if (options[i].code === languageFilterCode)
+                selectedLanguageAvailable = true
+        }
+        if (!selectedLanguageAvailable)
+            languageFilterCode = ""
+    }
+    function filterTracks(tracks, includeLanguageFilter) {
+        const query = appliedSearchQuery
+        const code = includeLanguageFilter ? languageFilterCode.toLowerCase() : ""
+        if (!query && !code)
             return tracks
+        const marker = code ? "_" + code + "_" : ""
         return tracks.filter(function(track) {
-            return (track.name || "").toLowerCase().includes(query)
-                || (track.path || "").toLowerCase().includes(query)
+            return (!query || track.searchText.includes(query))
+                && (!marker || track.normalizedPath.includes(marker))
         })
     }
 
@@ -41,6 +70,11 @@ Popup {
     padding: 0
     onOpened: {
         searchField.text = ""
+        searchDebounce.stop()
+        appliedSearchQuery = ""
+        languageFilterCode = ""
+        refreshLanguageOptions()
+        refreshTrackSnapshots()
         selectedTrackPaths = []
         backend.refreshBgmLibrary()
         Qt.callLater(function() {
@@ -48,6 +82,27 @@ Popup {
             trackList.positionViewAtBeginning()
             trackList.forceActiveFocus()
         })
+    }
+
+    Timer {
+        id: searchDebounce
+        interval: 140
+        repeat: false
+        onTriggered: musicPopup.appliedSearchQuery = searchField.text.trim().toLowerCase()
+    }
+
+    Connections {
+        target: musicPopup.backend
+        ignoreUnknownSignals: true
+        function onBgmLibraryChanged() {
+            musicPopup.librarySourceTracks = musicPopup.prepareTracks(musicPopup.backend.bgmLibraryTracks || [])
+        }
+        function onBgmPlaylistTracksChanged() {
+            musicPopup.playlistSourceTracks = musicPopup.prepareTracks(musicPopup.backend.bgmPlaylistTracks || [])
+        }
+        function onLanguagesChanged() {
+            musicPopup.refreshLanguageOptions()
+        }
     }
 
     function isTrackSelected(path) {
@@ -314,10 +369,80 @@ Popup {
                 font.family: "Inter"
                 font.pixelSize: Theme.textSm
                 leftPadding: 12
+                onTextChanged: searchDebounce.restart()
                 background: Rectangle {
                     radius: 9
                     color: "#17171d"
                     border.color: searchField.activeFocus ? "#3B82F6" : "#292930"
+                }
+            }
+
+            ComboBox {
+                id: languageSelector
+                visible: musicPopup.activeTab === "library"
+                Layout.preferredWidth: 146
+                implicitHeight: 36
+                model: musicPopup.languageOptions
+                textRole: "name"
+                currentIndex: {
+                    for (let i = 0; i < musicPopup.languageOptions.length; ++i) {
+                        if (musicPopup.languageOptions[i].code === musicPopup.languageFilterCode)
+                            return i
+                    }
+                    return 0
+                }
+                onActivated: musicPopup.languageFilterCode = musicPopup.languageOptions[index].code
+                contentItem: Label {
+                    leftPadding: 10
+                    rightPadding: 6
+                    text: languageSelector.currentText
+                    color: Theme.textPrimary
+                    font.family: "Inter"
+                    font.pixelSize: Theme.textXs
+                    verticalAlignment: Text.AlignVCenter
+                    elide: Text.ElideRight
+                }
+                background: Rectangle {
+                    radius: 9
+                    color: "#17171d"
+                    border.color: languageSelector.activeFocus ? "#3B82F6" : "#292930"
+                }
+                delegate: ItemDelegate {
+                    id: languageDelegate
+                    required property int index
+                    required property var modelData
+                    width: languageSelector.width
+                    text: modelData.name
+                    highlighted: languageSelector.highlightedIndex === index
+                    contentItem: Label {
+                        text: languageDelegate.text
+                        color: Theme.textPrimary
+                        font.family: "Inter"
+                        font.pixelSize: Theme.textSm
+                        verticalAlignment: Text.AlignVCenter
+                        elide: Text.ElideRight
+                    }
+                    background: Rectangle {
+                        color: languageDelegate.highlighted ? "#25252d" : "#17171d"
+                    }
+                }
+                popup: Popup {
+                    y: languageSelector.height
+                    width: languageSelector.width
+                    implicitHeight: Math.min(contentItem.implicitHeight, 240)
+                    padding: 4
+                    contentItem: ListView {
+                        clip: true
+                        implicitHeight: contentHeight
+                        model: languageSelector.popup.visible ? languageSelector.delegateModel : null
+                        currentIndex: languageSelector.highlightedIndex
+                        ScrollIndicator.vertical: ScrollIndicator {}
+                    }
+                    background: Rectangle {
+                        radius: 9
+                        color: "#17171d"
+                        border.color: "#292930"
+                    }
                 }
             }
 
