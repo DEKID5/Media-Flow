@@ -18,18 +18,14 @@ Popup {
     readonly property var playlistTracks: filterTracks(playlistSourceTracks, false)
 
     function prepareTracks(tracks) {
-        return tracks.map(function(track) {
-            const name = track.name || ""
-            const path = track.path || ""
-            return Object.assign({}, track, {
-                searchText: (name + " " + path).toLowerCase(),
-                normalizedPath: path.toLowerCase()
-            })
-        })
+        return tracks || []
     }
     function refreshTrackSnapshots() {
-        librarySourceTracks = prepareTracks(backend.bgmLibraryTracks || [])
-        playlistSourceTracks = prepareTracks(backend.bgmPlaylistTracks || [])
+        if (activeTab === "library") {
+            librarySourceTracks = backend.bgmLibraryTracks || []
+        } else {
+            playlistSourceTracks = backend.bgmPlaylistTracks || []
+        }
     }
     function refreshLanguageOptions() {
         const options = [{ name: "All languages", code: "" }]
@@ -68,6 +64,13 @@ Popup {
     dim: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
     padding: 0
+    onActiveTabChanged: {
+        if (visible) {
+            refreshTrackSnapshots()
+            trackList.currentIndex = trackList.count > 0 ? 0 : -1
+            trackList.positionViewAtBeginning()
+        }
+    }
     onOpened: {
         searchField.text = ""
         searchDebounce.stop()
@@ -76,7 +79,6 @@ Popup {
         refreshLanguageOptions()
         refreshTrackSnapshots()
         selectedTrackPaths = []
-        backend.refreshBgmLibrary()
         Qt.callLater(function() {
             trackList.currentIndex = trackList.count > 0 ? 0 : -1
             trackList.positionViewAtBeginning()
@@ -95,10 +97,14 @@ Popup {
         target: musicPopup.backend
         ignoreUnknownSignals: true
         function onBgmLibraryChanged() {
-            musicPopup.librarySourceTracks = musicPopup.prepareTracks(musicPopup.backend.bgmLibraryTracks || [])
+            if (musicPopup.visible && musicPopup.activeTab === "library") {
+                musicPopup.librarySourceTracks = musicPopup.backend.bgmLibraryTracks || []
+            }
         }
         function onBgmPlaylistTracksChanged() {
-            musicPopup.playlistSourceTracks = musicPopup.prepareTracks(musicPopup.backend.bgmPlaylistTracks || [])
+            if (musicPopup.visible && musicPopup.activeTab === "playlist") {
+                musicPopup.playlistSourceTracks = musicPopup.backend.bgmPlaylistTracks || []
+            }
         }
         function onLanguagesChanged() {
             musicPopup.refreshLanguageOptions()
@@ -674,26 +680,22 @@ Popup {
                 property string displayName: modelData.name || "Unknown track"
                 property string displayThumbnailPath: modelData.thumbnailPath || ""
                 readonly property bool isPlaylist: musicPopup.activeTab === "playlist"
-                readonly property bool isCurrent: isPlaylist && modelData.current
+                readonly property bool isCurrent: isPlaylist && (modelData.index === (musicPopup.backend.bgmIndex ?? -1))
                 readonly property bool isKeyboardCurrent: trackList.activeFocus && index === trackList.currentIndex
                 onModelDataChanged: {
                     displayName = modelData.name || "Unknown track"
                     displayThumbnailPath = modelData.thumbnailPath || ""
-                    if (musicPopup.visible)
-                        artworkRequest.restart()
+                    if (!displayThumbnailPath && modelData.path)
+                        backend.requestBgmThumbnail(modelData.path)
+                }
+                Component.onCompleted: {
+                    if (!displayThumbnailPath && modelData.path)
+                        backend.requestBgmThumbnail(modelData.path)
                 }
                 width: trackList.width - 4
                 height: 58
                 radius: 9
                 color: isCurrent ? "#1b3028" : isKeyboardCurrent ? "#202833" : rowMouse.containsMouse ? "#1c1c23" : "transparent"
-
-                Timer {
-                    id: artworkRequest
-                    interval: 1
-                    running: musicPopup.visible
-                    repeat: false
-                    onTriggered: backend.requestBgmThumbnail(modelData.path)
-                }
 
                 Connections {
                     target: musicPopup.backend
@@ -814,6 +816,7 @@ Popup {
                     CheckBox {
                         id: trackSelection
                         visible: !isPlaylist
+                        checked: musicPopup.isTrackSelected(modelData.path)
                         onToggled: musicPopup.toggleTrackSelection(modelData.path, checked)
                         indicator: Rectangle {
                             implicitWidth: 20
@@ -831,11 +834,6 @@ Popup {
                                 font.pixelSize: 13
                                 font.bold: true
                             }
-                        }
-                        Binding {
-                            target: trackSelection
-                            property: "checked"
-                            value: musicPopup.isTrackSelected(modelData.path)
                         }
                     }
 

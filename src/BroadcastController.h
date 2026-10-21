@@ -118,6 +118,7 @@ class BroadcastController final : public QObject
     Q_PROPERTY(bool bgmShuffle READ bgmShuffle WRITE setBgmShuffle NOTIFY bgmShuffleChanged)
     Q_PROPERTY(int bgmPositionMs READ bgmPositionMs NOTIFY bgmPositionChanged)
     Q_PROPERTY(int bgmDurationMs READ bgmDurationMs NOTIFY bgmDurationChanged)
+    Q_PROPERTY(int bgmIndex READ bgmIndex NOTIFY bgmChanged)
     Q_PROPERTY(QVariantList bgmPlaylistTracks READ bgmPlaylistTracks NOTIFY bgmPlaylistTracksChanged)
     Q_PROPERTY(QVariantList bgmLibraryTracks READ bgmLibraryTracks NOTIFY bgmLibraryChanged)
     Q_PROPERTY(QStringList bgmPlaylistNames READ bgmPlaylistNames NOTIFY bgmLibraryChanged)
@@ -210,6 +211,7 @@ public:
     void setBgmShuffle(bool enabled);
     int bgmPositionMs() const;
     int bgmDurationMs() const;
+    int bgmIndex() const { return m_bgmIndex; }
     QVariantList bgmPlaylistTracks() const;
     QVariantList bgmLibraryTracks() const;
     QStringList bgmPlaylistNames() const { return m_bgmPlaylists.keys(); }
@@ -459,6 +461,12 @@ private:
     int m_bgmIndex = 0;
     bool m_bgmShuffle = false;
     QList<int> m_bgmShuffleHistory; // indices played this shuffle session, for "back"
+
+    mutable QVariantList m_cachedBgmLibraryTracks;
+    mutable bool m_bgmLibraryDirty = true;
+    mutable QVariantList m_cachedBgmPlaylistTracks;
+    mutable bool m_bgmPlaylistDirty = true;
+    void invalidateBgmCaches() { m_bgmLibraryDirty = true; m_bgmPlaylistDirty = true; }
 
     // Thumbnail extractor
     MediaThumbnailManager *m_thumbManager = nullptr;
