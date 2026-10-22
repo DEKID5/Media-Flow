@@ -428,6 +428,8 @@ Item {
         cellWidth: width / gridColumns
         cellHeight: cellWidth * 0.7
         visible: root.currentView !== "pins" || root.selectedPinFolderId !== ""
+        cacheBuffer: 100
+        reuseItems: true
 
         model: (MediaFlowBackend && MediaFlowBackend.stagedMediaProxy) ? MediaFlowBackend.stagedMediaProxy : null
 
@@ -513,12 +515,10 @@ Item {
                 Image {
                     anchors.fill: parent; fillMode: Image.PreserveAspectCrop; opacity: cardMa.containsMouse ? 0.9 : 0.7
                     asynchronous: true
-                    // Caps decode cost to the card's own on-screen size instead
-                    // of decoding at full source resolution for a small tile --
-                    // matters most here since there can be dozens of these
-                    // on screen at once.
-                    sourceSize.width: width
-                    sourceSize.height: height
+                    // Caps decode cost to fixed thumbnail dimensions so Qt Quick
+                    // never decodes full-resolution 4K/24MP original photos when
+                    // width/height evaluate to 0 during delegate instantiation.
+                    sourceSize: Qt.size(240, 168)
                     source: model.thumbnailPath || "qrc:/MediaFlow/qml/assets/video_placeholder.png"
                     Behavior on opacity { NumberAnimation { duration: 200 } }
                 }

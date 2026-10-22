@@ -27,6 +27,7 @@ public:
         bool staged = false;
         bool imported = false;
         long long size = 0;
+        QString languageMarker; // e.g. "_E_", "_S_", or empty
     };
 
     enum Roles {
@@ -43,6 +44,7 @@ public:
     explicit MediaLibraryModel(QObject *parent = nullptr);
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
+    const Row &rowAt(int index) const { return m_rows.at(index); }
     QVariant data(const QModelIndex &index, int role) const override;
     QHash<int, QByteArray> roleNames() const override;
 
@@ -88,5 +90,7 @@ signals:
 
 private:
     QVector<Row> m_rows;
+    QHash<QString, int> m_idToIndex;
+    QHash<QString, QString> m_pathToId;
     quint64 m_thumbnailRevision = 0;
 };

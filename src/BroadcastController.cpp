@@ -1721,7 +1721,7 @@ void BroadcastController::onMediaFound(MediaType type, const QString &name, cons
         m.insert(it.key(), it.value());
 
     indexMediaAsset(m);
-    if (m_thumbManager) m_thumbManager->enqueue(id, absolutePath, typeStr);
+    if (m_thumbManager && type != MediaType::Image) m_thumbManager->enqueue(id, absolutePath, typeStr);
 
     m_pendingMediaBatch.append(m);
     m_pendingMediaPaths.insert(absolutePath);
@@ -1935,7 +1935,7 @@ QString BroadcastController::importOneFile(const QString &absolutePath, const QS
 
     m_libraryModel->appendFromVariantList({m});
     indexMediaAsset(m);
-    if (m_thumbManager) m_thumbManager->enqueue(id, absolutePath, type);
+    if (m_thumbManager && type != QStringLiteral("image")) m_thumbManager->enqueue(id, absolutePath, type);
     return id;
 }
 

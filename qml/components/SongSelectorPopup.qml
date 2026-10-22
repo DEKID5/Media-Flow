@@ -93,6 +93,8 @@ Rectangle {
                     width: 100; height: 60; radius: 6; color: "#0DFFFFFF"; clip: true
                     Image {
                         anchors.fill: parent; fillMode: Image.PreserveAspectCrop
+                        sourceSize: Qt.size(100, 60)
+                        asynchronous: true
                         source: searchResult.found ? (searchResult.thumbnailPath || "qrc:/MediaFlow/qml/assets/video_placeholder.png") : ""
                         visible: searchResult.found
                     }

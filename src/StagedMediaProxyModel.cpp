@@ -2,12 +2,9 @@
 #include "MediaLibraryModel.h"
 #include "SongSearchUtils.h"
 
-#include <QRegularExpression>
-
 StagedMediaProxyModel::StagedMediaProxyModel(QObject *parent)
     : QSortFilterProxyModel(parent)
 {
-    setRecursiveFilteringEnabled(true);
     // Matches the default m_filterType ("segment") -- setFilterType() only
     // calls sort() on an actual change, which a QML binding whose first
     // evaluated value equals the C++ default won't trigger.
@@ -90,60 +87,48 @@ void StagedMediaProxyModel::setLanguageCode(const QString &code)
 
 bool StagedMediaProxyModel::filterAcceptsRow(int source_row, const QModelIndex &source_parent) const
 {
-    QModelIndex idx = sourceModel()->index(source_row, 0, source_parent);
-    const QString type = sourceModel()->data(idx, MediaLibraryModel::TypeRole).toString();
-    const QString name = sourceModel()->data(idx, MediaLibraryModel::NameRole).toString();
-    const QString path = sourceModel()->data(idx, MediaLibraryModel::PathRole).toString();
-    const qsizetype fileNameStart =
-        qMax(path.lastIndexOf(QLatin1Char('/')), path.lastIndexOf(QLatin1Char('\\'))) + 1;
-    const QString fileName = path.mid(fileNameStart);
-    const QString haystack = fileName.isEmpty() ? name : fileName;
+    Q_UNUSED(source_parent);
+    const auto *libModel = static_cast<const MediaLibraryModel*>(sourceModel());
+    if (!libModel)
+        return true;
 
-    if ((type == QStringLiteral("video") || type == QStringLiteral("audio"))) {
-        static const QRegularExpression languageMarker(QStringLiteral("_[A-Z]{1,3}_"));
-        const bool hasLanguageMarker = languageMarker.match(haystack).hasMatch()
-            || languageMarker.match(path).hasMatch();
-        if (hasLanguageMarker) {
-            if (!haystack.contains(m_requiredLangMarker, Qt::CaseInsensitive)
-                && !path.contains(m_requiredLangMarker, Qt::CaseInsensitive))
-                return false;
-        }
+    if (source_row < 0 || source_row >= libModel->rowCount())
+        return false;
+
+    const MediaLibraryModel::Row &row = libModel->rowAt(source_row);
+
+    // 1. Quick check type filter first (e.g. ALL, VIDEO, IMAGE)
+    if (m_typeFilter != QLatin1String("all") && row.type != m_typeFilter)
+        return false;
+
+    // 2. Check view / category filter next
+    if (m_filterType == QLatin1String("category")) {
+        if (!m_categoryFilter.isEmpty() && row.category != m_categoryFilter)
+            return false;
+    } else if (m_filterType == QLatin1String("segment")) {
+        if (m_selectedSegmentId.isEmpty() || !m_stagedIdSet.contains(row.id))
+            return false;
+    } else if (m_filterType == QLatin1String("pinned")) {
+        if (!m_stagedIdSet.contains(row.id))
+            return false;
+    } else if (m_filterType == QLatin1String("imported")) {
+        if (!row.imported)
+            return false;
+    } else if (m_filterType == QLatin1String("videos")) {
+        if (row.type != QLatin1String("video"))
+            return false;
+    } else if (m_filterType == QLatin1String("images")) {
+        if (row.type != QLatin1String("image"))
+            return false;
+    } else if (m_filterType == QLatin1String("audio")) {
+        if (row.type != QLatin1String("audio"))
+            return false;
     }
 
-    if (m_typeFilter != "all" && type != m_typeFilter) return false;
-
-    if (m_filterType == "all") return true;
-
-    if (m_filterType == "segment") {
-        if (m_selectedSegmentId.isEmpty()) return false;
-        const QString assetUuid = sourceModel()->data(idx, MediaLibraryModel::IdRole).toString();
-        return m_stagedIdSet.contains(assetUuid);
-    }
-
-    if (m_filterType == "pinned") {
-        // Reuses stagedIds (set to the selected pin folder's mediaIds) -- no
-        // selectedSegmentId guard, since pin folders aren't tied to a segment.
-        const QString assetUuid = sourceModel()->data(idx, MediaLibraryModel::IdRole).toString();
-        return m_stagedIdSet.contains(assetUuid);
-    }
-
-    if (m_filterType == "imported") {
-        return sourceModel()->data(idx, MediaLibraryModel::ImportedRole).toBool();
-    }
-
-    if (m_filterType == "videos") {
-        return type == "video";
-    }
-    if (m_filterType == "images") {
-        return type == "image";
-    }
-    if (m_filterType == "audio") {
-        return type == "audio";
-    }
-
-    if (m_filterType == "category") {
-        if (m_categoryFilter.isEmpty()) return true;
-        return sourceModel()->data(idx, MediaLibraryModel::CategoryRole).toString() == m_categoryFilter;
+    // 3. Language marker check (only for video/audio)
+    if ((row.type == QLatin1String("video") || row.type == QLatin1String("audio")) && !row.languageMarker.isEmpty()) {
+        if (row.languageMarker.compare(m_requiredLangMarker, Qt::CaseInsensitive) != 0)
+            return false;
     }
 
     return true;
@@ -154,8 +139,12 @@ bool StagedMediaProxyModel::lessThan(const QModelIndex &left, const QModelIndex 
     if (m_filterType != "segment" && m_filterType != "pinned")
         return QSortFilterProxyModel::lessThan(left, right);
 
-    const QString leftId = sourceModel()->data(left, MediaLibraryModel::IdRole).toString();
-    const QString rightId = sourceModel()->data(right, MediaLibraryModel::IdRole).toString();
+    const auto *libModel = static_cast<const MediaLibraryModel*>(sourceModel());
+    if (!libModel)
+        return left.row() < right.row();
+
+    const QString &leftId = libModel->rowAt(left.row()).id;
+    const QString &rightId = libModel->rowAt(right.row()).id;
     const int leftPos = m_stagedPositions.value(leftId, -1);
     const int rightPos = m_stagedPositions.value(rightId, -1);
     return leftPos < rightPos;

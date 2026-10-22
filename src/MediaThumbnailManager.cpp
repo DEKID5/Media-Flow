@@ -258,6 +258,7 @@ void NativeThumbnailGenerator::processNext() {
             emit failed(m_current.id);
             m_processing = false;
             m_player->stop();
+            m_player->setSource(QUrl());
             processNext();
         }
     });
@@ -297,6 +298,7 @@ bool NativeThumbnailGenerator::finishAudioArtwork(bool allowTitleOnly)
     emit finished(m_current.id, thumbnailPath, title);
     m_processing = false;
     m_player->stop();
+    m_player->setSource(QUrl());
     QTimer::singleShot(100, this, &NativeThumbnailGenerator::processNext);
     return true;
 }
@@ -324,6 +326,7 @@ void NativeThumbnailGenerator::onFrameChanged(const QVideoFrame &frame) {
                 emit finished(m_current.id, m_current.cachePath, title);
                 m_processing = false;
                 m_player->stop();
+                m_player->setSource(QUrl());
                 QTimer::singleShot(100, this, &NativeThumbnailGenerator::processNext);
             }
         }
@@ -346,6 +349,7 @@ void NativeThumbnailGenerator::onStatusChanged(QMediaPlayer::MediaStatus status)
                 emit failed(m_current.id);
                 m_processing = false;
                 m_player->stop();
+                m_player->setSource(QUrl());
                 QTimer::singleShot(100, this, &NativeThumbnailGenerator::processNext);
             });
             return;

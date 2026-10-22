@@ -808,7 +808,8 @@ Item {
 
                                                     Image {
                                                         anchors.fill: parent; fillMode: Image.PreserveAspectCrop
-                                                        cache: false
+                                                        sourceSize: Qt.size(64, 36)
+                                                        asynchronous: true
                                                         source: asset.thumbnailPath || "qrc:/MediaFlow/qml/assets/video_placeholder.png"
                                                         opacity: 0.8
                                                     }

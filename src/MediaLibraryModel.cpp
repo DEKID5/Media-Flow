@@ -1,6 +1,7 @@
 #include "MediaLibraryModel.h"
 #include <QDebug>
 #include <QUrl>
+#include <QRegularExpression>
 
 MediaLibraryModel::MediaLibraryModel(QObject *parent)
     : QAbstractListModel(parent)
@@ -47,7 +48,13 @@ QHash<int, QByteArray> MediaLibraryModel::roleNames() const
 void MediaLibraryModel::appendFromVariantList(const QVariantList &list)
 {
     if (list.isEmpty()) return;
+    static const QRegularExpression langRegex(QStringLiteral("_[A-Z]{1,3}_"));
+
     beginInsertRows(QModelIndex(), m_rows.size(), m_rows.size() + list.size() - 1);
+    m_rows.reserve(m_rows.size() + list.size());
+    m_idToIndex.reserve(m_idToIndex.size() + list.size());
+    m_pathToId.reserve(m_pathToId.size() + list.size());
+
     for (const QVariant &v : list) {
         QVariantMap m = v.toMap();
         Row r;
@@ -59,6 +66,19 @@ void MediaLibraryModel::appendFromVariantList(const QVariantList &list)
         r.staged = m["isStaged"].toBool();
         r.imported = m["isImported"].toBool();
         r.category = m["category"].toString();
+
+        if (r.type == QLatin1String("video") || r.type == QLatin1String("audio")) {
+            const qsizetype fileNameStart = qMax(r.path.lastIndexOf(QLatin1Char('/')), r.path.lastIndexOf(QLatin1Char('\\'))) + 1;
+            const QString fileName = r.path.mid(fileNameStart);
+            const QString haystack = fileName.isEmpty() ? r.name : fileName;
+            auto match = langRegex.match(haystack);
+            if (!match.hasMatch()) match = langRegex.match(r.path);
+            if (match.hasMatch()) r.languageMarker = match.captured(0);
+        }
+
+        const int newIdx = m_rows.size();
+        m_idToIndex.insert(r.id, newIdx);
+        m_pathToId.insert(r.path, r.id);
         m_rows.append(r);
     }
     endInsertRows();
@@ -67,17 +87,16 @@ void MediaLibraryModel::appendFromVariantList(const QVariantList &list)
 
 void MediaLibraryModel::updateThumbnail(const QString &id, const QString &path)
 {
-    for (int i = 0; i < m_rows.size(); ++i) {
-        if (m_rows[i].id == id) {
-            if (m_rows[i].thumbnail == path)
-                return;
-            m_rows[i].thumbnail = path;
-            ++m_thumbnailRevision;
-            emit dataChanged(index(i), index(i), {ThumbnailRole});
-            emit thumbnailRevisionChanged();
-            return;
-        }
-    }
+    const auto it = m_idToIndex.constFind(id);
+    if (it == m_idToIndex.constEnd() || it.value() < 0 || it.value() >= m_rows.size())
+        return;
+    const int i = it.value();
+    if (m_rows[i].thumbnail == path)
+        return;
+    m_rows[i].thumbnail = path;
+    ++m_thumbnailRevision;
+    emit dataChanged(index(i), index(i), {ThumbnailRole});
+    emit thumbnailRevisionChanged();
 }
 
 QStringList MediaLibraryModel::categories() const
@@ -92,26 +111,26 @@ QStringList MediaLibraryModel::categories() const
 
 QVariantMap MediaLibraryModel::getRowById(const QString &id) const
 {
-    for (const auto &r : m_rows) {
-        if (r.id == id) {
-            QVariantMap m;
-            m.insert("id", r.id);
-            m.insert("name", r.name);
-            m.insert("type", r.type);
-            m.insert("absolutePath", r.path);
-            m.insert("thumbnailPath", r.thumbnail);
-            m.insert("isStaged", r.staged);
-            m.insert("isImported", r.imported);
-            m.insert("category", r.category);
-            return m;
-        }
-    }
-    return {};
+    const auto it = m_idToIndex.constFind(id);
+    if (it == m_idToIndex.constEnd() || it.value() < 0 || it.value() >= m_rows.size())
+        return {};
+    const auto &r = m_rows.at(it.value());
+    QVariantMap m;
+    m.insert("id", r.id);
+    m.insert("name", r.name);
+    m.insert("type", r.type);
+    m.insert("absolutePath", r.path);
+    m.insert("thumbnailPath", r.thumbnail);
+    m.insert("isStaged", r.staged);
+    m.insert("isImported", r.imported);
+    m.insert("category", r.category);
+    return m;
 }
 
 QVariantList MediaLibraryModel::toVariantList() const
 {
     QVariantList items;
+    items.reserve(m_rows.size());
     for (const auto &r : m_rows) {
         QVariantMap m;
         m.insert("id", r.id);
@@ -144,15 +163,18 @@ void MediaLibraryModel::renameCategory(const QString &oldName, const QString &ne
 
 void MediaLibraryModel::removeMedia(const QString &id)
 {
+    const auto it = m_idToIndex.find(id);
+    if (it == m_idToIndex.end()) return;
+    const int idx = it.value();
+    beginRemoveRows(QModelIndex(), idx, idx);
+    m_pathToId.remove(m_rows[idx].path);
+    m_rows.removeAt(idx);
+    m_idToIndex.clear();
     for (int i = 0; i < m_rows.size(); ++i) {
-        if (m_rows[i].id == id) {
-            beginRemoveRows(QModelIndex(), i, i);
-            m_rows.removeAt(i);
-            endRemoveRows();
-            emit categoriesChanged();
-            return;
-        }
+        m_idToIndex.insert(m_rows[i].id, i);
     }
+    endRemoveRows();
+    emit categoriesChanged();
 }
 
 void MediaLibraryModel::clear()
@@ -160,48 +182,45 @@ void MediaLibraryModel::clear()
     if (m_rows.isEmpty()) return;
     beginResetModel();
     m_rows.clear();
+    m_idToIndex.clear();
+    m_pathToId.clear();
     endResetModel();
     emit categoriesChanged();
 }
 
 bool MediaLibraryModel::containsPath(const QString &path) const
 {
-    return !idOfPath(path).isEmpty();
+    return m_pathToId.contains(path);
 }
 
 QString MediaLibraryModel::idOfPath(const QString &path) const
 {
-    for (const auto &r : m_rows) {
-        if (r.path == path) return r.id;
-    }
-    return "";
+    return m_pathToId.value(path);
 }
 
 void MediaLibraryModel::updateName(const QString &id, const QString &newName)
 {
     if (newName.isEmpty()) return;
-    for (int i = 0; i < m_rows.size(); ++i) {
-        if (m_rows[i].id == id) {
-            m_rows[i].name = newName;
-            emit dataChanged(index(i), index(i), {NameRole});
-            return;
-        }
-    }
+    const auto it = m_idToIndex.constFind(id);
+    if (it == m_idToIndex.constEnd() || it.value() < 0 || it.value() >= m_rows.size())
+        return;
+    const int i = it.value();
+    m_rows[i].name = newName;
+    emit dataChanged(index(i), index(i), {NameRole});
 }
 
 void MediaLibraryModel::markImported(const QString &id, const QString &category)
 {
-    for (int i = 0; i < m_rows.size(); ++i) {
-        if (m_rows[i].id != id)
-            continue;
-        if (m_rows[i].imported && m_rows[i].category == category)
-            return;
-        m_rows[i].imported = true;
-        const bool categoryChanged = m_rows[i].category != category;
-        m_rows[i].category = category;
-        emit dataChanged(index(i), index(i), {ImportedRole, CategoryRole});
-        if (categoryChanged)
-            emit categoriesChanged();
+    const auto it = m_idToIndex.constFind(id);
+    if (it == m_idToIndex.constEnd() || it.value() < 0 || it.value() >= m_rows.size())
         return;
-    }
+    const int i = it.value();
+    if (m_rows[i].imported && m_rows[i].category == category)
+        return;
+    m_rows[i].imported = true;
+    const bool categoryChanged = m_rows[i].category != category;
+    m_rows[i].category = category;
+    emit dataChanged(index(i), index(i), {ImportedRole, CategoryRole});
+    if (categoryChanged)
+        emit categoriesChanged();
 }
