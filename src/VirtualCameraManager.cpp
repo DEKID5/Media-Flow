@@ -234,24 +234,28 @@ void VirtualCameraManager::processFrame()
             uint8_t *y0 = yPlane + static_cast<size_t>(j) * w;
             uint8_t *y1 = y0 + w;
 
-            for (int i = 0; i < w; ++i) {
-                const uchar *p0 = r0 + i * 4;
-                const uchar *p1 = r1 + i * 4;
-                y0[i] = static_cast<uint8_t>(((66 * p0[0] + 129 * p0[1] + 25 * p0[2] + 128) >> 8) + 16);
-                y1[i] = static_cast<uint8_t>(((66 * p1[0] + 129 * p1[1] + 25 * p1[2] + 128) >> 8) + 16);
-            }
-
-            // Average all 4 pixels in each 2x2 block rather than just
-            // sampling the top-left one -- point-sampling aliases color
-            // edges (sharp-colored text/logos) more than a proper box
-            // filter does.
             uint8_t *uv = uvPlane + static_cast<size_t>(j / 2) * w;
             for (int i = 0; i < w; i += 2) {
-                const uchar *a = r0 + i * 4;
-                const uchar *b = r1 + i * 4;
-                const int rAvg = (a[0] + a[4] + b[0] + b[4] + 2) >> 2;
-                const int gAvg = (a[1] + a[5] + b[1] + b[5] + 2) >> 2;
-                const int bAvg = (a[2] + a[6] + b[2] + b[6] + 2) >> 2;
+                const uchar *p0 = r0 + i * 4;
+                const uchar *p1 = r1 + i * 4;
+
+                const int r00 = p0[0], g00 = p0[1], b00 = p0[2];
+                const int r01 = p0[4], g01 = p0[5], b01 = p0[6];
+                const int r10 = p1[0], g10 = p1[1], b10 = p1[2];
+                const int r11 = p1[4], g11 = p1[5], b11 = p1[6];
+
+                y0[i]     = static_cast<uint8_t>(((66 * r00 + 129 * g00 + 25 * b00 + 128) >> 8) + 16);
+                y0[i + 1] = static_cast<uint8_t>(((66 * r01 + 129 * g01 + 25 * b01 + 128) >> 8) + 16);
+                y1[i]     = static_cast<uint8_t>(((66 * r10 + 129 * g10 + 25 * b10 + 128) >> 8) + 16);
+                y1[i + 1] = static_cast<uint8_t>(((66 * r11 + 129 * g11 + 25 * b11 + 128) >> 8) + 16);
+
+                // Average all 4 pixels in each 2x2 block rather than just
+                // sampling the top-left one -- point-sampling aliases color
+                // edges (sharp-colored text/logos) more than a proper box
+                // filter does.
+                const int rAvg = (r00 + r01 + r10 + r11 + 2) >> 2;
+                const int gAvg = (g00 + g01 + g10 + g11 + 2) >> 2;
+                const int bAvg = (b00 + b01 + b10 + b11 + 2) >> 2;
                 uv[i]     = static_cast<uint8_t>(((-38 * rAvg - 74 * gAvg + 112 * bAvg + 128) >> 8) + 128);
                 uv[i + 1] = static_cast<uint8_t>(((112 * rAvg - 94 * gAvg - 18 * bAvg + 128) >> 8) + 128);
             }

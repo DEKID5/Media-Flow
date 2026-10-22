@@ -245,6 +245,12 @@ BroadcastController::BroadcastController(QQmlApplicationEngine *engine, QObject 
     m_programCameraDevice = QMediaDevices::defaultVideoInput();
     m_roomAudioOutputDevice = QMediaDevices::defaultAudioOutput();
     m_filterProxy->setSourceModel(m_libraryModel);
+
+    m_mediaBatchTimer = new QTimer(this);
+    m_mediaBatchTimer->setInterval(30);
+    m_mediaBatchTimer->setSingleShot(true);
+    connect(m_mediaBatchTimer, &QTimer::timeout, this, &BroadcastController::flushPendingMediaBatch);
+
     connect(m_libraryModel, &QAbstractItemModel::rowsInserted, this, [this]() {
         m_bgmLibraryDirty = true;
         emit bgmLibraryChanged();
@@ -1657,11 +1663,23 @@ void BroadcastController::indexMediaAsset(const QVariantMap &asset)
     }
 }
 
+void BroadcastController::flushPendingMediaBatch()
+{
+    if (m_mediaBatchTimer && m_mediaBatchTimer->isActive())
+        m_mediaBatchTimer->stop();
+    if (m_pendingMediaBatch.isEmpty())
+        return;
+    m_libraryModel->appendFromVariantList(m_pendingMediaBatch);
+    m_pendingMediaBatch.clear();
+    m_pendingMediaPaths.clear();
+}
+
 void BroadcastController::onMediaFound(MediaType type, const QString &name, const QString &absolutePath, const QDateTime &creationDate)
 {
     Q_UNUSED(creationDate);
-    if (m_libraryModel->containsPath(absolutePath)) {
-        indexMediaAsset(m_libraryModel->getRowById(m_libraryModel->idOfPath(absolutePath)));
+    if (m_libraryModel->containsPath(absolutePath) || m_pendingMediaPaths.contains(absolutePath)) {
+        if (m_libraryModel->containsPath(absolutePath))
+            indexMediaAsset(m_libraryModel->getRowById(m_libraryModel->idOfPath(absolutePath)));
         return;
     }
 
@@ -1702,13 +1720,21 @@ void BroadcastController::onMediaFound(MediaType type, const QString &name, cons
     for (auto it = songMetadata.cbegin(); it != songMetadata.cend(); ++it)
         m.insert(it.key(), it.value());
 
-    m_libraryModel->appendFromVariantList({m});
     indexMediaAsset(m);
     if (m_thumbManager) m_thumbManager->enqueue(id, absolutePath, typeStr);
+
+    m_pendingMediaBatch.append(m);
+    m_pendingMediaPaths.insert(absolutePath);
+    if (m_pendingMediaBatch.size() >= 50) {
+        flushPendingMediaBatch();
+    } else if (m_mediaBatchTimer && !m_mediaBatchTimer->isActive()) {
+        m_mediaBatchTimer->start();
+    }
 }
 
 void BroadcastController::onScanFinished()
 {
+    flushPendingMediaBatch();
     m_scanStatus = tr("Scan complete.");
     emit scanStatusChanged();
     emit bgmLibraryChanged();

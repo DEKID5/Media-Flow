@@ -66,6 +66,7 @@ private:
     QString m_categoryFilter;
     QString m_typeFilter = "all";
     QString m_languageCode = "E";
+    QString m_requiredLangMarker = QStringLiteral("_E_");
     QStringList m_stagedIds;
     QSet<QString> m_stagedIdSet;
     QHash<QString, int> m_stagedPositions;

@@ -1,9 +1,13 @@
 cmake_minimum_required(VERSION 3.21)
-project(MediaFlow VERSION 1.0.51 LANGUAGES CXX C) # C needed for vendored third_party/miniz
+project(MediaFlow VERSION 1.0.52 LANGUAGES CXX C) # C needed for vendored third_party/miniz
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
+
+if(MSVC)
+    add_compile_options(/MP /Gy /Gw)
+endif()
 
 find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Qml Quick QuickControls2 Sql Multimedia Concurrent Network)
 

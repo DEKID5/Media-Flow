@@ -402,9 +402,13 @@ private:
     QString importOneFile(const QString &absolutePath, const QString &category);
     static QStringList expandDroppedMedia(const QStringList &pathsOrUrls);
     static QString normalizeDroppedPath(const QString &pathOrUrl);
+    void flushPendingMediaBatch();
 
     QQmlApplicationEngine *m_engine;
     MediaLibraryModel *m_libraryModel = nullptr;
+    QVariantList m_pendingMediaBatch;
+    QSet<QString> m_pendingMediaPaths;
+    QTimer *m_mediaBatchTimer = nullptr;
     StagedMediaProxyModel *m_filterProxy;
     MeetingScheduleModel *m_meetingModel = nullptr;
     CameraDeviceModel *m_cameraModel;

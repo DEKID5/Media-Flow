@@ -782,97 +782,99 @@ QStringList WorkbookManager::bookStudyImages(const QString &lang,
     int linkedImageCount = 0;
     int missingImageCount = 0;
     {
-        QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
-        db.setDatabaseName(dbPath);
-        if (!db.open()) {
-            qWarning() << "WorkbookManager: couldn't open WCG publication database:"
-                       << db.lastError().text();
-        } else {
-            for (const int chapter : chapters) {
-                int documentId = -1;
-                qint64 mepsDocumentId = 0;
-                {
-                    QSqlQuery documentQuery(db);
-                    documentQuery.prepare(QStringLiteral(
-                        "SELECT d.DocumentId, d.MepsDocumentId "
-                        "FROM Document d JOIN Publication p ON p.PublicationId = d.PublicationId "
-                        "WHERE d.ChapterNumber = ? AND LOWER(p.UniqueEnglishSymbol) = 'wcg' "
-                        "ORDER BY d.DocumentId LIMIT 1"));
-                    documentQuery.addBindValue(chapter);
-                    if (documentQuery.exec() && documentQuery.next()) {
-                        documentId = documentQuery.value(0).toInt();
-                        mepsDocumentId = documentQuery.value(1).toLongLong();
-                    } else if (documentQuery.lastError().isValid()) {
-                        qWarning() << "WorkbookManager: couldn't find WCG chapter" << chapter
-                                   << "in the local publication:"
-                                   << documentQuery.lastError().text();
+        {
+            QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
+            db.setDatabaseName(dbPath);
+            if (!db.open()) {
+                qWarning() << "WorkbookManager: couldn't open WCG publication database:"
+                           << db.lastError().text();
+            } else {
+                for (const int chapter : chapters) {
+                    int documentId = -1;
+                    qint64 mepsDocumentId = 0;
+                    {
+                        QSqlQuery documentQuery(db);
+                        documentQuery.prepare(QStringLiteral(
+                            "SELECT d.DocumentId, d.MepsDocumentId "
+                            "FROM Document d JOIN Publication p ON p.PublicationId = d.PublicationId "
+                            "WHERE d.ChapterNumber = ? AND LOWER(p.UniqueEnglishSymbol) = 'wcg' "
+                            "ORDER BY d.DocumentId LIMIT 1"));
+                        documentQuery.addBindValue(chapter);
+                        if (documentQuery.exec() && documentQuery.next()) {
+                            documentId = documentQuery.value(0).toInt();
+                            mepsDocumentId = documentQuery.value(1).toLongLong();
+                        } else if (documentQuery.lastError().isValid()) {
+                            qWarning() << "WorkbookManager: couldn't find WCG chapter" << chapter
+                                       << "in the local publication:"
+                                       << documentQuery.lastError().text();
+                        }
                     }
-                }
-                if (documentId < 0 || mepsDocumentId <= 0) {
-                    qWarning() << "WorkbookManager: WCG chapter" << chapter
-                               << "is unavailable in the local publication";
-                    continue;
-                }
-
-                QSqlQuery imageQuery(db);
-                imageQuery.prepare(QStringLiteral(
-                    "SELECT m.FilePath, m.MimeType FROM DocumentMultimedia dm "
-                    "JOIN Multimedia m ON m.MultimediaId = dm.MultimediaId "
-                    "WHERE dm.DocumentId = ? AND LOWER(m.MimeType) LIKE 'image/%' "
-                    "ORDER BY dm.DocumentMultimediaId"));
-                imageQuery.addBindValue(documentId);
-                if (!imageQuery.exec()) {
-                    qWarning() << "WorkbookManager: couldn't read WCG chapter image references:"
-                               << imageQuery.lastError().text();
-                    continue;
-                }
-
-                while (imageQuery.next()) {
-                    const QString relativePath = imageQuery.value(0).toString();
-                    const QString mimeType = imageQuery.value(1).toString();
-                    const QFileInfo relativeInfo(relativePath);
-                    const QString suffix = relativeInfo.suffix().toLower();
-                    if (!mimeType.startsWith(QStringLiteral("image/"), Qt::CaseInsensitive)
-                        || (suffix != QStringLiteral("jpg")
-                            && suffix != QStringLiteral("jpeg")
-                            && suffix != QStringLiteral("png")
-                            && suffix != QStringLiteral("webp"))) {
+                    if (documentId < 0 || mepsDocumentId <= 0) {
+                        qWarning() << "WorkbookManager: WCG chapter" << chapter
+                                   << "is unavailable in the local publication";
                         continue;
                     }
 
-                    // WCG's chapter-specific illustrations carry the chapter
-                    // document's MEPS id in their filename. The DB also
-                    // associates some shared publication media with each
-                    // chapter, so exclude those rather than showing them as
-                    // if they belonged to the selected chapter.
-                    const QString expectedPrefix =
-                        QString::number(mepsDocumentId) + QLatin1Char('_');
-                    if (!relativeInfo.fileName().startsWith(expectedPrefix))
-                        continue;
-
-                    QString path = relativePath;
-                    if (QDir::isRelativePath(path))
-                        path = QDir(m_bookStudyPublicationFolder).filePath(path);
-                    const QFileInfo imageInfo(path);
-                    const QString absolutePath = imageInfo.absoluteFilePath();
-                    if (seenPaths.contains(absolutePath))
-                        continue;
-                    seenPaths.insert(absolutePath);
-                    if (!imageInfo.exists() || !imageInfo.isFile()) {
-                        ++missingImageCount;
-                        qWarning() << "WorkbookManager: WCG chapter illustration is unavailable:"
-                                   << absolutePath;
+                    QSqlQuery imageQuery(db);
+                    imageQuery.prepare(QStringLiteral(
+                        "SELECT m.FilePath, m.MimeType FROM DocumentMultimedia dm "
+                        "JOIN Multimedia m ON m.MultimediaId = dm.MultimediaId "
+                        "WHERE dm.DocumentId = ? AND LOWER(m.MimeType) LIKE 'image/%' "
+                        "ORDER BY dm.DocumentMultimediaId"));
+                    imageQuery.addBindValue(documentId);
+                    if (!imageQuery.exec()) {
+                        qWarning() << "WorkbookManager: couldn't read WCG chapter image references:"
+                                   << imageQuery.lastError().text();
                         continue;
                     }
 
-                    const QString mediaId = m_controller->ensureWorkbookMedia(absolutePath);
-                    if (!mediaId.isEmpty() && !mediaIds.contains(mediaId)) {
-                        mediaIds.append(mediaId);
-                        ++linkedImageCount;
+                    while (imageQuery.next()) {
+                        const QString relativePath = imageQuery.value(0).toString();
+                        const QString mimeType = imageQuery.value(1).toString();
+                        const QFileInfo relativeInfo(relativePath);
+                        const QString suffix = relativeInfo.suffix().toLower();
+                        if (!mimeType.startsWith(QStringLiteral("image/"), Qt::CaseInsensitive)
+                            || (suffix != QStringLiteral("jpg")
+                                && suffix != QStringLiteral("jpeg")
+                                && suffix != QStringLiteral("png")
+                                && suffix != QStringLiteral("webp"))) {
+                            continue;
+                        }
+
+                        // WCG's chapter-specific illustrations carry the chapter
+                        // document's MEPS id in their filename. The DB also
+                        // associates some shared publication media with each
+                        // chapter, so exclude those rather than showing them as
+                        // if they belonged to the selected chapter.
+                        const QString expectedPrefix =
+                            QString::number(mepsDocumentId) + QLatin1Char('_');
+                        if (!relativeInfo.fileName().startsWith(expectedPrefix))
+                            continue;
+
+                        QString path = relativePath;
+                        if (QDir::isRelativePath(path))
+                            path = QDir(m_bookStudyPublicationFolder).filePath(path);
+                        const QFileInfo imageInfo(path);
+                        const QString absolutePath = imageInfo.absoluteFilePath();
+                        if (seenPaths.contains(absolutePath))
+                            continue;
+                        seenPaths.insert(absolutePath);
+                        if (!imageInfo.exists() || !imageInfo.isFile()) {
+                            ++missingImageCount;
+                            qWarning() << "WorkbookManager: WCG chapter illustration is unavailable:"
+                                       << absolutePath;
+                            continue;
+                        }
+
+                        const QString mediaId = m_controller->ensureWorkbookMedia(absolutePath);
+                        if (!mediaId.isEmpty() && !mediaIds.contains(mediaId)) {
+                            mediaIds.append(mediaId);
+                            ++linkedImageCount;
+                        }
                     }
                 }
+                db.close();
             }
-            db.close();
         }
         QSqlDatabase::removeDatabase(connectionName);
     }
@@ -940,26 +942,28 @@ bool WorkbookManager::applyFromLocalMwb(const QString &lang, const QDate &target
     QList<int> songNumbers;
     {
         const QString connName = QUuid::createUuid().toString();
-        QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
-        db.setDatabaseName(best.dbPath);
-        if (db.open()) {
-            {
-                QSqlQuery q(db);
-                // "sjjm" is the song-video/audio publication symbol; its Track
-                // number is the song number, in document (opening/middle/
-                // concluding) order -- confirmed against a real local database.
-                // Capped at 3 via LIMIT so an unrelated extra sjjm-tagged row
-                // elsewhere in the document can't silently shift which song
-                // lands on which segment (m1/m7/m11).
-                q.prepare(QStringLiteral(
-                    "SELECT m.Track FROM DocumentMultimedia dm "
-                    "JOIN Multimedia m ON dm.MultimediaId = m.MultimediaId "
-                    "WHERE dm.DocumentId = ? AND m.KeySymbol = 'sjjm' "
-                    "ORDER BY dm.MultimediaId LIMIT 3"));
-                q.addBindValue(best.docId);
-                if (q.exec()) { while (q.next()) songNumbers.append(q.value(0).toInt()); }
+        {
+            QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
+            db.setDatabaseName(best.dbPath);
+            if (db.open()) {
+                {
+                    QSqlQuery q(db);
+                    // "sjjm" is the song-video/audio publication symbol; its Track
+                    // number is the song number, in document (opening/middle/
+                    // concluding) order -- confirmed against a real local database.
+                    // Capped at 3 via LIMIT so an unrelated extra sjjm-tagged row
+                    // elsewhere in the document can't silently shift which song
+                    // lands on which segment (m1/m7/m11).
+                    q.prepare(QStringLiteral(
+                        "SELECT m.Track FROM DocumentMultimedia dm "
+                        "JOIN Multimedia m ON dm.MultimediaId = m.MultimediaId "
+                        "WHERE dm.DocumentId = ? AND m.KeySymbol = 'sjjm' "
+                        "ORDER BY dm.MultimediaId LIMIT 3"));
+                    q.addBindValue(best.docId);
+                    if (q.exec()) { while (q.next()) songNumbers.append(q.value(0).toInt()); }
+                }
+                db.close();
             }
-            db.close();
         }
         QSqlDatabase::removeDatabase(connName);
     }
@@ -1180,61 +1184,63 @@ bool WorkbookManager::applyFromLocalWatchtower(const QString &lang, const QDate 
     QList<QPair<QString, QString>> images;
     {
         const QString connName = QUuid::createUuid().toString();
-        QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
-        db.setDatabaseName(best.dbPath);
-        if (db.open()) {
-            {
-                QSqlQuery sq(db);
-                // Capped at 2 via LIMIT -- see the comment below on why this
-                // article only ever carries the middle/closing songs -- so an
-                // unrelated extra sjjm-tagged row can't silently shift w6 to
-                // the wrong song.
-                sq.prepare(QStringLiteral(
-                    "SELECT m.Track FROM DocumentMultimedia dm "
-                    "JOIN Multimedia m ON dm.MultimediaId = m.MultimediaId "
-                    "WHERE dm.DocumentId = ? AND m.KeySymbol = 'sjjm' "
-                    "ORDER BY dm.MultimediaId LIMIT 2"));
-                sq.addBindValue(best.docId);
-                if (sq.exec()) { while (sq.next()) songNumbers.append(sq.value(0).toInt()); }
-                else {
-                    qWarning() << "WorkbookManager: couldn't read Watchtower song references:"
-                               << sq.lastError().text();
-                }
-            }
-            {
-                QSqlQuery imageQuery(db);
-                imageQuery.prepare(QStringLiteral(
-                    "SELECT m.FilePath FROM DocumentMultimedia dm "
-                    "JOIN Multimedia m ON dm.MultimediaId = m.MultimediaId "
-                    "WHERE dm.DocumentId = ? AND LOWER(m.MimeType) LIKE 'image/%' "
-                    "ORDER BY dm.DocumentMultimediaId"));
-                imageQuery.addBindValue(best.docId);
-                if (imageQuery.exec()) {
-                    while (imageQuery.next()) {
-                        QString path = imageQuery.value(0).toString();
-                        if (path.isEmpty())
-                            continue;
-                        if (QDir::isRelativePath(path))
-                            path = QDir(best.folder).filePath(path);
-                        const QFileInfo imageInfo(path);
-                        if (!imageInfo.exists() || !imageInfo.isFile()) {
-                            qWarning() << "WorkbookManager: Watchtower illustration is unavailable:"
-                                       << imageInfo.absoluteFilePath();
-                            continue;
-                        }
-                        images.append({
-                            QStringLiteral("wtimg_%1_%2")
-                                .arg(best.docId)
-                                .arg(imageInfo.fileName()),
-                            imageInfo.absoluteFilePath()
-                        });
+        {
+            QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
+            db.setDatabaseName(best.dbPath);
+            if (db.open()) {
+                {
+                    QSqlQuery sq(db);
+                    // Capped at 2 via LIMIT -- see the comment below on why this
+                    // article only ever carries the middle/closing songs -- so an
+                    // unrelated extra sjjm-tagged row can't silently shift w6 to
+                    // the wrong song.
+                    sq.prepare(QStringLiteral(
+                        "SELECT m.Track FROM DocumentMultimedia dm "
+                        "JOIN Multimedia m ON dm.MultimediaId = m.MultimediaId "
+                        "WHERE dm.DocumentId = ? AND m.KeySymbol = 'sjjm' "
+                        "ORDER BY dm.MultimediaId LIMIT 2"));
+                    sq.addBindValue(best.docId);
+                    if (sq.exec()) { while (sq.next()) songNumbers.append(sq.value(0).toInt()); }
+                    else {
+                        qWarning() << "WorkbookManager: couldn't read Watchtower song references:"
+                                   << sq.lastError().text();
                     }
-                } else {
-                    qWarning() << "WorkbookManager: couldn't read Watchtower image references:"
-                               << imageQuery.lastError().text();
                 }
+                {
+                    QSqlQuery imageQuery(db);
+                    imageQuery.prepare(QStringLiteral(
+                        "SELECT m.FilePath FROM DocumentMultimedia dm "
+                        "JOIN Multimedia m ON dm.MultimediaId = m.MultimediaId "
+                        "WHERE dm.DocumentId = ? AND LOWER(m.MimeType) LIKE 'image/%' "
+                        "ORDER BY dm.DocumentMultimediaId"));
+                    imageQuery.addBindValue(best.docId);
+                    if (imageQuery.exec()) {
+                        while (imageQuery.next()) {
+                            QString path = imageQuery.value(0).toString();
+                            if (path.isEmpty())
+                                continue;
+                            if (QDir::isRelativePath(path))
+                                path = QDir(best.folder).filePath(path);
+                            const QFileInfo imageInfo(path);
+                            if (!imageInfo.exists() || !imageInfo.isFile()) {
+                                qWarning() << "WorkbookManager: Watchtower illustration is unavailable:"
+                                           << imageInfo.absoluteFilePath();
+                                continue;
+                            }
+                            images.append({
+                                QStringLiteral("wtimg_%1_%2")
+                                    .arg(best.docId)
+                                    .arg(imageInfo.fileName()),
+                                imageInfo.absoluteFilePath()
+                            });
+                        }
+                    } else {
+                        qWarning() << "WorkbookManager: couldn't read Watchtower image references:"
+                                   << imageQuery.lastError().text();
+                    }
+                }
+                db.close();
             }
-            db.close();
         }
         QSqlDatabase::removeDatabase(connName);
     }

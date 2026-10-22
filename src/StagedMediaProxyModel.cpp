@@ -81,6 +81,7 @@ void StagedMediaProxyModel::setLanguageCode(const QString &code)
     const QString normalized = SongSearchUtils::normalizeLanguageCode(code);
     if (m_languageCode != normalized) {
         m_languageCode = normalized;
+        m_requiredLangMarker = QStringLiteral("_%1_").arg(m_languageCode);
         invalidateFilter();
         emit languageCodeChanged();
         emit filterChanged();
@@ -103,9 +104,8 @@ bool StagedMediaProxyModel::filterAcceptsRow(int source_row, const QModelIndex &
         const bool hasLanguageMarker = languageMarker.match(haystack).hasMatch()
             || languageMarker.match(path).hasMatch();
         if (hasLanguageMarker) {
-            const QString required = QStringLiteral("_%1_").arg(m_languageCode);
-            if (!haystack.contains(required, Qt::CaseInsensitive)
-                && !path.contains(required, Qt::CaseInsensitive))
+            if (!haystack.contains(m_requiredLangMarker, Qt::CaseInsensitive)
+                && !path.contains(m_requiredLangMarker, Qt::CaseInsensitive))
                 return false;
         }
     }

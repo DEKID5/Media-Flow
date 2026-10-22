@@ -44,9 +44,9 @@ QString fileNameFromMediaMap(const QVariantMap &media)
 
 namespace SongSearchUtils {
 
-QVariantList supportedLanguages()
+const QVariantList &supportedLanguagesRef()
 {
-    return {
+    static const QVariantList s_languages = {
         QVariantMap{{QStringLiteral("name"), QStringLiteral("English")}, {QStringLiteral("code"), QStringLiteral("E")}},
         QVariantMap{{QStringLiteral("name"), QStringLiteral("Ewe")}, {QStringLiteral("code"), QStringLiteral("EW")}},
         QVariantMap{{QStringLiteral("name"), QStringLiteral("Twi")}, {QStringLiteral("code"), QStringLiteral("TW")}},
@@ -54,13 +54,19 @@ QVariantList supportedLanguages()
         QVariantMap{{QStringLiteral("name"), QStringLiteral("French")}, {QStringLiteral("code"), QStringLiteral("F")}},
         QVariantMap{{QStringLiteral("name"), QStringLiteral("Spanish")}, {QStringLiteral("code"), QStringLiteral("S")}}
     };
+    return s_languages;
+}
+
+QVariantList supportedLanguages()
+{
+    return supportedLanguagesRef();
 }
 
 QString normalizeLanguageCode(const QString &language)
 {
     const QString trimmed = language.trimmed();
     const QString upper = trimmed.toUpper();
-    for (const QVariant &item : supportedLanguages()) {
+    for (const QVariant &item : supportedLanguagesRef()) {
         const QVariantMap lang = item.toMap();
         if (lang.value(QStringLiteral("code")).toString().compare(upper, Qt::CaseInsensitive) == 0
             || lang.value(QStringLiteral("name")).toString().compare(trimmed, Qt::CaseInsensitive) == 0) {
@@ -73,7 +79,7 @@ QString normalizeLanguageCode(const QString &language)
 QString languageNameForCode(const QString &languageCode)
 {
     const QString code = normalizeLanguageCode(languageCode);
-    for (const QVariant &item : supportedLanguages()) {
+    for (const QVariant &item : supportedLanguagesRef()) {
         const QVariantMap lang = item.toMap();
         if (lang.value(QStringLiteral("code")).toString() == code)
             return lang.value(QStringLiteral("name")).toString();
