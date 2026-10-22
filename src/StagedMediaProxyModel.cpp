@@ -139,13 +139,20 @@ bool StagedMediaProxyModel::lessThan(const QModelIndex &left, const QModelIndex 
     if (m_filterType != "segment" && m_filterType != "pinned")
         return QSortFilterProxyModel::lessThan(left, right);
 
-    const auto *libModel = static_cast<const MediaLibraryModel*>(sourceModel());
+    const auto *libModel = qobject_cast<const MediaLibraryModel*>(sourceModel());
     if (!libModel)
+        return left.row() < right.row();
+
+    if (left.row() < 0 || left.row() >= libModel->rowCount() ||
+        right.row() < 0 || right.row() >= libModel->rowCount())
         return left.row() < right.row();
 
     const QString &leftId = libModel->rowAt(left.row()).id;
     const QString &rightId = libModel->rowAt(right.row()).id;
     const int leftPos = m_stagedPositions.value(leftId, -1);
     const int rightPos = m_stagedPositions.value(rightId, -1);
-    return leftPos < rightPos;
+    if (leftPos != -1 && rightPos != -1) return leftPos < rightPos;
+    if (leftPos != -1) return true;
+    if (rightPos != -1) return false;
+    return left.row() < right.row();
 }

@@ -14,6 +14,14 @@ int MediaLibraryModel::rowCount(const QModelIndex &parent) const
     return m_rows.size();
 }
 
+const MediaLibraryModel::Row &MediaLibraryModel::rowAt(int index) const
+{
+    static const Row s_emptyRow{};
+    if (index >= 0 && index < m_rows.size())
+        return m_rows.at(index);
+    return s_emptyRow;
+}
+
 QVariant MediaLibraryModel::data(const QModelIndex &index, int role) const
 {
     if (!index.isValid() || index.row() >= m_rows.size()) return {};
