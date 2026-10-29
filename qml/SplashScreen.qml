@@ -12,27 +12,42 @@ Item {
     property bool scanReady: (MediaFlowBackend || {}).initialScanComplete === true
     property bool closed: false
 
+    // Guaranteed minimum display time so the splash screen is stable and consistent on all machines
     Timer {
-        interval: 1200
+        interval: 1500
         running: true
         onTriggered: splashRoot.minTimeElapsed = true
     }
+
+    // Safety timeout: never block startup indefinitely
     Timer {
-        interval: 10000
+        interval: 12000
         running: true
         onTriggered: splashRoot.requestClose()
     }
+
+    // Brief settle pause when scan completes so "Scan complete." is readably presented before fade-out
+    Timer {
+        id: settleTimer
+        interval: 350
+        onTriggered: splashRoot.requestClose()
+    }
+
     Timer {
         id: closeAnimationTimer
-        interval: 220
+        interval: 280
         onTriggered: splashRoot.finished()
     }
 
     onScanReadyChanged: maybeClose()
     onMinTimeElapsedChanged: maybeClose()
+
     function maybeClose() {
-        if (minTimeElapsed && scanReady)
-            requestClose()
+        if (minTimeElapsed && scanReady) {
+            if (!settleTimer.running && !closed) {
+                settleTimer.start()
+            }
+        }
     }
 
     function requestClose() {
@@ -43,18 +58,32 @@ Item {
         opacity = 0
     }
 
-    Image {
-        anchors.fill: parent
-        source: "qrc:/MediaFlow/qml/assets/splash_background.jpg"
-        fillMode: Image.PreserveAspectCrop
-        smooth: true
-        asynchronous: true
-        cache: true
-    }
-
+    // 1. Opaque solid backing so the dashboard can NEVER bleed through during startup
     Rectangle {
         anchors.fill: parent
-        color: "#66070B12"
+        color: "#060A12"
+    }
+
+    // 2. Synchronously loaded splash artwork (20KB local resource, loads in <1ms)
+    Image {
+        id: bgImage
+        anchors.fill: parent
+        source: "assets/splash_background.jpg"
+        fillMode: Image.PreserveAspectCrop
+        smooth: true
+        asynchronous: false
+        cache: true
+        onStatusChanged: {
+            if (status === Image.Error && source.toString() !== "qrc:/MediaFlow/qml/assets/splash_background.jpg") {
+                source = "qrc:/MediaFlow/qml/assets/splash_background.jpg"
+            }
+        }
+    }
+
+    // 3. Subtle translucent tint to elevate the central card and maintain contrast
+    Rectangle {
+        anchors.fill: parent
+        color: "#50070B12"
     }
 
     MouseArea {
@@ -67,8 +96,8 @@ Item {
         width: Math.min(parent.width - 48, 500)
         height: 280
         radius: 20
-        color: "#C010141D"
-        border.color: "#252D3B"
+        color: "#D010141D"
+        border.color: "#2A3546"
         border.width: 1
 
         Column {
@@ -137,6 +166,6 @@ Item {
     }
 
     Behavior on opacity {
-        NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+        NumberAnimation { duration: 280; easing.type: Easing.InOutCubic }
     }
 }
