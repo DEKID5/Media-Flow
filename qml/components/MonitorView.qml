@@ -473,30 +473,48 @@ Rectangle {
         }
     }
 
+    // Bottom dock gradient bar for controls & asset name
+    Rectangle {
+        id: bottomDockBar
+        anchors.bottom: parent.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        height: 56
+        z: 19
+        visible: (asset && asset.absolutePath) || (asset && asset.name)
+        gradient: Gradient {
+            GradientStop { position: 0.0; color: "transparent" }
+            GradientStop { position: 0.35; color: "#CC050507" }
+            GradientStop { position: 1.0; color: "#F208080B" }
+        }
+    }
+
     // Asset name
     Label {
-        anchors.bottom: controlRow.top; anchors.left: parent.left; anchors.margins: 12; z: 20
-        text: asset ? (asset.name || "") : ""; color: "white"; font.pixelSize: 10; font.bold: true; opacity: 0.7
+        anchors.bottom: parent.bottom; anchors.left: parent.left; anchors.margins: 14; z: 20
+        text: asset ? (asset.name || "") : ""; color: "white"; font.pixelSize: 11; font.bold: true; opacity: 0.85
         visible: asset && asset.name
+        elide: Text.ElideRight
+        width: Math.min(220, parent.width * 0.3)
     }
 
     // Status
     Label {
         anchors.top: parent.top; anchors.right: parent.right; anchors.margins: 12; z: 20
         text: isLive ? "PROGRAM OUTPUT" : "PREVIEW BUS"
-        color: Theme.textSecondary; font.pixelSize: Theme.textXs; font.bold: true; font.letterSpacing: 1.2
+        color: isLive ? "#EF4444" : Theme.textSecondary; font.pixelSize: Theme.textXs; font.bold: true; font.letterSpacing: 1.2
     }
 
     // Controls
     Row {
         id: controlRow
-        anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter; anchors.margins: 12
+        anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter; anchors.bottomMargin: 10
         spacing: Theme.space2; z: 20
 
         // Play/Pause
         Rectangle {
             visible: mediaType === "video" && asset && asset.absolutePath
-            width: 36; height: 36; radius: 18
+            width: 36; height: 34; radius: Theme.radiusSm
             color: ppMa.containsMouse ? "#80000000" : "#50000000"
             border.color: ppMa.containsMouse ? "#55FFFFFF" : "#33FFFFFF"
             Behavior on color { ColorAnimation { duration: Theme.durationFast } }
@@ -534,16 +552,25 @@ Rectangle {
         // CUT LIVE
         Rectangle {
             visible: showTransitions && asset && asset.absolutePath
-            width: 90; height: 36; radius: Theme.radius
-            color: cutMa.containsMouse ? "#33EF4444" : "transparent"
+            width: 108; height: 34; radius: Theme.radiusSm
+            color: cutMa.containsMouse ? "#33EF4444" : "#1AEF4444"
             border.color: cutMa.containsMouse ? Theme.accentRed : "#80EF4444"; border.width: 1.5
             Behavior on color { ColorAnimation { duration: Theme.durationFast } }
             scale: cutMa.pressed ? 0.95 : 1.0
             Behavior on scale { SpringAnimation { spring: 5; damping: 0.5 } }
-            Row {
-                anchors.centerIn: parent; spacing: Theme.space2
-                BroadcastIcon { anchors.verticalCenter: parent.verticalCenter; name: "bolt"; iconSize: 11; color: Theme.accentRed }
+            RowLayout {
+                anchors.centerIn: parent; spacing: 6
+                BroadcastIcon { name: "bolt"; iconSize: 11; color: Theme.accentRed }
                 Label { text: "CUT LIVE"; color: Theme.accentRed; font.pixelSize: Theme.textXs; font.bold: true }
+                Rectangle {
+                    width: 16; height: 16; radius: 3; color: "#26EF4444"
+                    border.color: "#66EF4444"; border.width: 1
+                    Label {
+                        anchors.centerIn: parent
+                        text: (MediaFlowBackend && MediaFlowBackend.shortcutKeys && MediaFlowBackend.shortcutKeys["cut"]) || "C"
+                        color: Theme.accentRed; font.bold: true; font.pixelSize: 8; font.family: "JetBrains Mono"
+                    }
+                }
             }
             MouseArea { id: cutMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: monitor.cutClicked() }
             ToolTip.visible: cutMa.containsMouse
@@ -554,13 +581,25 @@ Rectangle {
         // TAKE LIVE
         Rectangle {
             visible: showTransitions && asset && asset.absolutePath
-            width: 90; height: 36; radius: Theme.radius
-            color: takeMa.containsMouse ? "#33FFFFFF" : Theme.surfaceRaised
+            width: 114; height: 34; radius: Theme.radiusSm
+            color: takeMa.containsMouse ? "#33FFFFFF" : "#1AFFFFFF"
             border.color: takeMa.containsMouse ? "#55FFFFFF" : Theme.panelBorder; border.width: 1
             Behavior on color { ColorAnimation { duration: Theme.durationFast } }
             scale: takeMa.pressed ? 0.95 : 1.0
             Behavior on scale { SpringAnimation { spring: 5; damping: 0.5 } }
-            Label { anchors.centerIn: parent; text: "TAKE LIVE"; color: "white"; font.pixelSize: Theme.textXs; font.bold: true }
+            RowLayout {
+                anchors.centerIn: parent; spacing: 6
+                Label { text: "TAKE LIVE"; color: "white"; font.pixelSize: Theme.textXs; font.bold: true }
+                Rectangle {
+                    width: 16; height: 16; radius: 3; color: "#22FFFFFF"
+                    border.color: "#44FFFFFF"; border.width: 1
+                    Label {
+                        anchors.centerIn: parent
+                        text: (MediaFlowBackend && MediaFlowBackend.shortcutKeys && MediaFlowBackend.shortcutKeys["take"]) || "T"
+                        color: "white"; font.bold: true; font.pixelSize: 8; font.family: "JetBrains Mono"
+                    }
+                }
+            }
             MouseArea { id: takeMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: monitor.takeClicked() }
             ToolTip.visible: takeMa.containsMouse
             ToolTip.delay: 500

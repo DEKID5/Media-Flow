@@ -10,14 +10,38 @@ DockPanel {
     accentColor: Theme.accentEmerald
     title: "BACKGROUND MUSIC"
 
-    headerTrailing: Label {
-        text: ((MediaFlowBackend || {}).bgmCount || 0) + " TRACKS"
-        color: Theme.accentBlue
-        font.family: "Inter"
-        font.pixelSize: Theme.textXs
-        font.bold: true
-        font.letterSpacing: 0.5
-        verticalAlignment: Text.AlignVCenter
+    headerTrailing: RowLayout {
+        spacing: 4
+        Repeater {
+            model: [
+                { label: "LIBRARY", tab: "library" },
+                { label: "PLAYLIST", tab: "playlist" }
+            ]
+            delegate: Button {
+                required property var modelData
+                implicitWidth: modelData.tab === "playlist" ? 62 : 56
+                implicitHeight: 22
+                padding: 0
+                contentItem: Label {
+                    text: modelData.label
+                    color: "#60A5FA"
+                    font.family: "Inter"
+                    font.pixelSize: 8
+                    font.bold: true
+                    font.letterSpacing: 0.35
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                background: Rectangle {
+                    radius: 5
+                    color: parent.hovered ? "#202a3a" : "transparent"
+                }
+                onClicked: {
+                    musicPopup.activeTab = modelData.tab
+                    musicPopup.open()
+                }
+            }
+        }
     }
 
     function fmtMs(ms) {
@@ -65,6 +89,7 @@ DockPanel {
         }
 
         Rectangle {
+            id: bgmArtworkCard
             anchors.left: parent.left
             anchors.bottom: parent.bottom
             anchors.leftMargin: 2
@@ -72,11 +97,57 @@ DockPanel {
             width: 70
             height: 70
             radius: 8
-            color: "transparent"
+            color: "#111318"
+            border.color: "#252b32"
+            border.width: 1
             clip: true
 
+            Item {
+                id: artworkOrbit
+                anchors.centerIn: parent
+                width: 64
+                height: 64
+                visible: ((MediaFlowBackend || {}).bgmCount || 0) > 0
+                z: 2
+                RotationAnimation on rotation {
+                    from: 0
+                    to: 360
+                    duration: 7000
+                    loops: Animation.Infinite
+                    running: artworkOrbit.visible && bgmRoot.visible
+                }
+                Repeater {
+                    model: 4
+                    delegate: Rectangle {
+                        required property int index
+                        width: 4
+                        height: 4
+                        radius: 2
+                        color: Theme.accentEmerald
+                        x: index % 2 === 0 ? 1 : artworkOrbit.width - width - 1
+                        y: index < 2 ? 1 : artworkOrbit.height - height - 1
+                        opacity: 0.8
+                    }
+                }
+            }
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: 54
+                height: 54
+                radius: 9
+                color: "#1c2627"
+                visible: ((MediaFlowBackend || {}).bgmCoverArt || "") === ""
+                gradient: Gradient {
+                    GradientStop { position: 0; color: "#155e55" }
+                    GradientStop { position: 1; color: "#111827" }
+                }
+            }
+
             Image {
-                anchors.fill: parent
+                anchors.centerIn: parent
+                width: 54
+                height: 54
                 source: (MediaFlowBackend || {}).bgmCoverArt || ""
                 visible: source !== ""
                 fillMode: Image.PreserveAspectCrop
@@ -86,31 +157,79 @@ DockPanel {
             }
 
             Rectangle {
-                anchors.fill: parent
+                anchors.centerIn: parent
+                width: 54
+                height: 54
                 visible: ((MediaFlowBackend || {}).bgmCoverArt || "") !== ""
                 color: "transparent"
                 border.color: "#2a2a30"
                 border.width: 1
-                radius: 8
+                radius: 9
+            }
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: 22
+                height: 22
+                radius: 11
+                color: "#101a1b"
+                border.color: "#36B38A"
+                border.width: 1
+                visible: ((MediaFlowBackend || {}).bgmCoverArt || "") === ""
             }
 
             Label {
                 anchors.centerIn: parent
                 visible: ((MediaFlowBackend || {}).bgmCoverArt || "") === ""
                 text: "\uD83C\uDFB5"
-                color: "#2a2a30"
-                opacity: 0.55
-                font.pixelSize: 64
+                color: "#E5FFF5"
+                opacity: 0.9
+                font.pixelSize: 26
+                RotationAnimation on rotation {
+                    from: 0
+                    to: 360
+                    duration: 9000
+                    loops: Animation.Infinite
+                    running: (MediaFlowBackend || {}).isPlayingBgm || false
+                }
+            }
+
+            Row {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 4
+                spacing: 3
+                visible: (MediaFlowBackend || {}).isPlayingBgm || false
+                Repeater {
+                    model: [8, 13, 18, 11, 15]
+                    delegate: Rectangle {
+                        required property int index
+                        required property int modelData
+                        width: 3
+                        height: modelData
+                        radius: 2
+                        color: index === 2 ? "#D1FAE5" : Theme.accentEmerald
+                        SequentialAnimation on height {
+                            loops: Animation.Infinite
+                            running: bgmRoot.visible && ((MediaFlowBackend || {}).isPlayingBgm || false)
+                            NumberAnimation { to: 4; duration: 180 + index * 28; easing.type: Easing.InOutSine }
+                            NumberAnimation { to: modelData; duration: 220 + index * 24; easing.type: Easing.InOutSine }
+                        }
+                    }
+                }
             }
         }
 
         Label {
-            anchors.left: parent.left
+            anchors.left: bgmArtworkCard.right
             anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.verticalCenterOffset: -18
+            anchors.leftMargin: 12
+            anchors.top: parent.top
+            anchors.topMargin: 8
+            height: 20
             text: ((MediaFlowBackend || {}).bgmCount || 0) > 0 ? ((MediaFlowBackend || {}).bgmTrackName || "NO TRACKS") : "NO TRACKS"
-            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            horizontalAlignment: Text.AlignLeft
             color: "#6b7280"
             font.family: "Inter"
             font.pixelSize: 11
@@ -122,8 +241,9 @@ DockPanel {
         // ── Progress scrubber ──
         Item {
             id: progressRow
-            anchors.left: parent.left
+            anchors.left: bgmArtworkCard.right
             anchors.right: parent.right
+            anchors.leftMargin: 12
             anchors.bottom: timeRow.top
             anchors.bottomMargin: 4
             height: 16
@@ -174,18 +294,21 @@ DockPanel {
 
         RowLayout {
             id: timeRow
-            anchors.left: parent.left
+            anchors.left: bgmArtworkCard.right
             anchors.right: parent.right
+            anchors.leftMargin: 12
             anchors.bottom: transportRow.top
             anchors.bottomMargin: 8
             Label {
                 text: fmtMs((MediaFlowBackend || {}).bgmPositionMs || 0)
-                color: "#6b7280"; font.family: "JetBrains Mono"; font.pixelSize: Theme.textXs
+                color: "#9ca3af"; font.family: "JetBrains Mono"; font.pixelSize: Theme.textXs
+                font.features: { "tnum": 1 }
             }
             Item { Layout.fillWidth: true }
             Label {
                 text: fmtMs((MediaFlowBackend || {}).bgmDurationMs || 0)
                 color: "#6b7280"; font.family: "JetBrains Mono"; font.pixelSize: Theme.textXs
+                font.features: { "tnum": 1 }
             }
         }
 
@@ -195,17 +318,17 @@ DockPanel {
             anchors.right: parent.right
             anchors.bottom: parent.bottom
             height: 40
-            spacing: 8
+            spacing: 6
 
             BgmButton {
-                Layout.preferredWidth: 36
+                Layout.preferredWidth: 34
                 iconName: "shuffle"
                 active: (MediaFlowBackend || {}).bgmShuffle
                 onClicked: (MediaFlowBackend || {}).toggleBgmShuffle()
             }
 
             BgmButton {
-                Layout.preferredWidth: 40
+                Layout.preferredWidth: 36
                 iconName: "skip-back"
                 onClicked: (MediaFlowBackend || {}).backBgm()
             }
@@ -230,7 +353,7 @@ DockPanel {
 
                 background: Rectangle {
                     radius: 8
-                    color: "#2563eb"
+                    color: (MediaFlowBackend || {}).isPlayingBgm ? "#1d4ed8" : "#2563eb"
                     border.color: "#3B82F6"
                     border.width: 1
                 }
@@ -240,17 +363,33 @@ DockPanel {
             }
 
             BgmButton {
-                Layout.preferredWidth: 40
+                Layout.preferredWidth: 36
                 iconName: "skip-forward"
                 onClicked: (MediaFlowBackend || {}).nextBgm()
             }
 
             BgmButton {
-                Layout.preferredWidth: 50
+                Layout.preferredWidth: 46
+                label: "FADE"
+                onClicked: {
+                    if (MediaFlowBackend && MediaFlowBackend.fadeOutBgm) MediaFlowBackend.fadeOutBgm(2500)
+                    else (MediaFlowBackend || {}).stopBgm()
+                }
+                ToolTip.visible: hovered
+                ToolTip.delay: 400
+                ToolTip.text: "Smooth 2.5s fade out to stop"
+            }
+
+            BgmButton {
+                Layout.preferredWidth: 46
                 label: "STOP"
                 onClicked: (MediaFlowBackend || {}).stopBgm()
             }
         }
+    }
+
+    BgmLibraryPopup {
+        id: musicPopup
     }
 
     component BgmButton: Control {

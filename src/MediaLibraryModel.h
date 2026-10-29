@@ -13,6 +13,8 @@
 class MediaLibraryModel : public QAbstractListModel
 {
     Q_OBJECT
+    Q_PROPERTY(QStringList categories READ categories NOTIFY categoriesChanged)
+    Q_PROPERTY(quint64 thumbnailRevision READ thumbnailRevision NOTIFY thumbnailRevisionChanged)
 
 public:
     struct Row {
@@ -25,6 +27,7 @@ public:
         bool staged = false;
         bool imported = false;
         long long size = 0;
+        QString languageMarker; // e.g. "_E_", "_S_", or empty
     };
 
     enum Roles {
@@ -41,6 +44,7 @@ public:
     explicit MediaLibraryModel(QObject *parent = nullptr);
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
+    const Row &rowAt(int index) const;
     QVariant data(const QModelIndex &index, int role) const override;
     QHash<int, QByteArray> roleNames() const override;
 
@@ -57,6 +61,7 @@ public:
 
     void updateThumbnail(const QString &id, const QString &thumbnailData);
     void updateName(const QString &id, const QString &newName);
+    void markImported(const QString &id, const QString &category);
 
     /**
      * @brief Checks if a file path is already indexed.
@@ -66,7 +71,8 @@ public:
     /**
      * @brief Returns a list of unique categories.
      */
-    Q_INVOKABLE QStringList categories() const;
+    QStringList categories() const;
+    quint64 thumbnailRevision() const { return m_thumbnailRevision; }
 
     /**
      * @brief Batch updates categories.
@@ -78,7 +84,13 @@ public:
      */
     Q_INVOKABLE void removeMedia(const QString &id);
 
+signals:
+    void categoriesChanged();
+    void thumbnailRevisionChanged();
 
 private:
     QVector<Row> m_rows;
+    QHash<QString, int> m_idToIndex;
+    QHash<QString, QString> m_pathToId;
+    quint64 m_thumbnailRevision = 0;
 };

@@ -49,7 +49,7 @@ DockPanel {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
-            anchors.bottom: sizeRow.top
+            anchors.bottom: presetRow.top
             anchors.bottomMargin: 6
             spacing: 18
 
@@ -152,6 +152,56 @@ DockPanel {
                 iconName: "chevron-up"
                 Layout.alignment: Qt.AlignVCenter
                 onClicked: TimerBackend.adjustDuration(1)
+            }
+        }
+
+        RowLayout {
+            id: presetRow
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: sizeRow.top
+            anchors.bottomMargin: 6
+            height: 20
+            spacing: 6
+
+            Label {
+                text: "PRESETS"
+                color: "#71717A"
+                font.family: "Inter"; font.pixelSize: 8; font.bold: true; font.letterSpacing: 0.8
+            }
+
+            Item { Layout.fillWidth: true }
+
+            Repeater {
+                model: [
+                    { label: "-1m", delta: -1 },
+                    { label: "+1m", delta: 1 },
+                    { label: "+5m", delta: 5 }
+                ]
+                delegate: Rectangle {
+                    required property var modelData
+                    width: 38; height: 20; radius: 4
+                    color: presetMa.containsMouse ? "#27272a" : "#18181b"
+                    border.color: presetMa.containsMouse ? Theme.accentBlue : "#27272a"
+                    border.width: 1
+
+                    Label {
+                        anchors.centerIn: parent
+                        text: parent.modelData.label
+                        color: presetMa.containsMouse ? "#ffffff" : "#a1a1aa"
+                        font.family: "JetBrains Mono"
+                        font.pixelSize: 9
+                        font.bold: true
+                    }
+
+                    MouseArea {
+                        id: presetMa
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: TimerBackend.adjustDuration(parent.modelData.delta)
+                    }
+                }
             }
         }
 

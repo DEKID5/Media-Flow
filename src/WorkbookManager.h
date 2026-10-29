@@ -24,10 +24,9 @@ class BroadcastController;
  * each song number, so the right media just shows up in the right segment
  * without the operator looking anything up by hand.
  *
- * Both publications are downloaded as plain EPUB (not the encrypted .jwpub
- * format) -- a standard, unencrypted zip of XHTML files, requiring no
- * cryptography, just zip extraction (see third_party/miniz) and text
- * parsing.
+ * EPUB downloads are standard, unencrypted zip files. Local JW Library
+ * meeting-workbook content is decoded from its encrypted/compressed database
+ * blobs on Windows before parsing the same assignment headings and durations.
  */
 class WorkbookManager : public QObject
 {
@@ -46,9 +45,9 @@ public:
 
     Q_INVOKABLE void refreshNow();
 
-    // All week-start dates found across every locally downloaded mwb/w
-    // publication for the current language, each as {"label", "iso"} --
-    // powers the week-picker dropdown. Sorted ascending.
+    // Remaining current-year week starts, merged with weeks found in local
+    // publications for the current language, each as {"label", "iso"}.
+    // Weeks without a local workbook are fetched when selected.
     QVariantList availableWeeks() const;
     // Pins the workbook to a specific week (from availableWeeks) instead of
     // "closest to today", and re-runs the lookup immediately. An invalid
@@ -61,8 +60,8 @@ signals:
 
 private:
     void setStatus(const QString &text);
-    void fetchPublication(const QString &pubCode);
-    void applyMwbEpub(const QByteArray &epubData);
+    void fetchPublication(const QString &pubCode, bool supplementalOnly = false);
+    void applyMwbEpub(const QByteArray &epubData, bool supplementalOnly = false);
     void applyWatchtowerEpub(const QByteArray &epubData);
     void applyWatchtowerImages(const QMap<QString, QByteArray> &files,
                                 const QString &articleHtml, const QString &articleStem);
@@ -75,6 +74,8 @@ private:
     // normal auto-refresh, or the operator's manual pick from selectWeek().
     bool applyFromLocalMwb(const QString &lang, const QDate &targetDate);
     bool applyFromLocalWatchtower(const QString &lang, const QDate &targetDate);
+    QStringList bookStudyImages(const QString &lang, const QList<int> &chapters,
+                                const QString &segmentId);
     // The Congregation Bible Study book has no weekly issue to match --
     // it's whichever locally downloaded publication is a standalone "Book"
     // (per JW Library's own manifest.json), as opposed to the Bible,
@@ -91,8 +92,12 @@ private:
     // Invalid = automatic (always matches today); set by selectWeek() when
     // the operator manually picks a week from the dropdown.
     QDate m_selectedDate;
+    QString m_applyPartsLanguage;
+    QDate m_applyPartsDate;
+    bool m_applyPartsLoaded = false;
     // Ids of the article images linked into the Watchtower Study segment by
     // the previous run -- removed from the library if a later run picks a
     // different article, so stale images don't pile up week after week.
     QStringList m_lastWatchtowerImageIds;
+    QString m_bookStudyPublicationFolder;
 };

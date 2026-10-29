@@ -151,7 +151,10 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("MediaFlowBackend"), &controller);
     engine.rootContext()->setContextProperty(QStringLiteral("TimerBackend"), &timerController);
 
-    QObject::connect(&engine, &QQmlApplicationEngine::quit, &app, &QCoreApplication::quit);
+    QObject::connect(&engine, &QQmlApplicationEngine::quit, &app, [&app]() {
+        qCritical() << "engine.quit signal fired — QML called Qt.quit() or engine.exit(). Shutting down.";
+        app.quit();
+    });
 
     // The full-screen timer is its own dedicated window (opened/closed by
     // BroadcastController, positioned per its timerScreenIndex setting) so
@@ -162,11 +165,20 @@ int main(int argc, char *argv[])
         controller.setTimerFullScreenActive(timerController.fullScreenTimer());
     });
 
-    engine.load(QUrl(QStringLiteral("qrc:/MediaFlow/qml/Main.qml")));
-    if (engine.rootObjects().isEmpty())
-        return -1;
+    QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed,
+                     &app, [](const QUrl &url) {
+        qCritical() << "QML objectCreationFailed for:" << url;
+    }, Qt::QueuedConnection);
 
+    engine.load(QUrl(QStringLiteral("qrc:/MediaFlow/qml/Main.qml")));
+    if (engine.rootObjects().isEmpty()) {
+        qCritical() << "engine.rootObjects() is empty after loading Main.qml — QML load failed.";
+        return -1;
+    }
+
+    qInfo() << "app.exec() starting — event loop running.";
     const int result = app.exec();
+    qInfo() << "app.exec() returned with code:" << result;
 
 #ifdef Q_OS_WIN
     timeEndPeriod(1); // matches timeBeginPeriod(1) above

@@ -1,14 +1,20 @@
 cmake_minimum_required(VERSION 3.21)
-project(MediaFlow VERSION 1.0.0 LANGUAGES CXX C) # C needed for vendored third_party/miniz
+project(MediaFlow VERSION 1.0.56 LANGUAGES CXX C) # C needed for vendored third_party/miniz
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
+if(MSVC)
+    add_compile_options(/MP /Gy /Gw)
+endif()
+
 find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Qml Quick QuickControls2 Sql Multimedia Concurrent Network)
 
 set(MFQ_SOURCES
     src/main.cpp
+    src/AppUpdater.cpp
+    src/AppUpdater.h
     src/BroadcastController.cpp
     src/BroadcastController.h
     src/MediaExtractor.cpp
@@ -60,6 +66,7 @@ endif()
 # stdout/stderr, so nothing depends on having a console.
 qt_add_executable(mediaflow ${MFQ_SOURCES})
 set_target_properties(mediaflow PROPERTIES OUTPUT_NAME "MediaFlow" WIN32_EXECUTABLE TRUE)
+target_compile_definitions(mediaflow PRIVATE MEDIAFLOW_VERSION="${PROJECT_VERSION}")
 
 # Must be set BEFORE qt_add_qml_module() -- Qt's qmldir generator reads this
 # property when the module is declared, not retroactively. Setting it after
@@ -90,10 +97,13 @@ qt_add_qml_module(mediaflow
         qml/components/ThemedDialog.qml
         qml/components/TimerPanel.qml
         qml/components/BackgroundMusicPanel.qml
+        qml/components/BgmLibraryPopup.qml
+    RESOURCES
         qml/assets/cam_placeholder.png
         qml/assets/meeting_placeholder.png
         qml/assets/video_placeholder.png
         qml/assets/logo.png
+        qml/assets/splash_background.jpg
 )
 
 target_include_directories(mediaflow PRIVATE
@@ -119,7 +129,7 @@ if(WIN32)
     # winmm: timeBeginPeriod/timeEndPeriod (see main.cpp -- 1ms timer
     # resolution for the app's lifetime, to avoid audio stutter when the
     # process loses foreground focus).
-    target_link_libraries(mediaflow PRIVATE user32 Shell32 Ole32 winmm)
+    target_link_libraries(mediaflow PRIVATE user32 Shell32 Ole32 winmm bcrypt)
 endif()
 
 include(GNUInstallDirs)

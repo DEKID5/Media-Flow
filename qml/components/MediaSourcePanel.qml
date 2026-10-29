@@ -28,6 +28,15 @@ Item {
         function onModelReset() { root.refreshPinMediaIds() }
     }
 
+    Connections {
+        target: (MediaFlowBackend || {}).mediaLibrary || null
+        function onCategoriesChanged() {
+            const categories = MediaFlowBackend.mediaLibrary.categories
+            if (root.selectedCategory && categories.indexOf(root.selectedCategory) === -1)
+                root.selectedCategory = categories.length > 0 ? categories[0] : ""
+        }
+    }
+
     function openPinFolder(folderId) {
         selectedPinFolderId = folderId
         currentView = "pins"
@@ -289,7 +298,7 @@ Item {
         title: "Delete Pin Folder"
         acceptText: "DELETE"; acceptColor: Theme.accentRed
         contentItem: Label {
-            text: "Delete “" + deletePinDialog.folderName + "”? This only removes the pin folder — the media files themselves aren’t deleted."
+            text: "Delete “" + deletePinDialog.folderName + "”? Its Quick Fetch category will be removed. The media files themselves will stay on disk."
             color: "white"; font.pixelSize: 12; wrapMode: Text.WordWrap; width: 280
             leftPadding: 20; rightPadding: 20; topPadding: 4; bottomPadding: 12
         }
@@ -347,7 +356,7 @@ Item {
             id: categoryList
             anchors.fill: parent; anchors.leftMargin: 15; anchors.rightMargin: 15
             orientation: ListView.Horizontal; spacing: 10
-            model: (MediaFlowBackend && MediaFlowBackend.mediaLibrary) ? MediaFlowBackend.mediaLibrary.categories() : ["General"]
+            model: (MediaFlowBackend && MediaFlowBackend.mediaLibrary) ? MediaFlowBackend.mediaLibrary.categories : ["General"]
             delegate: Rectangle {
                 width: catLabel.contentWidth + 24; height: 26; radius: 13
                 color: root.selectedCategory === modelData ? Theme.accentEmerald : (catMa.containsMouse ? "#1AFFFFFF" : "#0DFFFFFF")
@@ -419,6 +428,8 @@ Item {
         cellWidth: width / gridColumns
         cellHeight: cellWidth * 0.7
         visible: root.currentView !== "pins" || root.selectedPinFolderId !== ""
+        cacheBuffer: 100
+        reuseItems: true
 
         model: (MediaFlowBackend && MediaFlowBackend.stagedMediaProxy) ? MediaFlowBackend.stagedMediaProxy : null
 
@@ -504,12 +515,10 @@ Item {
                 Image {
                     anchors.fill: parent; fillMode: Image.PreserveAspectCrop; opacity: cardMa.containsMouse ? 0.9 : 0.7
                     asynchronous: true
-                    // Caps decode cost to the card's own on-screen size instead
-                    // of decoding at full source resolution for a small tile --
-                    // matters most here since there can be dozens of these
-                    // on screen at once.
-                    sourceSize.width: width
-                    sourceSize.height: height
+                    // Caps decode cost to fixed thumbnail dimensions so Qt Quick
+                    // never decodes full-resolution 4K/24MP original photos when
+                    // width/height evaluate to 0 during delegate instantiation.
+                    sourceSize: Qt.size(240, 168)
                     source: model.thumbnailPath || "qrc:/MediaFlow/qml/assets/video_placeholder.png"
                     Behavior on opacity { NumberAnimation { duration: 200 } }
                 }
@@ -606,6 +615,23 @@ Item {
                     ToolTip.text: "Add to selected segment"
                 }
 
+                // Quick Stage indicator on hover
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 74; height: 26; radius: 13
+                    color: "#D90A0A0C"
+                    border.color: Theme.accentBlue
+                    border.width: 1
+                    visible: cardMa.containsMouse && !cardMa.drag.active && !addBtn.visible
+                    opacity: visible ? 1.0 : 0.0
+                    Behavior on opacity { NumberAnimation { duration: 120 } }
+                    RowLayout {
+                        anchors.centerIn: parent; spacing: 4
+                        BroadcastIcon { name: "play"; iconSize: 10; color: Theme.accentBlue }
+                        Label { text: "STAGE"; color: "white"; font.pixelSize: 9; font.bold: true; font.letterSpacing: 0.5 }
+                    }
+                }
+
                 MouseArea {
                     id: cardMa
                     anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
@@ -621,6 +647,39 @@ Item {
                         // deliberate action via the "+" button above, not a
                         // side effect of browsing/previewing media.
                         MediaFlowBackend.stageMedia(model.id)
+                    }
+                }
+            }
+        }
+
+        footer: Item {
+            width: grid.width
+            height: (grid.count > 0 && grid.count <= 2) ? 76 : 0
+            visible: height > 0
+            clip: true
+
+            Rectangle {
+                anchors.fill: parent
+                anchors.margins: 6
+                radius: Theme.radius
+                color: "#08FFFFFF"
+                border.color: "#1FFFFFFF"
+                border.width: 1
+
+                RowLayout {
+                    anchors.centerIn: parent
+                    spacing: 10
+                    BroadcastIcon { name: "folder"; iconSize: 16; color: Theme.textDim }
+                    Column {
+                        spacing: 2
+                        Label {
+                            text: root.currentView === "segment" ? "DRAG FILES HERE TO LINK" : "DRAG & DROP TO IMPORT"
+                            color: Theme.textSecondary; font.pixelSize: 9; font.bold: true; font.letterSpacing: 0.8
+                        }
+                        Label {
+                            text: "Supports images, videos & audio"
+                            color: Theme.textFaint; font.pixelSize: 8
+                        }
                     }
                 }
             }

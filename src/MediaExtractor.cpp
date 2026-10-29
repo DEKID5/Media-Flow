@@ -4,7 +4,6 @@
 #include <QDirIterator>
 #include <QFileInfo>
 #include <QDir>
-#include <QImageReader>
 #include <QUrl>
 #include <QtConcurrent>
 #include <QDebug>
@@ -155,43 +154,5 @@ void MediaExtractor::processFile(const QString &filePath)
     QDateTime creationDate = fi.birthTime();
     if (!creationDate.isValid()) creationDate = fi.lastModified();
 
-    QImage thumbnail = extractThumbnail(filePath, type);
-
-    emit mediaFound(type, name, fi.absoluteFilePath(), thumbnail, creationDate);
-}
-
-QImage MediaExtractor::extractThumbnail(const QString &filePath, MediaType type)
-{
-    QFileInfo fi(filePath);
-
-    if (type == MediaType::Image) {
-        QImageReader reader(filePath);
-        reader.setScaledSize(QSize(320, 180));
-        if (reader.canRead()) return reader.read();
-    } else if (type == MediaType::Video) {
-        // Strategy: Look for JW Library companion thumbnails
-        QStringList candidates;
-        candidates << fi.absolutePath() + "/" + fi.baseName() + ".jpg";
-        candidates << fi.absolutePath() + "/" + fi.baseName() + ".png";
-
-        for (const QString &c : candidates) {
-            if (QFile::exists(c)) {
-                QImage img(c);
-                if (!img.isNull()) return img.scaled(320, 180, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
-            }
-        }
-
-        // Fallback: try QImageReader on video (works on some platforms)
-        QImageReader videoReader(filePath);
-        if (videoReader.canRead()) {
-            videoReader.setScaledSize(QSize(320, 180));
-            return videoReader.read();
-        }
-
-        return QImage(":/MediaFlow/qml/assets/video_placeholder.png");
-    } else if (type == MediaType::Audio) {
-        return QImage(":/MediaFlow/qml/assets/meeting_placeholder.png");
-    }
-
-    return QImage();
+    emit mediaFound(type, name, fi.absoluteFilePath(), creationDate);
 }

@@ -1,4 +1,34 @@
 // Windows resource script -- embeds the app icon into MediaFlow.exe itself
 // (taskbar, Explorer, Alt-Tab), independent of the installer's own icon
 // setting (see packaging/mediaflow.iss's SetupIconFile).
+#include <windows.h>
+
 IDI_ICON1 ICON "../qml/assets/icon.ico"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 1,0,56,0
+ PRODUCTVERSION 1,0,56,0
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+ FILESUBTYPE 0
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName", "DEKID5\0"
+            VALUE "FileDescription", "MediaFlow\0"
+            VALUE "FileVersion", "1.0.56\0"
+            VALUE "InternalName", "MediaFlow\0"
+            VALUE "OriginalFilename", "MediaFlow.exe\0"
+            VALUE "ProductName", "MediaFlow\0"
+            VALUE "ProductVersion", "1.0.56\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1200
+    END
+END

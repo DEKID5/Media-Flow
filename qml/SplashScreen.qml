@@ -1,135 +1,171 @@
 import QtQuick
-import QtQuick.Window
 import MediaFlow 1.0
 
-// Shown immediately on launch, before the (heavier) main dashboard window
-// appears -- covers the gap while the startup library scan runs, since a
-// large JW Library folder can take a moment to index and an empty/blank
-// main window during that time reads as the app hanging. Closes itself once
-// the scan finishes AND a small minimum display time has passed (so it
-// never just flashes on a fast machine), with a hard timeout as a safety
-// net in case the scan ever takes unusually long.
-Window {
+Item {
     id: splashRoot
-    width: 420
-    height: 260
-    flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
-    color: "#0A0A0A"
-    visible: true
-    title: qsTr("MediaFlow")
+    anchors.fill: parent
+    opacity: 1
 
     signal finished()
-
-    Component.onCompleted: {
-        x = Screen.width / 2 - width / 2
-        y = Screen.height / 2 - height / 2
-    }
 
     property bool minTimeElapsed: false
     property bool scanReady: (MediaFlowBackend || {}).initialScanComplete === true
     property bool closed: false
 
-    // Always shows for a full 10s, regardless of how fast the scan finishes.
-    Timer { interval: 10000; running: true; onTriggered: splashRoot.minTimeElapsed = true }
-    // Safety net only -- if the scan is somehow still running well past the
-    // 10s minimum, don't block startup indefinitely.
-    Timer { interval: 20000; running: true; onTriggered: splashRoot.requestClose() }
+    // Guaranteed minimum display time so the splash screen is stable and consistent on all machines
+    Timer {
+        interval: 1500
+        running: true
+        onTriggered: splashRoot.minTimeElapsed = true
+    }
+
+    // Safety timeout: never block startup indefinitely
+    Timer {
+        interval: 12000
+        running: true
+        onTriggered: splashRoot.requestClose()
+    }
+
+    // Brief settle pause when scan completes so "Scan complete." is readably presented before fade-out
+    Timer {
+        id: settleTimer
+        interval: 350
+        onTriggered: splashRoot.requestClose()
+    }
+
+    Timer {
+        id: closeAnimationTimer
+        interval: 280
+        onTriggered: splashRoot.finished()
+    }
 
     onScanReadyChanged: maybeClose()
     onMinTimeElapsedChanged: maybeClose()
-    function maybeClose() { if (minTimeElapsed && scanReady) requestClose() }
 
-    // Named to avoid shadowing Window's own built-in close() -- this just
-    // signals readiness; Main.qml decides when to actually tear the
-    // splash window down, after it's shown the main window.
+    function maybeClose() {
+        if (minTimeElapsed && scanReady) {
+            if (!settleTimer.running && !closed) {
+                settleTimer.start()
+            }
+        }
+    }
+
     function requestClose() {
-        if (closed) return
+        if (closed)
+            return
         closed = true
-        finished()
+        closeAnimationTimer.start()
+        opacity = 0
+    }
+
+    // 1. Opaque solid backing so the dashboard can NEVER bleed through during startup
+    Rectangle {
+        anchors.fill: parent
+        color: "#060A12"
+    }
+
+    // 2. Synchronously loaded splash artwork (20KB local resource, loads in <1ms)
+    Image {
+        id: bgImage
+        anchors.fill: parent
+        source: "assets/splash_background.jpg"
+        fillMode: Image.PreserveAspectCrop
+        smooth: true
+        asynchronous: false
+        cache: true
+        onStatusChanged: {
+            if (status === Image.Error && source.toString() !== "qrc:/MediaFlow/qml/assets/splash_background.jpg") {
+                source = "qrc:/MediaFlow/qml/assets/splash_background.jpg"
+            }
+        }
+    }
+
+    // 3. Subtle translucent tint to elevate the central card and maintain contrast
+    Rectangle {
+        anchors.fill: parent
+        color: "#50070B12"
+    }
+
+    MouseArea {
+        anchors.fill: parent
+        hoverEnabled: true
     }
 
     Rectangle {
-        anchors.fill: parent
-        anchors.margins: 1
-        color: "transparent"
-        border.color: "#1AFFFFFF"
-        border.width: 1
-    }
-
-    Column {
         anchors.centerIn: parent
-        spacing: 22
-
-        Rectangle {
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: 64; height: 64; radius: 16
-            color: "#3B82F6"
-            Text {
-                anchors.centerIn: parent
-                text: "MF"
-                color: "white"
-                font.bold: true
-                font.pixelSize: 24
-                font.letterSpacing: 1
-            }
-
-            // Soft pulse -- reads as "working", not just a static logo.
-            SequentialAnimation on scale {
-                loops: Animation.Infinite
-                NumberAnimation { to: 1.06; duration: 900; easing.type: Easing.InOutQuad }
-                NumberAnimation { to: 1.0; duration: 900; easing.type: Easing.InOutQuad }
-            }
-        }
+        width: Math.min(parent.width - 48, 500)
+        height: 280
+        radius: 20
+        color: "#D010141D"
+        border.color: "#2A3546"
+        border.width: 1
 
         Column {
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 2
+            anchors.centerIn: parent
+            width: parent.width - 72
+            spacing: 26
+
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: "MediaFlow"
-                color: "#FFFFFF"
+                text: qsTr("Getting everything ready")
+                color: "#F5F7FA"
                 font.bold: true
-                font.pixelSize: 22
+                font.pixelSize: 20
             }
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: "BROADCAST SUITE"
-                color: "#3B82F6"
-                font.bold: true
-                font.pixelSize: 10
-                font.letterSpacing: 2
-            }
-        }
 
-        Column {
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 10
-
-            Row {
+            Rectangle {
+                id: progressTrack
                 anchors.horizontalCenter: parent.horizontalCenter
-                spacing: 6
-                Repeater {
-                    model: 3
-                    Rectangle {
-                        width: 6; height: 6; radius: 3
-                        color: "#3B82F6"
-                        SequentialAnimation on opacity {
-                            loops: Animation.Infinite
-                            PauseAnimation { duration: index * 150 }
-                            NumberAnimation { to: 0.25; duration: 450; easing.type: Easing.InOutQuad }
-                            NumberAnimation { to: 1.0; duration: 450; easing.type: Easing.InOutQuad }
+                width: Math.min(parent.width, 300)
+                height: 4
+                radius: 2
+                color: "#252D3B"
+                clip: true
+
+                Rectangle {
+                    id: progressBar
+                    width: 92
+                    height: parent.height
+                    radius: parent.radius
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: "#2563EB" }
+                        GradientStop { position: 1.0; color: "#60A5FA" }
+                    }
+                    SequentialAnimation on x {
+                        loops: Animation.Infinite
+                        NumberAnimation {
+                            from: -progressBar.width
+                            to: progressTrack.width
+                            duration: 1250
+                            easing.type: Easing.InOutSine
                         }
+                        PauseAnimation { duration: 100 }
                     }
                 }
             }
 
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: (MediaFlowBackend || {}).scanStatus || qsTr("Starting…")
-                color: "#6b7280"
-                font.pixelSize: 10
-                font.letterSpacing: 0.5
+                width: parent.width
+                text: (MediaFlowBackend || {}).scanStatus || qsTr("Preparing your media library…")
+                color: "#9AA5B5"
+                font.pixelSize: 12
+                horizontalAlignment: Text.AlignHCenter
+                elide: Text.ElideRight
+            }
+
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: qsTr("MEDIAFLOW  •  BROADCAST SUITE")
+                color: "#647084"
+                font.pixelSize: 9
+                font.bold: true
+                font.letterSpacing: 1.5
             }
         }
+    }
+
+    Behavior on opacity {
+        NumberAnimation { duration: 280; easing.type: Easing.InOutCubic }
     }
 }

@@ -11,19 +11,13 @@ Item {
     anchors.fill: parent
 
     property string manualSongSegmentId: ""
-    // Below this the header's full button labels no longer fit (measured:
-    // the header needs ~1900px with every label spelled out) -- collapse
-    // the broadcast buttons to icon-only (with tooltips) instead of letting
-    // the window's real minimum width stay stuck near ~1900px. The
-    // threshold sits above that measured requirement so it always
-    // switches to compact before anything would overflow.
-    readonly property bool compactHeader: Window.width > 0 && Window.width < 1950
-    // A second, lower tier for the controls that still have room to shrink
-    // further (branding subtitle, week/meeting-type/language pickers) --
-    // lets the window's real floor come down enough to fit a half-screen
-    // Windows Snap slot (960px on a standard 1920-wide display) instead of
-    // being stuck well above it.
-    readonly property bool veryCompactHeader: Window.width > 0 && Window.width < 1100
+    // Sizing tiers for header controls:
+    // 1. iconOnlyHeader: Collapse broadcast buttons to icon-only when window is narrow (< 1120px)
+    // 2. compactHeader: Punchy concise labels (LIVE, ZOOM, WEBCAM, AUDIENCE) between 1120px and 1460px
+    // 3. veryCompactHeader: Shrink workbook/meeting/language selectors below 1150px
+    readonly property bool iconOnlyHeader: Window.width > 0 && Window.width < 1120
+    readonly property bool compactHeader: Window.width > 0 && Window.width < 1460
+    readonly property bool veryCompactHeader: Window.width > 0 && Window.width < 1150
     signal settingsRequested()
 
     function takeLive() {
@@ -175,7 +169,13 @@ Item {
                             Layout.fillWidth: true
                             flat: true
                             textRole: "label"
+                            property string loadedMonthKey: ""
                             model: ListModel { id: weekModel }
+
+                            function currentMonthKey() {
+                                const now = new Date()
+                                return now.getFullYear() + "-" + (now.getMonth() + 1)
+                            }
 
                             function reload() {
                                 weekModel.clear()
@@ -184,9 +184,23 @@ Item {
                                 for (let i = 0; i < weeks.length; i++)
                                     weekModel.append(weeks[i])
                                 currentIndex = 0
+                                loadedMonthKey = currentMonthKey()
                             }
 
                             Component.onCompleted: reload()
+
+                            Timer {
+                                interval: 60 * 60 * 1000
+                                repeat: true
+                                running: true
+                                onTriggered: {
+                                    if (weekCombo.loadedMonthKey !== weekCombo.currentMonthKey()) {
+                                        weekCombo.reload()
+                                        if (MediaFlowBackend)
+                                            MediaFlowBackend.selectWorkbookWeek("")
+                                    }
+                                }
+                            }
 
                             onActivated: (index) => {
                                 if (MediaFlowBackend) MediaFlowBackend.selectWorkbookWeek(weekModel.get(index).iso)
@@ -333,7 +347,8 @@ Item {
 
                         Label {
                             text: (MediaFlowBackend || {}).masterVolume + "%"
-                            color: Theme.accentBlue; font.pixelSize: Theme.textXs; font.bold: true; Layout.preferredWidth: 32; horizontalAlignment: Text.AlignHCenter
+                            color: Theme.accentBlue; font.pixelSize: Theme.textXs; font.bold: true; Layout.preferredWidth: 34; horizontalAlignment: Text.AlignHCenter
+                            font.features: { "tnum": 1 }
                         }
 
                         Label {
@@ -364,151 +379,276 @@ Item {
 
                 // 6. LIVE & BROADCAST
                 RowLayout {
-                    spacing: Theme.space3
+                    spacing: Theme.space2
 
+                    // 6a. GO LIVE / MEETING LIVE
                     Rectangle {
+                        id: goLiveBtn
                         Layout.preferredHeight: 36
-                        Layout.preferredWidth: root.compactHeader ? 44 : 130
-                        Layout.minimumWidth: root.compactHeader ? 44 : 90
+                        Layout.preferredWidth: root.iconOnlyHeader ? 42 : (root.compactHeader ? 86 : 132)
+                        Layout.minimumWidth: root.iconOnlyHeader ? 42 : 80
                         radius: Theme.radius
-                        color: (MediaFlowBackend || {}).isMeetingLive ? "#1AEF4444" : Theme.surfaceRaised
-                        border.color: (MediaFlowBackend || {}).isMeetingLive ? Theme.accentRed : Theme.panelBorder
+                        property bool isLive: (MediaFlowBackend || {}).isMeetingLive === true
+                        color: isLive ? "#2A1115" : (goLiveMa.containsMouse ? Theme.surfaceHover : Theme.surfaceRaised)
+                        border.color: isLive ? Theme.accentRed : (goLiveMa.containsMouse ? Theme.panelBorderStrong : Theme.panelBorder)
+                        border.width: isLive ? 1.5 : 1
                         Behavior on color { ColorAnimation { duration: Theme.durationFast } }
-                        // Feedback on press (down), not on release; a critically-damped
-                        // spring settles it back so a rapid double-click doesn't stutter.
+                        Behavior on border.color { ColorAnimation { duration: Theme.durationFast } }
                         scale: goLiveMa.pressed ? 0.97 : 1.0
                         Behavior on scale { SpringAnimation { spring: 5; damping: 0.6 } }
                         ToolTip.visible: goLiveMa.containsMouse
-                        ToolTip.delay: 500
-                        ToolTip.text: ((MediaFlowBackend || {}).isMeetingLive ? "Meeting live — click to end" : "Go live") + root.keyHint("goLive")
+                        ToolTip.delay: 400
+                        ToolTip.text: (isLive ? "Meeting live — click to end session" : "Go live — start meeting broadcast session") + root.keyHint("goLive")
+
                         RowLayout {
-                            anchors.centerIn: parent; spacing: Theme.space2
+                            anchors.centerIn: parent
+                            spacing: Theme.space2
+
                             BroadcastIcon {
-                                name: "bolt"; iconSize: 13
-                                color: (MediaFlowBackend || {}).isMeetingLive ? Theme.accentRed : Theme.textSecondary
+                                name: "broadcast"
+                                iconSize: 15
+                                color: goLiveBtn.isLive ? Theme.accentRed : (goLiveMa.containsMouse ? Theme.textPrimary : Theme.textSecondary)
                             }
+
+                            Rectangle {
+                                visible: goLiveBtn.isLive
+                                width: 6; height: 6; radius: 3
+                                color: Theme.accentRed
+                                SequentialAnimation on opacity {
+                                    running: goLiveBtn.isLive; loops: Animation.Infinite
+                                    NumberAnimation { to: 0.25; duration: 600 }
+                                    NumberAnimation { to: 1.0; duration: 600 }
+                                }
+                            }
+
                             Label {
+                                visible: !root.iconOnlyHeader
+                                text: goLiveBtn.isLive ? (root.compactHeader ? "LIVE" : "MEETING LIVE") : (root.compactHeader ? "LIVE" : "GO LIVE")
+                                color: goLiveBtn.isLive ? Theme.accentRed : Theme.textPrimary
+                                font.pixelSize: Theme.textXs; font.bold: true
+                            }
+
+                            Rectangle {
                                 visible: !root.compactHeader
-                                text: (MediaFlowBackend || {}).isMeetingLive ? "MEETING LIVE" : "GO LIVE"
-                                color: Theme.textPrimary; font.pixelSize: Theme.textXs; font.bold: true
+                                width: 16; height: 16; radius: 3
+                                color: goLiveBtn.isLive ? "#33EF4444" : "#22FFFFFF"
+                                border.color: goLiveBtn.isLive ? "#66EF4444" : "#33FFFFFF"; border.width: 1
+                                Label {
+                                    anchors.centerIn: parent
+                                    text: root.keyFor("goLive") || "G"
+                                    color: goLiveBtn.isLive ? Theme.accentRed : Theme.textSecondary
+                                    font.pixelSize: 8; font.bold: true; font.family: "JetBrains Mono"
+                                }
                             }
                         }
-                        MouseArea { id: goLiveMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: (MediaFlowBackend || {}).toggleMeetingLive() }
+
+                        MouseArea {
+                            id: goLiveMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: (MediaFlowBackend || {}).toggleMeetingLive()
+                        }
                     }
 
+                    // 6b. BROADCAST TO ZOOM (Virtual Camera Pipeline)
                     Rectangle {
+                        id: zoomBtn
                         Layout.preferredHeight: 36
-                        Layout.preferredWidth: root.compactHeader ? 44 : 190
-                        Layout.minimumWidth: root.compactHeader ? 44 : 130
+                        Layout.preferredWidth: root.iconOnlyHeader ? 42 : (root.compactHeader ? 88 : 180)
+                        Layout.minimumWidth: root.iconOnlyHeader ? 42 : 82
                         radius: Theme.radius
-                        color: (MediaFlowBackend || {}).vcamEnabled ? "#1A3B82F6" : Theme.surfaceRaised
-                        border.color: (MediaFlowBackend || {}).vcamEnabled ? Theme.accentBlue : Theme.panelBorder
+                        property bool isZoomActive: (MediaFlowBackend || {}).vcamEnabled === true
+                        color: isZoomActive ? "#152E58" : (zoomMa.containsMouse ? Theme.surfaceHover : Theme.surfaceRaised)
+                        border.color: isZoomActive ? "#3B82F6" : (zoomMa.containsMouse ? Theme.panelBorderStrong : Theme.panelBorder)
+                        border.width: isZoomActive ? 1.5 : 1
                         Behavior on color { ColorAnimation { duration: Theme.durationFast } }
+                        Behavior on border.color { ColorAnimation { duration: Theme.durationFast } }
                         scale: zoomMa.pressed ? 0.97 : 1.0
                         Behavior on scale { SpringAnimation { spring: 5; damping: 0.6 } }
                         ToolTip.visible: zoomMa.containsMouse
-                        ToolTip.delay: 500
-                        ToolTip.text: ((MediaFlowBackend || {}).vcamEnabled
-                            ? "Broadcasting — click to stop sending video to Zoom."
-                            : "1. Click to start.  2. In Zoom's camera picker, choose “OBS Virtual Camera.”  3. Room audio stays on your speakers — nothing is sent to Zoom.") + root.keyHint("broadcastZoom")
+                        ToolTip.delay: 400
+                        ToolTip.text: (isZoomActive
+                            ? "Broadcasting to Zoom (OBS Virtual Camera) — click to stop sending video"
+                            : "Broadcast to Zoom: Feeds Program output into Zoom via OBS Virtual Camera. Room audio stays on hall speakers.") + root.keyHint("broadcastZoom")
+
                         RowLayout {
-                            anchors.centerIn: parent; spacing: Theme.space2
+                            anchors.centerIn: parent
+                            spacing: Theme.space2
+
+                            BroadcastIcon {
+                                name: "zoom"
+                                iconSize: 15
+                                color: zoomBtn.isZoomActive ? "#60A5FA" : (zoomMa.containsMouse ? Theme.textPrimary : "#38BDF8")
+                            }
+
                             Rectangle {
-                                width: 8; height: 8; radius: 4
-                                color: (MediaFlowBackend || {}).vcamEnabled ? Theme.accentBlue : Theme.textFaint
-                                border.color: "white"; border.width: (MediaFlowBackend || {}).vcamEnabled ? 1 : 0
+                                visible: zoomBtn.isZoomActive
+                                width: 6; height: 6; radius: 3
+                                color: "#60A5FA"
                                 SequentialAnimation on opacity {
-                                    running: (MediaFlowBackend || {}).vcamEnabled; loops: Animation.Infinite
-                                    NumberAnimation { to: 0.4; duration: 700 }
+                                    running: zoomBtn.isZoomActive; loops: Animation.Infinite
+                                    NumberAnimation { to: 0.3; duration: 700 }
                                     NumberAnimation { to: 1.0; duration: 700 }
                                 }
                             }
+
                             Label {
-                                visible: !root.compactHeader
-                                text: "BROADCAST TO ZOOM"
-                                color: (MediaFlowBackend || {}).vcamEnabled ? "white" : Theme.textSecondary
+                                visible: !root.iconOnlyHeader
+                                text: zoomBtn.isZoomActive ? (root.compactHeader ? "ZOOM" : "BROADCASTING") : (root.compactHeader ? "ZOOM" : "BROADCAST TO ZOOM")
+                                color: zoomBtn.isZoomActive ? "white" : Theme.textPrimary
                                 font.pixelSize: Theme.textXs; font.bold: true
                                 elide: Text.ElideRight
                             }
+
+                            Rectangle {
+                                visible: !root.compactHeader
+                                width: 16; height: 16; radius: 3
+                                color: zoomBtn.isZoomActive ? "#333B82F6" : "#22FFFFFF"
+                                border.color: zoomBtn.isZoomActive ? "#663B82F6" : "#33FFFFFF"; border.width: 1
+                                Label {
+                                    anchors.centerIn: parent
+                                    text: root.keyFor("broadcastZoom") || "Z"
+                                    color: zoomBtn.isZoomActive ? "white" : Theme.textSecondary
+                                    font.pixelSize: 8; font.bold: true; font.family: "JetBrains Mono"
+                                }
+                            }
                         }
-                        MouseArea { id: zoomMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: requestZoomBroadcast() }
+
+                        MouseArea {
+                            id: zoomMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: requestZoomBroadcast()
+                        }
                     }
 
-                    // Forces the Zoom feed's webcam fallback off entirely --
-                    // independent of BROADCAST TO ZOOM itself (that starts/
-                    // stops sending anything at all; this only controls
-                    // what shows when nothing's on Program). See
-                    // VirtualCameraWindow.qml's Camera.active.
+                    // 6c. WEBCAM FALLBACK (Controls hall podium camera display on Zoom when Program is idle)
                     Rectangle {
+                        id: webcamBtn
                         Layout.preferredHeight: 36
-                        Layout.preferredWidth: root.compactHeader ? 44 : 100
-                        Layout.minimumWidth: root.compactHeader ? 44 : 70
+                        Layout.preferredWidth: root.iconOnlyHeader ? 42 : (root.compactHeader ? 92 : 115)
+                        Layout.minimumWidth: root.iconOnlyHeader ? 42 : 78
                         radius: Theme.radius
-                        color: (MediaFlowBackend || {}).webcamFallbackEnabled ? Theme.surfaceRaised : "#1AEF4444"
-                        border.color: (MediaFlowBackend || {}).webcamFallbackEnabled ? Theme.panelBorder : Theme.accentRed
+                        property bool camEnabled: (MediaFlowBackend || {}).webcamFallbackEnabled !== false
+                        color: !camEnabled ? "#251214" : (webcamMa.containsMouse ? Theme.surfaceHover : Theme.surfaceRaised)
+                        border.color: !camEnabled ? Theme.accentRed : (webcamMa.containsMouse ? Theme.panelBorderStrong : Theme.panelBorder)
+                        border.width: !camEnabled ? 1.5 : 1
                         Behavior on color { ColorAnimation { duration: Theme.durationFast } }
+                        Behavior on border.color { ColorAnimation { duration: Theme.durationFast } }
                         scale: webcamMa.pressed ? 0.97 : 1.0
                         Behavior on scale { SpringAnimation { spring: 5; damping: 0.6 } }
                         ToolTip.visible: webcamMa.containsMouse
-                        ToolTip.delay: 500
-                        ToolTip.text: ((MediaFlowBackend || {}).webcamFallbackEnabled
-                            ? "Webcam shows on Zoom whenever nothing's on Program. Click to force it off (black instead)."
-                            : "Webcam is forced off — Zoom shows black whenever nothing's on Program. Click to re-enable.") + root.keyHint("webcamToggle")
-                        Row {
-                            anchors.centerIn: parent; spacing: Theme.space1
+                        ToolTip.delay: 400
+                        ToolTip.text: (camEnabled
+                            ? "Webcam shows on Zoom whenever Program is idle. Click to force off (black)."
+                            : "Webcam is forced OFF — Zoom shows black whenever Program is idle. Click to enable.") + root.keyHint("webcamToggle")
+
+                        RowLayout {
+                            anchors.centerIn: parent
+                            spacing: Theme.space2
+
                             BroadcastIcon {
-                                anchors.verticalCenter: parent.verticalCenter
-                                name: (MediaFlowBackend || {}).webcamFallbackEnabled ? "video" : "mute"
-                                iconSize: 12
-                                color: (MediaFlowBackend || {}).webcamFallbackEnabled ? Theme.textPrimary : Theme.accentRed
+                                name: webcamBtn.camEnabled ? "webcam" : "webcam-off"
+                                iconSize: 15
+                                color: webcamBtn.camEnabled ? (webcamMa.containsMouse ? Theme.textPrimary : "#10B981") : Theme.accentRed
                             }
+
                             Label {
-                                visible: !root.compactHeader
-                                text: (MediaFlowBackend || {}).webcamFallbackEnabled ? "WEBCAM" : "OFF"
-                                color: (MediaFlowBackend || {}).webcamFallbackEnabled ? Theme.textSecondary : Theme.accentRed
+                                visible: !root.iconOnlyHeader
+                                text: webcamBtn.camEnabled ? "WEBCAM" : "CAM OFF"
+                                color: webcamBtn.camEnabled ? Theme.textPrimary : Theme.accentRed
                                 font.pixelSize: Theme.textXs; font.bold: true
                             }
+
+                            Rectangle {
+                                visible: !root.compactHeader
+                                width: 16; height: 16; radius: 3
+                                color: !webcamBtn.camEnabled ? "#33EF4444" : "#22FFFFFF"
+                                border.color: !webcamBtn.camEnabled ? "#66EF4444" : "#33FFFFFF"; border.width: 1
+                                Label {
+                                    anchors.centerIn: parent
+                                    text: root.keyFor("webcamToggle") || "W"
+                                    color: !webcamBtn.camEnabled ? Theme.accentRed : Theme.textSecondary
+                                    font.pixelSize: 8; font.bold: true; font.family: "JetBrains Mono"
+                                }
+                            }
                         }
+
                         MouseArea {
-                            id: webcamMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                            onClicked: { if (MediaFlowBackend) MediaFlowBackend.webcamFallbackEnabled = !MediaFlowBackend.webcamFallbackEnabled }
+                            id: webcamMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (MediaFlowBackend)
+                                    MediaFlowBackend.webcamFallbackEnabled = !MediaFlowBackend.webcamFallbackEnabled
+                            }
                         }
                     }
 
+                    // 6d. AUDIENCE DISPLAY / EXTEND FEED (Hall projector / secondary monitor output)
                     Rectangle {
+                        id: audienceBtn
                         Layout.preferredHeight: 36
-                        Layout.preferredWidth: root.compactHeader ? 44 : 144
-                        Layout.minimumWidth: root.compactHeader ? 44 : 95
+                        Layout.preferredWidth: root.iconOnlyHeader ? 42 : (root.compactHeader ? 98 : 145)
+                        Layout.minimumWidth: root.iconOnlyHeader ? 42 : 88
                         radius: Theme.radius
-                        color: {
-                            let ext = (MediaFlowBackend || {}).feedExtended
-                            if (ext) return Theme.accentBlue
-                            return extMa.containsMouse ? Theme.surfaceHover : "transparent"
-                        }
-                        border.color: Theme.accentBlue
+                        property bool isExtended: (MediaFlowBackend || {}).feedExtended === true
+                        color: isExtended ? Theme.accentBlue : (extMa.containsMouse ? Theme.surfaceHover : Theme.surfaceRaised)
+                        border.color: isExtended ? "#60A5FA" : (extMa.containsMouse ? Theme.panelBorderStrong : Theme.panelBorder)
+                        border.width: isExtended ? 1.5 : 1
                         Behavior on color { ColorAnimation { duration: Theme.durationFast } }
+                        Behavior on border.color { ColorAnimation { duration: Theme.durationFast } }
                         scale: extMa.pressed ? 0.97 : 1.0
                         Behavior on scale { SpringAnimation { spring: 5; damping: 0.6 } }
                         ToolTip.visible: extMa.containsMouse
-                        ToolTip.delay: 500
-                        ToolTip.text: ((MediaFlowBackend || {}).feedExtended ? "Feed active" : "Extend feed") + root.keyHint("extendFeed")
-                        Row {
-                            anchors.centerIn: parent; spacing: Theme.space2
+                        ToolTip.delay: 400
+                        ToolTip.text: (isExtended
+                            ? "Audience Display is ACTIVE on secondary screen/projector — click to close"
+                            : "Audience Display — extend Program feed to secondary screen or hall projector") + root.keyHint("extendFeed")
+
+                        RowLayout {
+                            anchors.centerIn: parent
+                            spacing: Theme.space2
+
                             BroadcastIcon {
-                                anchors.verticalCenter: parent.verticalCenter
-                                name: (MediaFlowBackend || {}).feedExtended ? "eye" : "screen"
-                                iconSize: 13; color: "white"
+                                name: "projector"
+                                iconSize: 15
+                                color: audienceBtn.isExtended ? "white" : (extMa.containsMouse ? Theme.textPrimary : Theme.textSecondary)
                             }
+
                             Label {
+                                visible: !root.iconOnlyHeader
+                                text: audienceBtn.isExtended ? (root.compactHeader ? "DISPLAY ON" : "FEED ACTIVE") : (root.compactHeader ? "AUDIENCE" : "EXTEND FEED")
+                                color: audienceBtn.isExtended ? "white" : Theme.textPrimary
+                                font.pixelSize: Theme.textXs; font.bold: true
+                            }
+
+                            Rectangle {
                                 visible: !root.compactHeader
-                                text: (MediaFlowBackend || {}).feedExtended ? "FEED ACTIVE" : "EXTEND FEED"
-                                color: "white"; font.pixelSize: Theme.textXs; font.bold: true
+                                width: 16; height: 16; radius: 3
+                                color: audienceBtn.isExtended ? "#33FFFFFF" : "#22FFFFFF"
+                                border.color: audienceBtn.isExtended ? "#55FFFFFF" : "#33FFFFFF"; border.width: 1
+                                Label {
+                                    anchors.centerIn: parent
+                                    text: root.keyFor("extendFeed") || "F"
+                                    color: "white"
+                                    font.pixelSize: 8; font.bold: true; font.family: "JetBrains Mono"
+                                }
                             }
                         }
+
                         MouseArea {
-                            id: extMa; anchors.fill: parent; hoverEnabled: true
+                            id: extMa
+                            anchors.fill: parent
+                            hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: { if (MediaFlowBackend) MediaFlowBackend.toggleAudienceWindow() }
+                            onClicked: {
+                                if (MediaFlowBackend)
+                                    MediaFlowBackend.toggleAudienceWindow()
+                            }
                         }
                     }
                 }
@@ -630,7 +770,8 @@ Item {
                         model: (MediaFlowBackend || {}).meetingSchedule
                         delegate: Item {
                             id: segmentDelegate
-                            width: sList.width; height: isSelected ? 160 : 110
+                            width: sList.width
+                            height: isSelected ? 160 : 110
                             property bool isSelected: (MediaFlowBackend || {}).selectedSegmentId === model.id
                             // Captured here because the nested Repeater below has its own
                             // "model" (associatedMediaIds), which shadows this segment's model.id.
@@ -657,6 +798,17 @@ Item {
                                     anchors.fill: parent; anchors.margins: -2
                                     radius: Theme.radiusLg + 2; color: "transparent"; border.color: segmentDelegate.accent; border.width: 1
                                     opacity: isSelected ? 0.3 : 0
+                                }
+
+                                // Left status rail / accent marker
+                                Rectangle {
+                                    anchors.left: parent.left
+                                    anchors.top: parent.top
+                                    anchors.bottom: parent.bottom
+                                    anchors.margins: 4
+                                    width: 3
+                                    radius: 1.5
+                                    color: isSelected ? segmentDelegate.accent : (model.isLive ? Theme.accentRed : "transparent")
                                 }
 
                                 ColumnLayout {
@@ -715,6 +867,13 @@ Item {
                                                 color: Theme.textPrimary; font.pixelSize: Theme.textMd; font.bold: true; horizontalAlignment: TextInput.AlignHCenter
                                                 inputMethodHints: Qt.ImhDigitsOnly
 
+                                                function submitSong() {
+                                                    if (MediaFlowBackend && text !== "") {
+                                                        MediaFlowBackend.findAndStageSong(parseInt(text), MediaFlowBackend.currentLanguageCode || "E", model.id)
+                                                    }
+                                                    focus = false
+                                                }
+
                                                 Text {
                                                     text: "Song #"
                                                     anchors.centerIn: parent
@@ -723,11 +882,7 @@ Item {
                                                     font: songInput.font
                                                 }
 
-                                                onAccepted: {
-                                                    if (MediaFlowBackend && text !== "") {
-                                                        MediaFlowBackend.findAndStageSong(parseInt(text), MediaFlowBackend.currentLanguageCode || "E", model.id)
-                                                    }
-                                                }
+                                                onAccepted: submitSong()
                                             }
                                         }
 
@@ -736,11 +891,7 @@ Item {
                                             BroadcastIcon { anchors.centerIn: parent; name: "check"; color: "white"; iconSize: 14 }
                                             MouseArea {
                                                 anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                                                onClicked: {
-                                                    if (MediaFlowBackend && songInput.text !== "") {
-                                                        MediaFlowBackend.findAndStageSong(parseInt(songInput.text), MediaFlowBackend.currentLanguageCode || "E", model.id)
-                                                    }
-                                                }
+                                                onClicked: songInput.submitSong()
                                             }
                                         }
 
@@ -778,21 +929,34 @@ Item {
                                                 model: (typeof associatedMediaIds !== "undefined") ? associatedMediaIds : []
                                                 delegate: Rectangle {
                                                     width: 64; height: 36; radius: Theme.radiusSm; color: "black"; clip: true
-                                                    property var asset: (MediaFlowBackend || {}).mediaLibrary ? MediaFlowBackend.mediaLibrary.getRowById(modelData) : ({})
+                                                    border.color: isSelected ? Theme.panelBorderStrong : Theme.panelBorder
+                                                    border.width: 1
+                                                    readonly property var mediaLibrary: (MediaFlowBackend || {}).mediaLibrary || null
+                                                    readonly property var asset: {
+                                                        if (!mediaLibrary)
+                                                            return ({})
+                                                        const revision = mediaLibrary.thumbnailRevision
+                                                        return mediaLibrary.getRowById(modelData)
+                                                    }
 
                                                     Image {
                                                         anchors.fill: parent; fillMode: Image.PreserveAspectCrop
+                                                        sourceSize: Qt.size(64, 36)
+                                                        asynchronous: true
                                                         source: asset.thumbnailPath || "qrc:/MediaFlow/qml/assets/video_placeholder.png"
-                                                        opacity: 0.8
+                                                        opacity: 0.85
                                                     }
 
                                                     // Unlink button
                                                     Rectangle {
                                                         anchors.top: parent.top; anchors.right: parent.right; anchors.margins: 2
                                                         width: 15; height: 15; radius: 7.5; color: Theme.accentRed
+                                                        opacity: unlinkMa.containsMouse ? 1.0 : (isSelected ? 0.75 : 0.0)
+                                                        Behavior on opacity { NumberAnimation { duration: Theme.durationFast } }
                                                         Label { text: "×"; anchors.centerIn: parent; color: "white"; font.pixelSize: Theme.textSm; font.bold: true }
                                                         MouseArea {
-                                                            anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                                            id: unlinkMa
+                                                            anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                                                             onClicked: (MediaFlowBackend || {}).removeMediaFromSequence(segmentDelegate.segmentId, modelData)
                                                         }
                                                     }
@@ -888,8 +1052,10 @@ Item {
                                         // Public Talk -> 30:00, Watchtower Study -> 60:00) so the
                                         // dedicated full-screen timer reflects it immediately --
                                         // skipped for songs, which have no duration set.
-                                        if (TimerBackend && model.durationMinutes > 0)
+                                        if (TimerBackend && model.durationMinutes > 0) {
+                                            TimerBackend.reset()
                                             TimerBackend.targetDurationSeconds = model.durationMinutes * 60
+                                        }
                                     }
                                 }
                             }

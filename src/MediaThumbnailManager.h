@@ -16,7 +16,8 @@ class ThumbnailJob : public QObject, public QRunnable
 {
     Q_OBJECT
 public:
-    ThumbnailJob(const QString &id, const QString &path, const QString &type);
+    ThumbnailJob(const QString &id, const QString &path, const QString &type,
+                 const QString &ffmpegPath = {});
     void run() override;
 
 signals:
@@ -24,13 +25,15 @@ signals:
     void failed(const QString &id);
 
 private:
-    bool extractVideoFrame(const QString &input, const QString &output);
+    bool extractVideoFrame(const QString &input, const QString &output,
+                           const QString &ffmpegPath);
     bool scaleImage(const QString &input, const QString &output);
     bool extractAudioArt(const QString &input, const QString &output);
 
     QString m_id;
     QString m_path;
     QString m_type;
+    QString m_ffmpegPath;
 };
 
 #include <QVideoSink>
@@ -43,6 +46,7 @@ class NativeThumbnailGenerator : public QObject
 public:
     explicit NativeThumbnailGenerator(QObject *parent = nullptr);
     void enqueue(const QString &id, const QString &path, const QString &cachePath);
+    void enqueueAudio(const QString &id, const QString &path, const QString &cachePath);
 
 signals:
     void finished(const QString &id, const QString &cachePath, const QString &title);
@@ -50,11 +54,18 @@ signals:
 
 private slots:
     void processNext();
+    void onMetaDataChanged();
     void onFrameChanged(const QVideoFrame &frame);
     void onStatusChanged(QMediaPlayer::MediaStatus status);
 
 private:
-    struct Request { QString id; QString path; QString cachePath; };
+    struct Request {
+        QString id;
+        QString path;
+        QString cachePath;
+        bool audio = false;
+    };
+    bool finishAudioArtwork(bool allowTitleOnly = false);
     QList<Request> m_queue;
     QMediaPlayer *m_player;
     QVideoSink *m_sink;
@@ -80,6 +91,6 @@ signals:
 private:
     QThreadPool m_pool;
     NativeThumbnailGenerator *m_native;
-    bool m_hasFfmpeg = false;
+    QString m_ffmpegPath;
     QHash<QString, QString> m_failMarkers; // id -> failure-marker path for in-flight jobs
 };

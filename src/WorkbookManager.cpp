@@ -13,6 +13,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QRegularExpression>
+#include <QTextDocument>
 #include <QDebug>
 #include <QStandardPaths>
 #include <QDir>
@@ -22,10 +23,20 @@
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QUuid>
+#include <QCryptographicHash>
+#include <QHash>
 #include <QSet>
 #include <cstring>
 #include <climits>
 #include <algorithm>
+
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <bcrypt.h>
+#endif
 
 #include "miniz.h"
 #include "miniz_zip.h"
@@ -110,6 +121,381 @@ QList<TocEntry> parseToc(const QByteArray &tocXhtml)
     return entries;
 }
 
+QString plainTextFromHtml(const QString &markup)
+{
+    QTextDocument document;
+    document.setHtml(markup);
+    return document.toPlainText().simplified();
+}
+
+bool inflateJwpubContent(const QByteArray &compressed, QString *html)
+{
+    constexpr mz_ulong maxOutputSize = 32 * 1024 * 1024;
+    QByteArray candidate = compressed;
+
+    for (int paddingAttempt = 0; paddingAttempt < 2; ++paddingAttempt) {
+        mz_ulong capacity = 64 * 1024;
+        while (capacity <= maxOutputSize) {
+            QByteArray output(static_cast<int>(capacity), '\0');
+            mz_ulong outputSize = capacity;
+            const int result = mz_uncompress(
+                reinterpret_cast<unsigned char *>(output.data()), &outputSize,
+                reinterpret_cast<const unsigned char *>(candidate.constData()),
+                static_cast<mz_ulong>(candidate.size()));
+            if (result == MZ_OK) {
+                output.resize(static_cast<int>(outputSize));
+                *html = QString::fromUtf8(output);
+                return true;
+            }
+            if (result != MZ_BUF_ERROR)
+                break;
+            if (capacity == maxOutputSize)
+                break;
+            capacity = qMin(capacity * 2, maxOutputSize);
+        }
+
+        if (paddingAttempt != 0 || candidate.isEmpty())
+            break;
+        const int paddingSize = static_cast<unsigned char>(candidate.back());
+        if (paddingSize <= 0 || paddingSize > 16 || paddingSize > candidate.size())
+            break;
+        const QByteArray padding = candidate.right(paddingSize);
+        if (padding != QByteArray(paddingSize, static_cast<char>(paddingSize)))
+            break;
+        candidate.chop(paddingSize);
+    }
+
+    return false;
+}
+
+bool decryptJwpubContent(const QByteArray &encrypted, int mepsLanguageIndex,
+                        const QString &symbol, int year, const QString &issueTagNumber,
+                        QString *html)
+{
+#ifdef Q_OS_WIN
+    if (encrypted.isEmpty() || (encrypted.size() % 16) != 0
+        || symbol.isEmpty() || mepsLanguageIndex < 0 || year <= 0) {
+        qWarning() << "WorkbookManager: invalid local JWPUB content or publication metadata";
+        return false;
+    }
+
+    QStringList keyParts{
+        QString::number(mepsLanguageIndex),
+        symbol,
+        QString::number(year)
+    };
+    if (!issueTagNumber.isEmpty() && issueTagNumber != QStringLiteral("0"))
+        keyParts.append(issueTagNumber);
+
+    // JW Library derives the z-a content key from the publication metadata.
+    QByteArray keyMaterial = QCryptographicHash::hash(
+        keyParts.join(QLatin1Char('_')).toUtf8(), QCryptographicHash::Sha256);
+    static const QByteArray xorKey = QByteArray::fromHex(
+        "11cbb5587e32846d4c26790c633da289f66fe5842a3a585ce1bc3a294af5ada7");
+    for (qsizetype i = 0; i < keyMaterial.size(); ++i)
+        keyMaterial[i] = static_cast<char>(keyMaterial.at(i) ^ xorKey.at(i));
+
+    BCRYPT_ALG_HANDLE algorithm = nullptr;
+    NTSTATUS status = BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_AES_ALGORITHM, nullptr, 0);
+    if (!BCRYPT_SUCCESS(status)) {
+        qWarning() << "WorkbookManager: couldn't initialize AES for local workbook content"
+                   << Qt::hex << status;
+        return false;
+    }
+
+    status = BCryptSetProperty(
+        algorithm, BCRYPT_CHAINING_MODE,
+        reinterpret_cast<PUCHAR>(const_cast<wchar_t *>(BCRYPT_CHAIN_MODE_CBC)),
+        sizeof(BCRYPT_CHAIN_MODE_CBC), 0);
+    if (!BCRYPT_SUCCESS(status)) {
+        qWarning() << "WorkbookManager: couldn't configure AES-CBC for local workbook content"
+                   << Qt::hex << status;
+        BCryptCloseAlgorithmProvider(algorithm, 0);
+        return false;
+    }
+
+    DWORD keyObjectSize = 0;
+    DWORD resultSize = 0;
+    status = BCryptGetProperty(algorithm, BCRYPT_OBJECT_LENGTH,
+                               reinterpret_cast<PUCHAR>(&keyObjectSize),
+                               sizeof(keyObjectSize), &resultSize, 0);
+    if (!BCRYPT_SUCCESS(status)) {
+        qWarning() << "WorkbookManager: couldn't query AES key storage size" << Qt::hex << status;
+        BCryptCloseAlgorithmProvider(algorithm, 0);
+        return false;
+    }
+
+    QByteArray keyObject(static_cast<qsizetype>(keyObjectSize), '\0');
+    BCRYPT_KEY_HANDLE key = nullptr;
+    status = BCryptGenerateSymmetricKey(
+        algorithm, &key,
+        reinterpret_cast<PUCHAR>(keyObject.data()), keyObjectSize,
+        reinterpret_cast<PUCHAR>(keyMaterial.data()), 16, 0);
+    if (!BCRYPT_SUCCESS(status)) {
+        qWarning() << "WorkbookManager: couldn't create AES key for local workbook content"
+                   << Qt::hex << status;
+        BCryptCloseAlgorithmProvider(algorithm, 0);
+        return false;
+    }
+
+    QByteArray iv = keyMaterial.mid(16, 16);
+    QByteArray decrypted(encrypted.size(), '\0');
+    ULONG decryptedSize = 0;
+    status = BCryptDecrypt(
+        key, reinterpret_cast<PUCHAR>(const_cast<char *>(encrypted.constData())),
+        static_cast<ULONG>(encrypted.size()), nullptr,
+        reinterpret_cast<PUCHAR>(iv.data()), static_cast<ULONG>(iv.size()),
+        reinterpret_cast<PUCHAR>(decrypted.data()), static_cast<ULONG>(decrypted.size()),
+        &decryptedSize, 0);
+    BCryptDestroyKey(key);
+    BCryptCloseAlgorithmProvider(algorithm, 0);
+    if (!BCRYPT_SUCCESS(status)) {
+        qWarning() << "WorkbookManager: couldn't decrypt local workbook content" << Qt::hex << status;
+        return false;
+    }
+    decrypted.resize(static_cast<qsizetype>(decryptedSize));
+    if (!inflateJwpubContent(decrypted, html)) {
+        qWarning() << "WorkbookManager: couldn't decompress local workbook content";
+        return false;
+    }
+    return true;
+#else
+    qWarning() << "WorkbookManager: local JWPUB assignment extraction is only supported on Windows";
+    Q_UNUSED(encrypted)
+    Q_UNUSED(mepsLanguageIndex)
+    Q_UNUSED(symbol)
+    Q_UNUSED(year)
+    Q_UNUSED(issueTagNumber)
+    Q_UNUSED(html)
+    return false;
+#endif
+}
+
+struct WorkbookAssignmentSpan {
+    int number = 0;
+    QString segmentId;
+    int firstParagraph = 0;
+    int endParagraph = INT_MAX;
+};
+
+struct WorkbookAssignmentData {
+    QVariantList scheduleRows;
+    QList<WorkbookAssignmentSpan> spans;
+};
+
+struct BookStudyAssignment {
+    QString segmentId;
+    QList<int> chapters;
+};
+
+WorkbookAssignmentData parseWorkbookAssignmentData(const QString &chapterHtml,
+                                                    const QString &languageCode,
+                                                    const QDate &weekStart)
+{
+    struct Heading {
+        int level = 0;
+        qsizetype start = 0;
+        qsizetype end = 0;
+        int paragraph = 0;
+        QString markup;
+    };
+
+    static const QRegularExpression headingRe(
+        QStringLiteral(R"(<h([23])\b([^>]*)>(.*?)</h\1\s*>)"),
+        QRegularExpression::CaseInsensitiveOption | QRegularExpression::DotMatchesEverythingOption);
+    static const QRegularExpression paragraphRe(
+        QStringLiteral(R"(\bid\s*=\s*["']p(\d+)["'])"), QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression numberRe(QStringLiteral(R"(^\s*(\d+)\s*[.)]\s*)"));
+    static const QRegularExpression durationRe(
+        QStringLiteral(R"(\b(\d{1,2})\s*(?:min(?:ute)?s?\.?)(?!\w))"),
+        QRegularExpression::CaseInsensitiveOption);
+
+    QList<Heading> headings;
+    auto it = headingRe.globalMatch(chapterHtml);
+    while (it.hasNext()) {
+        const QRegularExpressionMatch match = it.next();
+        const QRegularExpressionMatch paragraphMatch = paragraphRe.match(match.captured(2));
+        headings.append({
+            match.captured(1).toInt(),
+            match.capturedStart(),
+            match.capturedEnd(),
+            paragraphMatch.hasMatch() ? paragraphMatch.captured(1).toInt() : 0,
+            match.captured(3)
+        });
+    }
+
+    WorkbookAssignmentData result;
+    const QString rowIdPrefix = QStringLiteral("mwb_%1_%2_")
+        .arg(languageCode, weekStart.toString(QStringLiteral("yyyyMMdd")));
+    for (int i = 0; i < headings.size(); ++i) {
+        const Heading &heading = headings[i];
+        if (heading.level != 3)
+            continue;
+
+        const QString title = plainTextFromHtml(heading.markup);
+        const QRegularExpressionMatch numberMatch = numberRe.match(title);
+        if (!numberMatch.hasMatch())
+            continue;
+        const int number = numberMatch.captured(1).toInt();
+
+        QString segmentId;
+        if (number >= 1 && number <= 3)
+            segmentId = QStringLiteral("m3");
+        else if (number >= 4 && number <= 9)
+            segmentId = rowIdPrefix + QString::number(number);
+        if (segmentId.isEmpty())
+            continue;
+
+        int nextHeadingIndex = i + 1;
+        while (nextHeadingIndex < headings.size()
+               && headings[nextHeadingIndex].level != 2
+               && headings[nextHeadingIndex].level != 3) {
+            ++nextHeadingIndex;
+        }
+        const int endParagraph = nextHeadingIndex < headings.size()
+            ? headings[nextHeadingIndex].paragraph : INT_MAX;
+        result.spans.append({number, segmentId, heading.paragraph, endParagraph});
+
+        if (number < 4 || number > 9)
+            continue;
+
+        const qsizetype partEnd = nextHeadingIndex < headings.size()
+            ? headings[nextHeadingIndex].start : chapterHtml.size();
+        const QString body = plainTextFromHtml(
+            chapterHtml.mid(heading.end, partEnd - heading.end));
+        const QRegularExpressionMatch durationMatch =
+            durationRe.match(title + QLatin1Char(' ') + body);
+        const int durationMinutes = durationMatch.hasMatch()
+            ? durationMatch.captured(1).toInt() : 0;
+        result.scheduleRows.append(QVariantMap{
+            {QStringLiteral("number"), number},
+            {QStringLiteral("id"), segmentId},
+            {QStringLiteral("title"), title},
+            {QStringLiteral("durationMinutes"), durationMinutes}
+        });
+    }
+    return result;
+}
+
+BookStudyAssignment parseBookStudyAssignment(const QString &chapterHtml,
+                                             const WorkbookAssignmentData &assignmentData)
+{
+    static const QRegularExpression headingRe(
+        QStringLiteral(R"(<h([23])\b([^>]*)>(.*?)</h\1\s*>)"),
+        QRegularExpression::CaseInsensitiveOption | QRegularExpression::DotMatchesEverythingOption);
+    static const QRegularExpression numberRe(QStringLiteral(R"(^\s*(\d+)\s*[.)]\s*)"));
+    static const QRegularExpression chapterRe(
+        QStringLiteral(R"(\bwcg\b[^0-9]{0,40}?(?:\bchap(?:ter)?s?\.?\s*)?(\d{1,3})(?:\s*(?:-|–|—|,|and|&|to)\s*(\d{1,3}))?)"),
+        QRegularExpression::CaseInsensitiveOption);
+
+    QList<QRegularExpressionMatch> headings;
+    auto it = headingRe.globalMatch(chapterHtml);
+    while (it.hasNext())
+        headings.append(it.next());
+
+    BookStudyAssignment result;
+    for (int i = 0; i < headings.size(); ++i) {
+        const QRegularExpressionMatch &heading = headings.at(i);
+        if (heading.captured(1).toInt() != 3)
+            continue;
+        const QString headingText = plainTextFromHtml(heading.captured(3));
+        const QRegularExpressionMatch numberMatch = numberRe.match(headingText);
+        if (!numberMatch.hasMatch())
+            continue;
+
+        const int assignmentNumber = numberMatch.captured(1).toInt();
+        const auto studySpan = std::find_if(
+            assignmentData.spans.cbegin(), assignmentData.spans.cend(),
+            [assignmentNumber](const WorkbookAssignmentSpan &span) {
+                return span.number == assignmentNumber;
+            });
+        if (studySpan == assignmentData.spans.cend())
+            continue;
+
+        int nextHeading = i + 1;
+        while (nextHeading < headings.size()
+               && headings.at(nextHeading).captured(1).toInt() != 2
+               && headings.at(nextHeading).captured(1).toInt() != 3) {
+            ++nextHeading;
+        }
+        const qsizetype sectionEnd = nextHeading < headings.size()
+            ? headings.at(nextHeading).capturedStart() : chapterHtml.size();
+        const QString sectionText = plainTextFromHtml(
+            headingText + QLatin1Char(' ')
+            + chapterHtml.mid(heading.capturedEnd(), sectionEnd - heading.capturedEnd()));
+        const QRegularExpressionMatch chapterMatch = chapterRe.match(sectionText);
+        if (!chapterMatch.hasMatch())
+            continue;
+
+        const int firstChapter = chapterMatch.captured(1).toInt();
+        const int lastChapter = chapterMatch.captured(2).isEmpty()
+            ? firstChapter : chapterMatch.captured(2).toInt();
+        if (firstChapter < 1 || lastChapter < firstChapter
+            || lastChapter - firstChapter > 4) {
+            qWarning() << "WorkbookManager: invalid WCG chapter range in Bible Study assignment:"
+                       << chapterMatch.captured(0);
+            return result;
+        }
+        for (int chapter = firstChapter; chapter <= lastChapter; ++chapter)
+            result.chapters.append(chapter);
+        result.segmentId = studySpan->segmentId;
+        return result;
+    }
+    return result;
+}
+
+QString localVideoPathForMultimedia(const QString &keySymbol, int track,
+                                    int mepsLanguageIndex, int issueTagNumber)
+{
+    for (const QString &packageRoot : JwLibraryPaths::packageRoots()) {
+        const QString dbPath = packageRoot + QStringLiteral("/LocalState/Data/mediaCollection.db");
+        if (!QFileInfo::exists(dbPath))
+            continue;
+
+        const QString connectionName = QUuid::createUuid().toString();
+        QString resolvedPath;
+        {
+            QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
+            db.setDatabaseName(dbPath);
+            if (!db.open()) {
+                qWarning() << "WorkbookManager: couldn't open JW Library media catalog:"
+                           << db.lastError().text();
+            } else {
+                {
+                    QSqlQuery query(db);
+                    query.prepare(QStringLiteral(
+                        "SELECT v.FilePath FROM MediaKey mk "
+                        "JOIN Video v ON v.MediaKeyId = mk.MediaKeyId "
+                        "WHERE mk.KeySymbol = ? AND mk.Track = ? "
+                        "AND mk.MepsLanguageIndex = ? AND mk.IssueTagNumber = ? "
+                        "ORDER BY v.BitRate DESC"));
+                    query.addBindValue(keySymbol);
+                    query.addBindValue(track);
+                    query.addBindValue(mepsLanguageIndex);
+                    query.addBindValue(issueTagNumber);
+                    if (!query.exec()) {
+                        qWarning() << "WorkbookManager: couldn't query JW Library media catalog:"
+                                   << query.lastError().text();
+                    } else {
+                        while (query.next()) {
+                            const QString path = query.value(0).toString();
+                            if (QFileInfo::exists(path)) {
+                                resolvedPath = path;
+                                break;
+                            }
+                        }
+                    }
+                }
+                db.close();
+            }
+        }
+        QSqlDatabase::removeDatabase(connectionName);
+        if (!resolvedPath.isEmpty())
+            return resolvedPath;
+    }
+    return {};
+}
+
 // English/French/Spanish month names -- the three Latin-script built-in
 // languages where a text match is realistically reliable without pulling
 // in full QLocale-based localized parsing for every possible language
@@ -134,7 +520,7 @@ int monthNumberFromWord(const QString &word)
 // word isn't recognized -- callers fall back to position-based selection.
 QDate parseWeekStart(const QString &text, int fallbackYear)
 {
-    static const QRegularExpression re(R"(([A-Za-zÀ-ÿ]+)\s+(\d{1,2}))");
+    static const QRegularExpression re(R"(([A-Za-zÀ-ÿ]+)\s+(\d{1,2})(?!\d))");
     const QRegularExpressionMatch m = re.match(text);
     if (!m.hasMatch()) return {};
     const int month = monthNumberFromWord(m.captured(1));
@@ -229,24 +615,27 @@ void WorkbookManager::refreshNow()
     setStatus(tr("Checking for this week's workbook…"));
     const QString lang = currentLanguageCode();
     const QDate targetDate = m_selectedDate.isValid() ? m_selectedDate : QDate::currentDate();
-    // A publication JW Library has already downloaded locally is strictly
-    // better than fetching our own EPUB copy: it's guaranteed to be in the
-    // exact right language (no 404s for languages jw.org's EPUB export
-    // doesn't cover), its images are already sitting on disk as plain jpgs
-    // (no zip/regex extraction needed), and matching by each document's own
-    // date text sidesteps any issue-numbering/offset assumptions entirely.
-    // Only fall back to the network fetch if nothing local matches -- that
-    // fallback only ever targets today, since a manually-picked past/future
-    // week is presumed to already be downloaded locally if it's available
-    // at all.
-    if (!applyFromLocalMwb(lang, targetDate) && !m_selectedDate.isValid())
+    if (m_applyPartsLanguage != lang || m_applyPartsDate != targetDate) {
+        m_controller->setWorkbookScheduleRows({});
+        m_controller->clearWorkbookSongLinks();
+        for (const QString &segmentId : {QStringLiteral("m3"), QStringLiteral("m6"),
+                                         QStringLiteral("m8"), QStringLiteral("m9")}) {
+            m_controller->setWorkbookMediaForSegment(segmentId, {});
+        }
+        m_applyPartsLanguage = lang;
+        m_applyPartsDate = targetDate;
+        m_applyPartsLoaded = false;
+    }
+    applyFromLocalBookStudy(lang);
+    // Prefer the local workbook database for song linking, week matching, and
+    // the timed Apply Yourself assignments when its content can be decoded.
+    const bool hasLocalMwb = applyFromLocalMwb(lang, targetDate);
+    if (!hasLocalMwb && !m_selectedDate.isValid())
         fetchPublication(QStringLiteral("mwb"));
+    else if (!m_applyPartsLoaded)
+        fetchPublication(QStringLiteral("mwb"), hasLocalMwb);
     if (!applyFromLocalWatchtower(lang, targetDate) && !m_selectedDate.isValid())
         fetchPublication(QStringLiteral("w"));
-    // No network fallback here -- the Congregation Bible Study book isn't
-    // published via the mwb/w EPUB endpoints at all, so this only ever
-    // works when it's already downloaded locally in JW Library.
-    applyFromLocalBookStudy(lang);
 }
 
 void WorkbookManager::selectWeek(const QDate &date)
@@ -296,10 +685,23 @@ QVariantList WorkbookManager::availableWeeks() const
     }
 
     QList<QDate> sorted = dates.values();
+    const QDate today = QDate::currentDate();
+    const QDate monthStart(today.year(), today.month(), 1);
+    const QDate yearEnd(today.year(), 12, 31);
+    const int daysUntilMonday = (8 - monthStart.dayOfWeek()) % 7;
+    for (QDate weekStart = monthStart.addDays(daysUntilMonday);
+         weekStart <= yearEnd;
+         weekStart = weekStart.addDays(7)) {
+        dates.insert(weekStart);
+    }
+
+    sorted = dates.values();
     std::sort(sorted.begin(), sorted.end());
 
     QVariantList result;
     for (const QDate &start : sorted) {
+        if (start < monthStart || start > yearEnd)
+            continue;
         QVariantMap entry;
         entry["iso"] = start.toString(Qt::ISODate);
         entry["label"] = start.toString(QStringLiteral("MMM d")) + QStringLiteral(" – ")
@@ -311,28 +713,185 @@ QVariantList WorkbookManager::availableWeeks() const
 
 bool WorkbookManager::applyFromLocalBookStudy(const QString &lang)
 {
-    QString bestFolder;
-    const QString filter = QStringLiteral("*_") + lang;
+    m_bookStudyPublicationFolder.clear();
+    QList<QFileInfo> candidates;
     for (const QString &root : publicationsRoots()) {
         QDir rootDir(root);
         if (!rootDir.exists()) continue;
-        const QFileInfoList entries = rootDir.entryInfoList({filter}, QDir::Dirs | QDir::NoDotAndDotDot);
-        for (const QFileInfo &fi : entries) {
-            QFile manifest(fi.absoluteFilePath() + QStringLiteral("/manifest.json"));
-            if (!manifest.open(QIODevice::ReadOnly)) continue;
-            const QJsonObject pub = QJsonDocument::fromJson(manifest.readAll())
-                .object().value(QStringLiteral("publication")).toObject();
-            if (pub.value(QStringLiteral("publicationType")).toString() == QStringLiteral("Book")) {
-                bestFolder = fi.absoluteFilePath();
-                break;
-            }
+        const QFileInfoList entries = rootDir.entryInfoList(
+            {QStringLiteral("wcg_*")}, QDir::Dirs | QDir::NoDotAndDotDot);
+        candidates.append(entries);
+    }
+    const QString preferredFolder = QStringLiteral("wcg_") + lang;
+    std::stable_sort(candidates.begin(), candidates.end(),
+                     [&preferredFolder](const QFileInfo &left, const QFileInfo &right) {
+        return left.fileName().compare(preferredFolder, Qt::CaseInsensitive) == 0
+            && right.fileName().compare(preferredFolder, Qt::CaseInsensitive) != 0;
+    });
+
+    for (const QFileInfo &fi : candidates) {
+        QFile manifest(fi.absoluteFilePath() + QStringLiteral("/manifest.json"));
+        if (!manifest.open(QIODevice::ReadOnly))
+            continue;
+
+        const QJsonObject pub = QJsonDocument::fromJson(manifest.readAll())
+            .object().value(QStringLiteral("publication")).toObject();
+        if (pub.value(QStringLiteral("publicationType")).toString() != QStringLiteral("Book")
+            || pub.value(QStringLiteral("uniqueEnglishSymbol")).toString()
+                != QStringLiteral("wcg"))
+            continue;
+
+        m_bookStudyPublicationFolder = fi.absoluteFilePath();
+        m_controller->setWorkbookPublicationFolder(QStringLiteral("cbs"), fi.absoluteFilePath());
+        if (fi.fileName().compare(preferredFolder, Qt::CaseInsensitive) != 0) {
+            qInfo() << "WorkbookManager: using locally downloaded WCG edition"
+                    << fi.fileName() << "for selected app language" << lang
+                    << "because no matching-language edition is installed";
         }
-        if (!bestFolder.isEmpty()) break;
+        return true;
     }
 
-    if (bestFolder.isEmpty()) return false;
-    m_controller->setWorkbookPublicationFolder(QStringLiteral("cbs"), bestFolder);
-    return true;
+    m_controller->setWorkbookPublicationFolder(QStringLiteral("cbs"), {});
+    return false;
+}
+
+QStringList WorkbookManager::bookStudyImages(const QString &lang,
+                                             const QList<int> &chapters,
+                                             const QString &segmentId)
+{
+    QStringList mediaIds;
+    if (chapters.isEmpty())
+        return mediaIds;
+    if (m_bookStudyPublicationFolder.isEmpty()) {
+        qWarning() << "WorkbookManager: cannot link WCG chapter images; publication is not downloaded for"
+                   << lang;
+        return mediaIds;
+    }
+
+    const QStringList dbFiles = QDir(m_bookStudyPublicationFolder)
+        .entryList({QStringLiteral("wcg_*.db")}, QDir::Files);
+    if (dbFiles.isEmpty()) {
+        qWarning() << "WorkbookManager: WCG publication database is missing from"
+                   << m_bookStudyPublicationFolder;
+        return mediaIds;
+    }
+
+    const QString dbPath = QDir(m_bookStudyPublicationFolder).absoluteFilePath(dbFiles.first());
+    const QString connectionName = QUuid::createUuid().toString();
+    QSet<QString> seenPaths;
+    int linkedImageCount = 0;
+    int missingImageCount = 0;
+    {
+        {
+            QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
+            db.setDatabaseName(dbPath);
+            if (!db.open()) {
+                qWarning() << "WorkbookManager: couldn't open WCG publication database:"
+                           << db.lastError().text();
+            } else {
+                for (const int chapter : chapters) {
+                    int documentId = -1;
+                    qint64 mepsDocumentId = 0;
+                    {
+                        QSqlQuery documentQuery(db);
+                        documentQuery.prepare(QStringLiteral(
+                            "SELECT d.DocumentId, d.MepsDocumentId "
+                            "FROM Document d JOIN Publication p ON p.PublicationId = d.PublicationId "
+                            "WHERE d.ChapterNumber = ? AND LOWER(p.UniqueEnglishSymbol) = 'wcg' "
+                            "ORDER BY d.DocumentId LIMIT 1"));
+                        documentQuery.addBindValue(chapter);
+                        if (documentQuery.exec() && documentQuery.next()) {
+                            documentId = documentQuery.value(0).toInt();
+                            mepsDocumentId = documentQuery.value(1).toLongLong();
+                        } else if (documentQuery.lastError().isValid()) {
+                            qWarning() << "WorkbookManager: couldn't find WCG chapter" << chapter
+                                       << "in the local publication:"
+                                       << documentQuery.lastError().text();
+                        }
+                    }
+                    if (documentId < 0 || mepsDocumentId <= 0) {
+                        qWarning() << "WorkbookManager: WCG chapter" << chapter
+                                   << "is unavailable in the local publication";
+                        continue;
+                    }
+
+                    QSqlQuery imageQuery(db);
+                    imageQuery.prepare(QStringLiteral(
+                        "SELECT m.FilePath, m.MimeType FROM DocumentMultimedia dm "
+                        "JOIN Multimedia m ON m.MultimediaId = dm.MultimediaId "
+                        "WHERE dm.DocumentId = ? AND LOWER(m.MimeType) LIKE 'image/%' "
+                        "ORDER BY dm.DocumentMultimediaId"));
+                    imageQuery.addBindValue(documentId);
+                    if (!imageQuery.exec()) {
+                        qWarning() << "WorkbookManager: couldn't read WCG chapter image references:"
+                                   << imageQuery.lastError().text();
+                        continue;
+                    }
+
+                    while (imageQuery.next()) {
+                        const QString relativePath = imageQuery.value(0).toString();
+                        const QString mimeType = imageQuery.value(1).toString();
+                        const QFileInfo relativeInfo(relativePath);
+                        const QString suffix = relativeInfo.suffix().toLower();
+                        if (!mimeType.startsWith(QStringLiteral("image/"), Qt::CaseInsensitive)
+                            || (suffix != QStringLiteral("jpg")
+                                && suffix != QStringLiteral("jpeg")
+                                && suffix != QStringLiteral("png")
+                                && suffix != QStringLiteral("webp"))) {
+                            continue;
+                        }
+
+                        // WCG's chapter-specific illustrations carry the chapter
+                        // document's MEPS id in their filename. The DB also
+                        // associates some shared publication media with each
+                        // chapter, so exclude those rather than showing them as
+                        // if they belonged to the selected chapter.
+                        const QString expectedPrefix =
+                            QString::number(mepsDocumentId) + QLatin1Char('_');
+                        if (!relativeInfo.fileName().startsWith(expectedPrefix))
+                            continue;
+
+                        QString path = relativePath;
+                        if (QDir::isRelativePath(path))
+                            path = QDir(m_bookStudyPublicationFolder).filePath(path);
+                        const QFileInfo imageInfo(path);
+                        const QString absolutePath = imageInfo.absoluteFilePath();
+                        if (seenPaths.contains(absolutePath))
+                            continue;
+                        seenPaths.insert(absolutePath);
+                        if (!imageInfo.exists() || !imageInfo.isFile()) {
+                            ++missingImageCount;
+                            qWarning() << "WorkbookManager: WCG chapter illustration is unavailable:"
+                                       << absolutePath;
+                            continue;
+                        }
+
+                        const QString mediaId = m_controller->ensureWorkbookMedia(absolutePath);
+                        if (!mediaId.isEmpty() && !mediaIds.contains(mediaId)) {
+                            mediaIds.append(mediaId);
+                            ++linkedImageCount;
+                        }
+                    }
+                }
+                db.close();
+            }
+        }
+        QSqlDatabase::removeDatabase(connectionName);
+    }
+
+    if (linkedImageCount == 0) {
+        qWarning() << "WorkbookManager: no supported local images were linked for WCG chapter(s)"
+                   << chapters << "to segment" << segmentId;
+    } else {
+        qInfo() << "WorkbookManager: linked" << linkedImageCount
+                << "chapter-specific WCG images for chapter(s)" << chapters
+                << "to segment" << segmentId;
+    }
+    if (missingImageCount > 0) {
+        qWarning() << "WorkbookManager:" << missingImageCount
+                   << "WCG chapter image file(s) were missing on disk";
+    }
+    return mediaIds;
 }
 
 bool WorkbookManager::applyFromLocalMwb(const QString &lang, const QDate &targetDate)
@@ -383,26 +942,28 @@ bool WorkbookManager::applyFromLocalMwb(const QString &lang, const QDate &target
     QList<int> songNumbers;
     {
         const QString connName = QUuid::createUuid().toString();
-        QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
-        db.setDatabaseName(best.dbPath);
-        if (db.open()) {
-            {
-                QSqlQuery q(db);
-                // "sjjm" is the song-video/audio publication symbol; its Track
-                // number is the song number, in document (opening/middle/
-                // concluding) order -- confirmed against a real local database.
-                // Capped at 3 via LIMIT so an unrelated extra sjjm-tagged row
-                // elsewhere in the document can't silently shift which song
-                // lands on which segment (m1/m7/m11).
-                q.prepare(QStringLiteral(
-                    "SELECT m.Track FROM DocumentMultimedia dm "
-                    "JOIN Multimedia m ON dm.MultimediaId = m.MultimediaId "
-                    "WHERE dm.DocumentId = ? AND m.KeySymbol = 'sjjm' "
-                    "ORDER BY dm.MultimediaId LIMIT 3"));
-                q.addBindValue(best.docId);
-                if (q.exec()) { while (q.next()) songNumbers.append(q.value(0).toInt()); }
+        {
+            QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
+            db.setDatabaseName(best.dbPath);
+            if (db.open()) {
+                {
+                    QSqlQuery q(db);
+                    // "sjjm" is the song-video/audio publication symbol; its Track
+                    // number is the song number, in document (opening/middle/
+                    // concluding) order -- confirmed against a real local database.
+                    // Capped at 3 via LIMIT so an unrelated extra sjjm-tagged row
+                    // elsewhere in the document can't silently shift which song
+                    // lands on which segment (m1/m7/m11).
+                    q.prepare(QStringLiteral(
+                        "SELECT m.Track FROM DocumentMultimedia dm "
+                        "JOIN Multimedia m ON dm.MultimediaId = m.MultimediaId "
+                        "WHERE dm.DocumentId = ? AND m.KeySymbol = 'sjjm' "
+                        "ORDER BY dm.MultimediaId LIMIT 3"));
+                    q.addBindValue(best.docId);
+                    if (q.exec()) { while (q.next()) songNumbers.append(q.value(0).toInt()); }
+                }
+                db.close();
             }
-            db.close();
         }
         QSqlDatabase::removeDatabase(connName);
     }
@@ -413,6 +974,159 @@ bool WorkbookManager::applyFromLocalMwb(const QString &lang, const QDate &target
     if (songNumbers.size() > 0) m_controller->resolveWeeklySong(songNumbers[0], lang, QStringLiteral("m1"));
     if (songNumbers.size() > 1) m_controller->resolveWeeklySong(songNumbers[1], lang, QStringLiteral("m7"));
     if (songNumbers.size() > 2) m_controller->resolveWeeklySong(songNumbers[2], lang, QStringLiteral("m11"));
+
+    if (!m_applyPartsLoaded) {
+        const QString connName = QUuid::createUuid().toString();
+        QByteArray encryptedChapter;
+        int mepsLanguageIndex = 0;
+        int publicationYear = 0;
+        int issueTagNumber = 0;
+        QString publicationSymbol;
+        QList<QVariantMap> multimedia;
+        {
+            QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
+            db.setDatabaseName(best.dbPath);
+            if (db.open()) {
+                {
+                    QSqlQuery query(db);
+                    query.prepare(QStringLiteral(
+                        "SELECT d.Content, p.MepsLanguageIndex, p.Symbol, p.Year, p.IssueTagNumber "
+                        "FROM Document d JOIN Publication p ON d.PublicationId = p.PublicationId "
+                        "WHERE d.DocumentId = ?"));
+                    query.addBindValue(best.docId);
+                    if (query.exec() && query.next()) {
+                        encryptedChapter = query.value(0).toByteArray();
+                        mepsLanguageIndex = query.value(1).toInt();
+                        publicationSymbol = query.value(2).toString();
+                        publicationYear = query.value(3).toInt();
+                        issueTagNumber = query.value(4).toInt();
+                    } else {
+                        qWarning() << "WorkbookManager: couldn't read selected local workbook content:"
+                                   << query.lastError().text();
+                    }
+                }
+
+                {
+                    QSqlQuery query(db);
+                    query.prepare(QStringLiteral(
+                        "SELECT m.MimeType, m.FilePath, m.KeySymbol, m.Track, "
+                        "m.MepsLanguageIndex, m.IssueTagNumber, dm.BeginParagraphOrdinal "
+                        "FROM DocumentMultimedia dm "
+                        "JOIN Multimedia m ON m.MultimediaId = dm.MultimediaId "
+                        "WHERE dm.DocumentId = ? ORDER BY dm.DocumentMultimediaId"));
+                    query.addBindValue(best.docId);
+                    if (query.exec()) {
+                        while (query.next()) {
+                            multimedia.append(QVariantMap{
+                                {QStringLiteral("mimeType"), query.value(0).toString()},
+                                {QStringLiteral("filePath"), query.value(1).toString()},
+                                {QStringLiteral("keySymbol"), query.value(2).toString()},
+                                {QStringLiteral("track"), query.value(3).toInt()},
+                                {QStringLiteral("languageIndex"), query.value(4).toInt()},
+                                {QStringLiteral("issueTagNumber"), query.value(5).toInt()},
+                                {QStringLiteral("paragraph"), query.value(6).toInt()}
+                            });
+                        }
+                    } else {
+                        qWarning() << "WorkbookManager: couldn't read local workbook media references:"
+                                   << query.lastError().text();
+                    }
+                }
+                db.close();
+            } else {
+                qWarning() << "WorkbookManager: couldn't reopen local workbook for assignment content:"
+                           << db.lastError().text();
+            }
+        }
+        QSqlDatabase::removeDatabase(connName);
+
+        QString chapterHtml;
+        if (!encryptedChapter.isEmpty()
+            && decryptJwpubContent(encryptedChapter, mepsLanguageIndex, publicationSymbol,
+                                   publicationYear, QString::number(issueTagNumber), &chapterHtml)) {
+            QDate weekStart = parseWeekStart(best.title, targetDate.year());
+            if (!weekStart.isValid())
+                weekStart = targetDate.addDays(1 - targetDate.dayOfWeek());
+            const WorkbookAssignmentData assignmentData =
+                parseWorkbookAssignmentData(chapterHtml, lang, weekStart);
+            m_controller->setWorkbookScheduleRows(assignmentData.scheduleRows);
+            m_applyPartsLoaded = true;
+
+            QHash<QString, QStringList> linkedMedia;
+            for (const QVariantMap &item : multimedia) {
+                const QString mimeType = item.value(QStringLiteral("mimeType")).toString();
+                const QString keySymbol = item.value(QStringLiteral("keySymbol")).toString();
+                if (keySymbol.compare(QStringLiteral("sjjm"), Qt::CaseInsensitive) == 0)
+                    continue;
+                if (!mimeType.startsWith(QStringLiteral("image/"))
+                    && !mimeType.startsWith(QStringLiteral("video/")))
+                    continue;
+
+                const int paragraph = item.value(QStringLiteral("paragraph")).toInt();
+                if (paragraph <= 0)
+                    continue;
+                const auto span = std::find_if(
+                    assignmentData.spans.cbegin(), assignmentData.spans.cend(),
+                    [paragraph](const WorkbookAssignmentSpan &candidate) {
+                        return candidate.firstParagraph > 0
+                            && paragraph >= candidate.firstParagraph
+                            && paragraph < candidate.endParagraph;
+                    });
+                if (span == assignmentData.spans.cend())
+                    continue;
+
+                QString path = item.value(QStringLiteral("filePath")).toString();
+                if (mimeType.startsWith(QStringLiteral("image/"))) {
+                    if (QDir::isRelativePath(path))
+                        path = QDir(QFileInfo(best.dbPath).absolutePath()).filePath(path);
+                } else {
+                    path = localVideoPathForMultimedia(
+                        keySymbol, item.value(QStringLiteral("track")).toInt(),
+                        item.value(QStringLiteral("languageIndex")).toInt(),
+                        item.value(QStringLiteral("issueTagNumber")).toInt());
+                }
+                if (path.isEmpty() || !QFileInfo::exists(path))
+                    continue;
+
+                const QString mediaId = m_controller->ensureWorkbookMedia(path);
+                if (!mediaId.isEmpty() && !linkedMedia[span->segmentId].contains(mediaId))
+                    linkedMedia[span->segmentId].append(mediaId);
+            }
+
+            QStringList segmentIds{QStringLiteral("m3")};
+            for (const QVariant &rowValue : assignmentData.scheduleRows)
+                segmentIds.append(rowValue.toMap().value(QStringLiteral("id")).toString());
+
+            const BookStudyAssignment studyAssignment =
+                parseBookStudyAssignment(chapterHtml, assignmentData);
+            if (!studyAssignment.chapters.isEmpty()) {
+                const QStringList chapterMedia = bookStudyImages(
+                    lang, studyAssignment.chapters, studyAssignment.segmentId);
+                qInfo() << "WorkbookManager: Bible Study images for week" << best.title
+                        << "chapter(s)" << studyAssignment.chapters << "segment"
+                        << studyAssignment.segmentId << ":" << chapterMedia.size();
+                for (const QString &mediaId : chapterMedia) {
+                    if (!linkedMedia[studyAssignment.segmentId].contains(mediaId))
+                        linkedMedia[studyAssignment.segmentId].append(mediaId);
+                }
+            } else if (!studyAssignment.segmentId.isEmpty()) {
+                qWarning() << "WorkbookManager: couldn't identify a WCG chapter in Bible Study assignment"
+                           << studyAssignment.segmentId << "for" << best.title;
+            }
+
+            for (const QString &segmentId : segmentIds) {
+                m_controller->setWorkbookMediaForSegment(segmentId, linkedMedia.value(segmentId));
+            }
+            m_controller->persistWorkbookChanges();
+            int linkedMediaCount = 0;
+            for (auto it = linkedMedia.cbegin(); it != linkedMedia.cend(); ++it)
+                linkedMediaCount += it.value().size();
+            qInfo() << "WorkbookManager: loaded" << assignmentData.scheduleRows.size()
+                    << "independent timed meeting rows from the local workbook for" << best.title
+                    << "and linked" << linkedMediaCount
+                    << "non-song media files";
+        }
+    }
 
     setStatus(tr("Meeting Workbook loaded: %1").arg(best.title));
     return true;
@@ -470,42 +1184,68 @@ bool WorkbookManager::applyFromLocalWatchtower(const QString &lang, const QDate 
     QList<QPair<QString, QString>> images;
     {
         const QString connName = QUuid::createUuid().toString();
-        QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
-        db.setDatabaseName(best.dbPath);
-        if (db.open()) {
-            {
-                QSqlQuery sq(db);
-                // Capped at 2 via LIMIT -- see the comment below on why this
-                // article only ever carries the middle/closing songs -- so an
-                // unrelated extra sjjm-tagged row can't silently shift w6 to
-                // the wrong song.
-                sq.prepare(QStringLiteral(
-                    "SELECT m.Track FROM DocumentMultimedia dm "
-                    "JOIN Multimedia m ON dm.MultimediaId = m.MultimediaId "
-                    "WHERE dm.DocumentId = ? AND m.KeySymbol = 'sjjm' "
-                    "ORDER BY dm.MultimediaId LIMIT 2"));
-                sq.addBindValue(best.docId);
-                if (sq.exec()) { while (sq.next()) songNumbers.append(sq.value(0).toInt()); }
+        {
+            QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
+            db.setDatabaseName(best.dbPath);
+            if (db.open()) {
+                {
+                    QSqlQuery sq(db);
+                    // Capped at 2 via LIMIT -- see the comment below on why this
+                    // article only ever carries the middle/closing songs -- so an
+                    // unrelated extra sjjm-tagged row can't silently shift w6 to
+                    // the wrong song.
+                    sq.prepare(QStringLiteral(
+                        "SELECT m.Track FROM DocumentMultimedia dm "
+                        "JOIN Multimedia m ON dm.MultimediaId = m.MultimediaId "
+                        "WHERE dm.DocumentId = ? AND m.KeySymbol = 'sjjm' "
+                        "ORDER BY dm.MultimediaId LIMIT 2"));
+                    sq.addBindValue(best.docId);
+                    if (sq.exec()) { while (sq.next()) songNumbers.append(sq.value(0).toInt()); }
+                    else {
+                        qWarning() << "WorkbookManager: couldn't read Watchtower song references:"
+                                   << sq.lastError().text();
+                    }
+                }
+                {
+                    QSqlQuery imageQuery(db);
+                    imageQuery.prepare(QStringLiteral(
+                        "SELECT m.FilePath FROM DocumentMultimedia dm "
+                        "JOIN Multimedia m ON dm.MultimediaId = m.MultimediaId "
+                        "WHERE dm.DocumentId = ? AND LOWER(m.MimeType) LIKE 'image/%' "
+                        "ORDER BY dm.DocumentMultimediaId"));
+                    imageQuery.addBindValue(best.docId);
+                    if (imageQuery.exec()) {
+                        while (imageQuery.next()) {
+                            QString path = imageQuery.value(0).toString();
+                            if (path.isEmpty())
+                                continue;
+                            if (QDir::isRelativePath(path))
+                                path = QDir(best.folder).filePath(path);
+                            const QFileInfo imageInfo(path);
+                            if (!imageInfo.exists() || !imageInfo.isFile()) {
+                                qWarning() << "WorkbookManager: Watchtower illustration is unavailable:"
+                                           << imageInfo.absoluteFilePath();
+                                continue;
+                            }
+                            images.append({
+                                QStringLiteral("wtimg_%1_%2")
+                                    .arg(best.docId)
+                                    .arg(imageInfo.fileName()),
+                                imageInfo.absoluteFilePath()
+                            });
+                        }
+                    } else {
+                        qWarning() << "WorkbookManager: couldn't read Watchtower image references:"
+                                   << imageQuery.lastError().text();
+                    }
+                }
+                db.close();
             }
-            db.close();
         }
         QSqlDatabase::removeDatabase(connName);
     }
     if (songNumbers.size() != 2) {
         qWarning() << "WorkbookManager: expected 2 songs (middle/closing) in Watchtower document, found" << songNumbers.size();
-    }
-
-    // Auto-link just the magazine cover as a placeholder thumbnail, not the
-    // article's own in-content photos -- the operator adds whichever of
-    // those they actually want for this week's Study themselves via "ADD JW
-    // IMAGE", which already opens straight into this same folder.
-    {
-        const QDir folderDir(best.folder);
-        const QStringList covers = folderDir.entryList({QStringLiteral("*_cvr.jpg")}, QDir::Files);
-        if (!covers.isEmpty()) {
-            images.append({QStringLiteral("wtimg_cover_%1").arg(covers.first()),
-                            folderDir.absoluteFilePath(covers.first())});
-        }
     }
 
     // The Watchtower Study article carries exactly two of the meeting's
@@ -520,15 +1260,18 @@ bool WorkbookManager::applyFromLocalWatchtower(const QString &lang, const QDate 
         m_controller->meetingSchedule()->updateSegmentTitle(QStringLiteral("w4"), best.title.toUpper());
 
     commitWatchtowerImages(images);
+    qInfo() << "WorkbookManager: linked" << images.size()
+            << "downloaded Watchtower article images for" << best.title;
 
     setStatus(tr("Watchtower Study loaded: %1").arg(best.title.isEmpty() ? tr("(untitled)") : best.title));
     return true;
 }
 
-void WorkbookManager::fetchPublication(const QString &pubCode)
+void WorkbookManager::fetchPublication(const QString &pubCode, bool supplementalOnly)
 {
-    const QDate today = QDate::currentDate();
-    const QString issue = (pubCode == QStringLiteral("mwb")) ? mwbIssueFor(today) : wIssueFor(today);
+    const QDate targetDate = m_selectedDate.isValid() ? m_selectedDate : QDate::currentDate();
+    const QString issue = (pubCode == QStringLiteral("mwb"))
+        ? mwbIssueFor(targetDate) : wIssueFor(QDate::currentDate());
     const QString lang = currentLanguageCode();
 
     QUrl url(QStringLiteral("https://app.jw-cdn.org/apis/pub-media/GETPUBMEDIALINKS"));
@@ -546,7 +1289,7 @@ void WorkbookManager::fetchPublication(const QString &pubCode)
     const QString langName = SongSearchUtils::languageNameForCode(lang);
 
     QNetworkReply *metaReply = m_network->get(QNetworkRequest(url));
-    connect(metaReply, &QNetworkReply::finished, this, [this, metaReply, pubCode, pubLabel, langName, lang]() {
+    connect(metaReply, &QNetworkReply::finished, this, [this, metaReply, pubCode, pubLabel, langName, lang, supplementalOnly]() {
         metaReply->deleteLater();
         const int httpStatus = metaReply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         if (metaReply->error() != QNetworkReply::NoError) {
@@ -557,9 +1300,17 @@ void WorkbookManager::fetchPublication(const QString &pubCode)
             // gets a plain-language message instead of the raw network
             // error text.
             if (httpStatus == 404) {
-                setStatus(tr("%1 isn't available in %2 for this issue").arg(pubLabel, langName));
+                const QString error = tr("%1 isn't available in %2 for this issue").arg(pubLabel, langName);
+                if (supplementalOnly)
+                    qWarning() << "WorkbookManager:" << error;
+                else
+                    setStatus(error);
             } else {
-                setStatus(tr("Couldn't reach jw.org for %1 (%2)").arg(pubLabel, metaReply->errorString()));
+                const QString error = tr("Couldn't reach jw.org for %1 (%2)").arg(pubLabel, metaReply->errorString());
+                if (supplementalOnly)
+                    qWarning() << "WorkbookManager:" << error;
+                else
+                    setStatus(error);
             }
             return;
         }
@@ -569,52 +1320,72 @@ void WorkbookManager::fetchPublication(const QString &pubCode)
             ? QString()
             : epubEntries.at(0).toObject()["file"].toObject()["url"].toString();
         if (epubUrl.isEmpty()) {
-            setStatus(tr("%1 isn't available in %2 for this issue").arg(pubLabel, langName));
+            const QString error = tr("%1 isn't available in %2 for this issue").arg(pubLabel, langName);
+            if (supplementalOnly)
+                qWarning() << "WorkbookManager:" << error;
+            else
+                setStatus(error);
             return;
         }
 
         QNetworkReply *epubReply = m_network->get(QNetworkRequest(QUrl(epubUrl)));
-        connect(epubReply, &QNetworkReply::finished, this, [this, epubReply, pubCode, pubLabel]() {
+        connect(epubReply, &QNetworkReply::finished, this, [this, epubReply, pubCode, pubLabel, supplementalOnly]() {
             epubReply->deleteLater();
             if (epubReply->error() != QNetworkReply::NoError) {
-                setStatus(tr("Download failed for %1 (%2)").arg(pubLabel, epubReply->errorString()));
+                const QString error = tr("Download failed for %1 (%2)").arg(pubLabel, epubReply->errorString());
+                if (supplementalOnly)
+                    qWarning() << "WorkbookManager:" << error;
+                else
+                    setStatus(error);
                 return;
             }
             const QByteArray data = epubReply->readAll();
             if (pubCode == QStringLiteral("mwb"))
-                applyMwbEpub(data);
+                applyMwbEpub(data, supplementalOnly);
             else
                 applyWatchtowerEpub(data);
         });
     });
 }
 
-void WorkbookManager::applyMwbEpub(const QByteArray &epubData)
+void WorkbookManager::applyMwbEpub(const QByteArray &epubData, bool supplementalOnly)
 {
     const QMap<QString, QByteArray> files = extractFilesFromEpub(epubData);
     QByteArray toc;
     for (auto it = files.constBegin(); it != files.constEnd(); ++it) {
         if (it.key().endsWith(QStringLiteral("toc.xhtml"))) { toc = it.value(); break; }
     }
-    if (toc.isEmpty()) { setStatus(tr("Meeting Workbook: couldn't find its table of contents")); return; }
+    if (toc.isEmpty()) {
+        if (supplementalOnly)
+            qWarning() << "WorkbookManager: couldn't find the Meeting Workbook EPUB table of contents";
+        else
+            setStatus(tr("Meeting Workbook: couldn't find its table of contents"));
+        return;
+    }
 
     const QList<TocEntry> weeks = parseToc(toc);
-    if (weeks.isEmpty()) { setStatus(tr("Meeting Workbook: no weeks found")); return; }
+    if (weeks.isEmpty()) {
+        if (supplementalOnly)
+            qWarning() << "WorkbookManager: no weeks found in Meeting Workbook EPUB";
+        else
+            setStatus(tr("Meeting Workbook: no weeks found"));
+        return;
+    }
 
-    const QDate today = QDate::currentDate();
-    const int issueYear = today.year();
+    const QDate targetDate = m_selectedDate.isValid() ? m_selectedDate : QDate::currentDate();
+    const int issueYear = targetDate.year();
 
     int bestIndex = -1;
     int bestDiff = INT_MAX;
     for (int i = 0; i < weeks.size(); ++i) {
         const QDate start = parseWeekStart(weeks[i].text, issueYear);
         if (!start.isValid()) continue;
-        // Must be the week that actually CONTAINS today (its Mon-start is on
-        // or before today, within the same 7-day span) -- nearest absolute
+        // Must be the week that actually CONTAINS the selected date (its
+        // Mon-start is on or before it, within the same 7-day span) -- nearest absolute
         // distance would otherwise flip to next week as early as Thursday
         // (once more than 3 days past this week's Monday), rolling the
         // whole app over several days before Monday actually arrives.
-        const qint64 daysFromStart = start.daysTo(today);
+        const qint64 daysFromStart = start.daysTo(targetDate);
         if (daysFromStart < 0 || daysFromStart >= 7) continue;
         const int diff = static_cast<int>(daysFromStart);
         if (diff < bestDiff) { bestDiff = diff; bestIndex = i; }
@@ -625,8 +1396,8 @@ void WorkbookManager::applyMwbEpub(const QByteArray &epubData)
     // month, which keeps this working (approximately) for every language
     // rather than not at all.
     if (bestIndex == -1) {
-        const QDate issueStart(issueYear, mwbIssueFor(today).mid(4, 2).toInt(), 1);
-        int approxWeek = static_cast<int>(issueStart.daysTo(today) / 7);
+        const QDate issueStart(issueYear, mwbIssueFor(targetDate).mid(4, 2).toInt(), 1);
+        int approxWeek = static_cast<int>(issueStart.daysTo(targetDate) / 7);
         bestIndex = std::clamp(approxWeek, 0, static_cast<int>(weeks.size()) - 1);
     }
 
@@ -635,7 +1406,13 @@ void WorkbookManager::applyMwbEpub(const QByteArray &epubData)
     for (auto it = files.constBegin(); it != files.constEnd(); ++it) {
         if (it.key().endsWith(chosenHref)) { chapter = it.value(); break; }
     }
-    if (chapter.isEmpty()) { setStatus(tr("Meeting Workbook: couldn't load this week's content")); return; }
+    if (chapter.isEmpty()) {
+        if (supplementalOnly)
+            qWarning() << "WorkbookManager: couldn't load the selected week's Meeting Workbook content";
+        else
+            setStatus(tr("Meeting Workbook: couldn't load this week's content"));
+        return;
+    }
 
     // Song numbers, in document order -- always exactly [opening, middle,
     // concluding] for the standard midweek meeting format (confirmed
@@ -655,6 +1432,33 @@ void WorkbookManager::applyMwbEpub(const QByteArray &epubData)
     if (songs.size() > 0) m_controller->resolveWeeklySong(songs[0], lang, QStringLiteral("m1"));
     if (songs.size() > 1) m_controller->resolveWeeklySong(songs[1], lang, QStringLiteral("m7"));
     if (songs.size() > 2) m_controller->resolveWeeklySong(songs[2], lang, QStringLiteral("m11"));
+
+    QDate weekStart = parseWeekStart(weeks[bestIndex].text, targetDate.year());
+    if (!weekStart.isValid())
+        weekStart = targetDate.addDays(1 - targetDate.dayOfWeek());
+    const WorkbookAssignmentData assignmentData =
+        parseWorkbookAssignmentData(html, lang, weekStart);
+    m_controller->setWorkbookScheduleRows(assignmentData.scheduleRows);
+    const BookStudyAssignment studyAssignment = parseBookStudyAssignment(html, assignmentData);
+    if (!studyAssignment.chapters.isEmpty()) {
+        const QStringList chapterMedia = bookStudyImages(
+            lang, studyAssignment.chapters, studyAssignment.segmentId);
+        m_controller->setWorkbookMediaForSegment(
+            studyAssignment.segmentId,
+            chapterMedia);
+        m_controller->persistWorkbookChanges();
+        qInfo() << "WorkbookManager: Bible Study images for week" << weeks[bestIndex].text
+                << "chapter(s)" << studyAssignment.chapters << "segment"
+                << studyAssignment.segmentId << ":" << chapterMedia.size();
+    } else if (!studyAssignment.segmentId.isEmpty()) {
+        m_controller->setWorkbookMediaForSegment(studyAssignment.segmentId, {});
+        m_controller->persistWorkbookChanges();
+        qWarning() << "WorkbookManager: couldn't identify a WCG chapter in Bible Study assignment"
+                   << studyAssignment.segmentId << "for" << weeks[bestIndex].text;
+    }
+    qInfo() << "WorkbookManager: generated" << assignmentData.scheduleRows.size()
+            << "independent timed meeting rows from" << weeks[bestIndex].text;
+    m_applyPartsLoaded = true;
 
     setStatus(tr("Meeting Workbook loaded: %1").arg(weeks[bestIndex].text));
 }
@@ -812,27 +1616,20 @@ void WorkbookManager::commitWatchtowerImages(const QList<QPair<QString, QString>
     m_lastWatchtowerImageIds.clear();
 
     QStringList newIds;
-    int index = 0;
+    QStringList newOwnedIds;
     for (const auto &pair : idPathPairs) {
-        const QString &id = pair.first;
         const QString &path = pair.second;
-        if (m_controller->mediaLibrary()->idOfPath(path).isEmpty()) {
-            QVariantMap m;
-            m["id"] = id;
-            m["name"] = tr("Watchtower Study Image %1").arg(index + 1);
-            m["type"] = "image";
-            m["absolutePath"] = path;
-            m["thumbnailPath"] = path;
-            m["isStaged"] = false;
-            m["isImported"] = true;
-            m["category"] = tr("Watchtower Study");
-            m_controller->mediaLibrary()->appendFromVariantList({m});
-        }
-        newIds.append(id);
-        ++index;
+        const bool alreadyIndexed = m_controller->mediaLibrary()->containsPath(path);
+        const QString mediaId = m_controller->ensureWorkbookMedia(path);
+        if (mediaId.isEmpty())
+            continue;
+        m_controller->mediaLibrary()->markImported(mediaId, tr("Watchtower Study"));
+        newIds.append(mediaId);
+        if (!alreadyIndexed)
+            newOwnedIds.append(mediaId);
     }
 
     m_controller->meetingSchedule()->setLinkedMediaForId(QStringLiteral("w4"), newIds);
-    m_lastWatchtowerImageIds = newIds;
+    m_lastWatchtowerImageIds = newOwnedIds;
     m_controller->persistWorkbookChanges();
 }

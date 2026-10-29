@@ -8,8 +8,13 @@ Item {
     
     width: iconSize
     height: iconSize
+
+    onNameChanged: iconCanvas.requestPaint()
+    onColorChanged: iconCanvas.requestPaint()
+    onIconSizeChanged: iconCanvas.requestPaint()
     
     Canvas {
+        id: iconCanvas
         anchors.fill: parent
         onPaint: {
             var ctx = getContext("2d");
@@ -133,6 +138,137 @@ Item {
                 ctx.beginPath(); ctx.moveTo(w*0.75, h*0.2); ctx.lineTo(w*0.75, h*0.8); ctx.stroke();
             } else if (name === "check") {
                 ctx.beginPath(); ctx.moveTo(w*0.2, h*0.5); ctx.lineTo(w*0.45, h*0.75); ctx.lineTo(w*0.85, h*0.25); ctx.stroke();
+            } else if (name === "broadcast" || name === "live") {
+                // Central antenna mast
+                ctx.beginPath();
+                ctx.moveTo(w*0.5, h*0.42); ctx.lineTo(w*0.5, h*0.86); ctx.stroke();
+                // Tripod support legs
+                ctx.beginPath();
+                ctx.moveTo(w*0.30, h*0.86); ctx.lineTo(w*0.5, h*0.62); ctx.lineTo(w*0.70, h*0.86); ctx.stroke();
+                // Transmitter beacon
+                ctx.beginPath();
+                ctx.arc(w*0.5, h*0.38, w*0.09, 0, 2*Math.PI); ctx.fill();
+                // Inner radiating waves (left & right)
+                ctx.beginPath();
+                ctx.arc(w*0.5, h*0.38, w*0.22, -Math.PI*0.35, Math.PI*0.35); ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(w*0.5, h*0.38, w*0.22, Math.PI*0.65, Math.PI*1.35); ctx.stroke();
+                // Outer radiating waves (left & right)
+                ctx.beginPath();
+                ctx.arc(w*0.5, h*0.38, w*0.38, -Math.PI*0.35, Math.PI*0.35); ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(w*0.5, h*0.38, w*0.38, Math.PI*0.65, Math.PI*1.35); ctx.stroke();
+            } else if (name === "zoom") {
+                // Zoom camera body
+                var zx = w*0.08, zy = h*0.24, zw = w*0.54, zh = h*0.52, zr = 2;
+                ctx.beginPath();
+                ctx.moveTo(zx + zr, zy);
+                ctx.lineTo(zx + zw - zr, zy);
+                ctx.arcTo(zx + zw, zy, zx + zw, zy + zr, zr);
+                ctx.lineTo(zx + zw, zy + zh - zr);
+                ctx.arcTo(zx + zw, zy + zh, zx + zw - zr, zy + zh, zr);
+                ctx.lineTo(zx + zr, zy + zh);
+                ctx.arcTo(zx, zy + zh, zx, zy + zh - zr, zr);
+                ctx.lineTo(zx, zy + zr);
+                ctx.arcTo(zx, zy, zx + zr, zy, zr);
+                ctx.closePath();
+                ctx.stroke();
+                // Lens cone
+                ctx.beginPath();
+                ctx.moveTo(zx + zw, h*0.38);
+                ctx.lineTo(w*0.92, h*0.24);
+                ctx.lineTo(w*0.92, h*0.76);
+                ctx.lineTo(zx + zw, h*0.62);
+                ctx.closePath();
+                ctx.fill();
+                // Distinctive Zoom 'Z' mark inside camera
+                ctx.lineWidth = 1.8;
+                ctx.beginPath();
+                ctx.moveTo(w*0.20, h*0.38);
+                ctx.lineTo(w*0.44, h*0.38);
+                ctx.lineTo(w*0.22, h*0.62);
+                ctx.lineTo(w*0.46, h*0.62);
+                ctx.stroke();
+            } else if (name === "webcam") {
+                var wcamX = w*0.5, wcamY = h*0.36, wcamR = w*0.26;
+                // Outer lens circle
+                ctx.beginPath();
+                ctx.arc(wcamX, wcamY, wcamR, 0, 2*Math.PI);
+                ctx.stroke();
+                // Inner optical lens ring
+                ctx.beginPath();
+                ctx.arc(wcamX, wcamY, wcamR*0.52, 0, 2*Math.PI);
+                ctx.stroke();
+                // Center camera sensor pupil
+                ctx.beginPath();
+                ctx.arc(wcamX, wcamY, wcamR*0.22, 0, 2*Math.PI);
+                ctx.fill();
+                // Stand neck
+                ctx.beginPath();
+                ctx.moveTo(wcamX, wcamY + wcamR);
+                ctx.lineTo(wcamX, h*0.74);
+                ctx.stroke();
+                // Desk base mount
+                ctx.beginPath();
+                ctx.moveTo(w*0.22, h*0.86);
+                ctx.lineTo(w*0.78, h*0.86);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(w*0.36, h*0.74);
+                ctx.lineTo(w*0.22, h*0.86);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(w*0.64, h*0.74);
+                ctx.lineTo(w*0.78, h*0.86);
+                ctx.stroke();
+            } else if (name === "webcam-off") {
+                var wcamOffX = w*0.5, wcamOffY = h*0.36, wcamOffR = w*0.26;
+                // Camera outline
+                ctx.beginPath();
+                ctx.arc(wcamOffX, wcamOffY, wcamOffR, 0, 2*Math.PI);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(wcamOffX, wcamOffY, wcamOffR*0.52, 0, 2*Math.PI);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(wcamOffX, wcamOffY, wcamOffR*0.22, 0, 2*Math.PI);
+                ctx.fill();
+                // Stand neck & base
+                ctx.beginPath();
+                ctx.moveTo(wcamOffX, wcamOffY + wcamOffR);
+                ctx.lineTo(wcamOffX, h*0.74);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(w*0.22, h*0.86);
+                ctx.lineTo(w*0.78, h*0.86);
+                ctx.stroke();
+                // Prominent red diagonal strike-through slash
+                ctx.strokeStyle = "#EF4444";
+                ctx.lineWidth = 2.0;
+                ctx.beginPath();
+                ctx.moveTo(w*0.14, h*0.14);
+                ctx.lineTo(w*0.86, h*0.86);
+                ctx.stroke();
+            } else if (name === "projector" || name === "audience") {
+                // Wide presentation display
+                ctx.strokeRect(w*0.10, h*0.18, w*0.80, h*0.48);
+                // Stand neck
+                ctx.beginPath();
+                ctx.moveTo(w*0.5, h*0.66);
+                ctx.lineTo(w*0.5, h*0.84);
+                ctx.stroke();
+                // Stand base
+                ctx.beginPath();
+                ctx.moveTo(w*0.28, h*0.84);
+                ctx.lineTo(w*0.72, h*0.84);
+                ctx.stroke();
+                // Projection play triangle inside
+                ctx.beginPath();
+                ctx.moveTo(w*0.42, h*0.32);
+                ctx.lineTo(w*0.60, h*0.42);
+                ctx.lineTo(w*0.42, h*0.52);
+                ctx.closePath();
+                ctx.fill();
             } else if (name === "screen") {
                 ctx.strokeRect(w*0.1, h*0.2, w*0.8, h*0.5);
                 ctx.beginPath(); ctx.moveTo(w*0.3, h*0.7); ctx.lineTo(w*0.7, h*0.7); ctx.stroke();

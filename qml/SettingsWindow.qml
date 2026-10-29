@@ -264,6 +264,86 @@ Popup {
 
             Rectangle { Layout.fillWidth: true; height: 1; color: Theme.panelBorder }
 
+            // ── App Updates ──
+            ColumnLayout {
+                id: updateSection
+                Layout.fillWidth: true
+                spacing: Theme.space3
+                readonly property var updater: (MediaFlowBackend || {}).updater
+
+                Label { text: "APP UPDATES"; color: Theme.textSecondary; font.bold: true; font.pixelSize: Theme.textSm; font.letterSpacing: 1 }
+                Label {
+                    Layout.fillWidth: true
+                    text: "Current version " + (updateSection.updater ? updateSection.updater.currentVersion : "")
+                    color: Theme.textDim; font.pixelSize: Theme.textSm
+                }
+                Label {
+                    Layout.fillWidth: true
+                    text: updateSection.updater ? updateSection.updater.status : "Update checker unavailable"
+                    color: updateSection.updater && updateSection.updater.updateAvailable ? Theme.accentBlue : Theme.textPrimary
+                    font.pixelSize: Theme.textSm; wrapMode: Text.WordWrap
+                }
+                ProgressBar {
+                    Layout.fillWidth: true
+                    visible: updateSection.updater ? updateSection.updater.downloading : false
+                    from: 0; to: 100
+                    value: updateSection.updater ? Math.max(0, updateSection.updater.downloadProgress) : 0
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.space3
+                    PillButton {
+                        text: updateSection.updater && updateSection.updater.checking ? "CHECKING…" : "CHECK FOR UPDATES"
+                        accentColor: Theme.accentBlue
+                        enabled: updateSection.updater && !updateSection.updater.checking
+                                 && !updateSection.updater.downloading && !updateSection.updater.downloadReady
+                        onClicked: updateSection.updater.checkForUpdates()
+                    }
+                    PillButton {
+                        visible: updateSection.updater ? updateSection.updater.updateAvailable && !updateSection.updater.downloadReady && !updateSection.updater.downloading : false
+                        text: "DOWNLOAD UPDATE"
+                        primary: true
+                        accentColor: Theme.accentBlue
+                        onClicked: updateSection.updater.downloadUpdate()
+                    }
+                    PillButton {
+                        visible: updateSection.updater ? updateSection.updater.downloading : false
+                        text: "CANCEL"
+                        accentColor: Theme.accentRed
+                        onClicked: updateSection.updater.cancelDownload()
+                    }
+                    PillButton {
+                        visible: updateSection.updater ? updateSection.updater.downloadReady : false
+                        text: "INSTALL & RESTART"
+                        primary: true
+                        accentColor: Theme.accentEmerald
+                        onClicked: installUpdateDialog.open()
+                    }
+                }
+                Label {
+                    Layout.fillWidth: true
+                    visible: updateSection.updater ? updateSection.updater.updateAvailable : false
+                    text: updateSection.updater ? "Available version: " + updateSection.updater.latestVersion : ""
+                    color: Theme.textPrimary; font.bold: true; font.pixelSize: Theme.textSm
+                }
+                ScrollView {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 96
+                    visible: updateSection.updater ? updateSection.updater.updateAvailable : false
+                    clip: true
+                    TextArea {
+                        readOnly: true
+                        wrapMode: TextEdit.Wrap
+                        text: updateSection.updater ? updateSection.updater.releaseNotes : ""
+                        color: Theme.textDim
+                        font.pixelSize: Theme.textXs
+                        background: Rectangle { color: Theme.panelBgDark; radius: Theme.radiusSm }
+                    }
+                }
+            }
+
+            Rectangle { Layout.fillWidth: true; height: 1; color: Theme.panelBorder }
+
             // ── Weekly Workbook ──
             ColumnLayout {
                 Layout.fillWidth: true
@@ -437,13 +517,33 @@ Popup {
             RowLayout {
                 Layout.fillWidth: true
                 Label {
-                    text: "MediaFlow Suite v1.0.0"
+                    text: "MediaFlow Suite v" + ((MediaFlowBackend || {}).updater
+                                                  ? MediaFlowBackend.updater.currentVersion : "")
                     color: Theme.textFaint; font.pixelSize: Theme.textXs
                 }
                 Item { Layout.fillWidth: true }
             }
         }
     }
+    }
+
+    Dialog {
+        id: installUpdateDialog
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: 440
+        modal: true
+        title: "Install update and restart?"
+        standardButtons: Dialog.Yes | Dialog.Cancel
+        Label {
+            width: 360
+            text: "MediaFlow will close and open the installer for version "
+                  + (updateSection.updater ? updateSection.updater.latestVersion : "")
+                  + ". Approve the Windows permission prompt, finish setup, and leave “Launch MediaFlow” selected to restart the app."
+            color: Theme.textPrimary
+            wrapMode: Text.WordWrap
+        }
+        onAccepted: updateSection.updater.installAndRestart()
     }
 
     component ScreenPicker: Rectangle {

@@ -2,7 +2,9 @@
 
 #include <QObject>
 #include <QHash>
+#include <QMap>
 #include <QPointer>
+#include <QSet>
 #include <QQmlApplicationEngine>
 #include <QThread>
 #include <QTimer>
@@ -21,6 +23,7 @@
 #include "MediaAsset.h"
 #include "VirtualCameraManager.h"
 #include "PinnedFolderModel.h"
+#include "AppUpdater.h"
 
 class MediaExtractor;
 class MediaThumbnailManager;
@@ -70,10 +73,9 @@ class BroadcastController final : public QObject
     Q_PROPERTY(bool feedExtended READ feedExtended NOTIFY feedExtendedChanged)
     Q_PROPERTY(bool hasSecondaryScreen READ hasSecondaryScreen NOTIFY hasSecondaryScreenChanged)
     Q_PROPERTY(QString scanStatus READ scanStatus NOTIFY scanStatusChanged)
-    // True once the first (startup) library scan has finished -- the splash
-    // screen (qml/SplashScreen.qml) waits on this before showing the main
-    // window, so the operator doesn't see an empty/flickering dashboard
-    // while assets are still being discovered.
+    // True once the first (startup) library scan has finished. The splash
+    // uses this to remain visible during quick scans, but yields to the
+    // dashboard after its short startup grace period for large libraries.
     Q_PROPERTY(bool initialScanComplete READ initialScanComplete NOTIFY initialScanCompleteChanged)
 
     // --- Settings ---
@@ -116,8 +118,14 @@ class BroadcastController final : public QObject
     Q_PROPERTY(bool bgmShuffle READ bgmShuffle WRITE setBgmShuffle NOTIFY bgmShuffleChanged)
     Q_PROPERTY(int bgmPositionMs READ bgmPositionMs NOTIFY bgmPositionChanged)
     Q_PROPERTY(int bgmDurationMs READ bgmDurationMs NOTIFY bgmDurationChanged)
+    Q_PROPERTY(int bgmIndex READ bgmIndex NOTIFY bgmChanged)
+    Q_PROPERTY(QVariantList bgmPlaylistTracks READ bgmPlaylistTracks NOTIFY bgmPlaylistTracksChanged)
+    Q_PROPERTY(QVariantList bgmLibraryTracks READ bgmLibraryTracks NOTIFY bgmLibraryChanged)
+    Q_PROPERTY(QStringList bgmPlaylistNames READ bgmPlaylistNames NOTIFY bgmLibraryChanged)
+    Q_PROPERTY(QString currentBgmPlaylistName READ currentBgmPlaylistName NOTIFY bgmLibraryChanged)
     Q_PROPERTY(QSortFilterProxyModel* stagedMediaProxy READ stagedMediaProxy CONSTANT)
     Q_PROPERTY(PinnedFolderModel* pinnedFolders READ pinnedFolders CONSTANT)
+    Q_PROPERTY(AppUpdater* updater READ updater CONSTANT)
 
 public:
     explicit BroadcastController(QQmlApplicationEngine *engine, QObject *parent = nullptr);
@@ -130,6 +138,7 @@ public:
     BroadcastEngine *broadcastEngine() const { return m_broadcastEngine; }
     QSortFilterProxyModel *stagedMediaProxy() const { return m_filterProxy; }
     PinnedFolderModel *pinnedFolders() const { return m_pinnedFolders; }
+    AppUpdater *updater() const { return m_updater; }
     QCameraDevice programCameraDevice() const { return m_programCameraDevice; }
     QAudioDevice roomAudioOutputDevice() const { return m_roomAudioOutputDevice; }
 
@@ -202,6 +211,11 @@ public:
     void setBgmShuffle(bool enabled);
     int bgmPositionMs() const;
     int bgmDurationMs() const;
+    int bgmIndex() const { return m_bgmIndex; }
+    QVariantList bgmPlaylistTracks() const;
+    QVariantList bgmLibraryTracks() const;
+    QStringList bgmPlaylistNames() const { return m_bgmPlaylists.keys(); }
+    QString currentBgmPlaylistName() const { return m_currentBgmPlaylistName; }
 
     // --- Sequence/Media API ---
     Q_INVOKABLE void selectSegment(const QString &id);
@@ -257,6 +271,10 @@ public:
     // MeetingScheduleModel/MediaLibraryModel and need this to actually be
     // remembered across a restart.
     void persistWorkbookChanges() { saveState(); }
+    QString ensureWorkbookMedia(const QString &path);
+    void setWorkbookMediaForSegment(const QString &segmentId, const QStringList &mediaIds);
+    void setWorkbookScheduleRows(const QVariantList &rows);
+    void clearWorkbookSongLinks();
     // Lets WorkbookManager tell us which on-disk folder holds the current
     // week's matched publication (mwb, w, or the standalone Congregation
     // Bible Study book), so addMediaToSegment can default the file picker
@@ -292,8 +310,18 @@ public:
     Q_INVOKABLE void nextBgm();
     Q_INVOKABLE void backBgm();
     Q_INVOKABLE void stopBgm();
+    Q_INVOKABLE void fadeOutBgm(int durationMs = 2500);
     Q_INVOKABLE void scanBgmFolder();
     Q_INVOKABLE void addFilesToBgm(const QStringList &paths);
+    Q_INVOKABLE void refreshBgmLibrary();
+    Q_INVOKABLE bool createBgmPlaylist(const QString &name);
+    Q_INVOKABLE void selectBgmPlaylist(const QString &name);
+    Q_INVOKABLE void addBgmTracksToPlaylist(const QStringList &paths);
+    Q_INVOKABLE void requestBgmThumbnail(const QString &path);
+    Q_INVOKABLE void playBgmTrack(int index);
+    Q_INVOKABLE void playBgmFile(const QString &path);
+    Q_INVOKABLE void removeBgmTrack(int index);
+    Q_INVOKABLE void browseAndAddBgmFiles();
     Q_INVOKABLE void toggleBgmShuffle() { setBgmShuffle(!m_bgmShuffle); }
     Q_INVOKABLE void seekBgm(int ms);
 
@@ -338,6 +366,10 @@ signals:
     void songNotFoundInLanguage(int songNumber, const QString &languageName);
     void isProgramPausedChanged();
     void bgmChanged();
+    void bgmLibraryChanged();
+    void bgmPlaylistTracksChanged();
+    void bgmTrackMetadataUpdated(const QString &path, const QString &title,
+                                 const QString &thumbnailUrl);
     void bgmShuffleChanged();
     void bgmPositionChanged();
     void bgmDurationChanged();
@@ -345,7 +377,7 @@ signals:
 
 private slots:
     void updateScreenCount();
-    void onMediaFound(MediaType type, const QString &name, const QString &absolutePath, const QImage &thumbnail, const QDateTime &creationDate);
+    void onMediaFound(MediaType type, const QString &name, const QString &absolutePath, const QDateTime &creationDate);
     void onScanFinished();
     void onBgmStatusChanged(QMediaPlayer::MediaStatus status);
 
@@ -353,6 +385,7 @@ private:
     void ensureExtractor();
     void registerCameras();
     void loadBgmTrack(int index);
+    void storeActiveBgmPlaylist();
     void saveState();
     void loadState();
     bool openZoomWindow();
@@ -360,7 +393,9 @@ private:
     void clearMediaIndexes();
     void applyLanguageCode(const QString &languageCode, bool persist, bool reResolveSongs);
     QString languageName(const QString &languageCode) const;
-    QString resolveSongToSegment(int songNumber, const QString &languageCode, const QString &targetSegmentId, bool warnOnMissing);
+    QString resolveSongToSegment(int songNumber, const QString &languageCode,
+                                 const QString &targetSegmentId, bool warnOnMissing,
+                                 bool persistState = true);
     void reResolveSongSegmentsForCurrentLanguage();
     // Builds a MediaAsset entry for one file, adds it to the library + index,
     // enqueues its thumbnail, and returns its new id. Shared by every
@@ -368,15 +403,20 @@ private:
     QString importOneFile(const QString &absolutePath, const QString &category);
     static QStringList expandDroppedMedia(const QStringList &pathsOrUrls);
     static QString normalizeDroppedPath(const QString &pathOrUrl);
+    void flushPendingMediaBatch();
 
     QQmlApplicationEngine *m_engine;
     MediaLibraryModel *m_libraryModel = nullptr;
+    QVariantList m_pendingMediaBatch;
+    QSet<QString> m_pendingMediaPaths;
+    QTimer *m_mediaBatchTimer = nullptr;
     StagedMediaProxyModel *m_filterProxy;
     MeetingScheduleModel *m_meetingModel = nullptr;
     CameraDeviceModel *m_cameraModel;
     BroadcastEngine *m_broadcastEngine;
     VirtualCameraManager *m_vcamManager;
     PinnedFolderModel *m_pinnedFolders = nullptr;
+    AppUpdater *m_updater = nullptr;
 
     QString m_selectedSegmentId;
     QString m_meetingType = "midweek";
@@ -416,10 +456,22 @@ private:
     QMediaPlayer *m_bgmPlayer = nullptr;
     QAudioOutput *m_bgmAudio = nullptr;
     QStringList m_bgmPlaylist;
+    QMap<QString, QStringList> m_bgmPlaylists;
+    QString m_currentBgmPlaylistName = QStringLiteral("My Playlist");
+    QStringList m_bgmLibraryPaths;
     QString m_bgmCoverArt;
+    QHash<QString, QString> m_bgmTrackTitles;
+    QHash<QString, QString> m_bgmThumbnailPaths;
+    QSet<QString> m_bgmThumbnailRequests;
     int m_bgmIndex = 0;
     bool m_bgmShuffle = false;
     QList<int> m_bgmShuffleHistory; // indices played this shuffle session, for "back"
+
+    mutable QVariantList m_cachedBgmLibraryTracks;
+    mutable bool m_bgmLibraryDirty = true;
+    mutable QVariantList m_cachedBgmPlaylistTracks;
+    mutable bool m_bgmPlaylistDirty = true;
+    void invalidateBgmCaches() { m_bgmLibraryDirty = true; m_bgmPlaylistDirty = true; }
 
     // Thumbnail extractor
     MediaThumbnailManager *m_thumbManager = nullptr;
@@ -429,6 +481,7 @@ private:
     QPointer<QQuickWindow> m_zoomWindow;
     bool m_zoomWindowHidden = false;
     QTimer *m_duckingExemptionTimer = nullptr;
+    QTimer *m_workbookRefreshTimer = nullptr;
     QHash<QString, QVariantMap> m_mediaIndexByPath;
     QHash<QString, QVariantMap> m_songIndex;
 };

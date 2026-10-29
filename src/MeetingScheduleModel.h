@@ -4,6 +4,7 @@
 #include <QString>
 #include <QStringList>
 #include <QVector>
+#include <QVariantList>
 
 /**
  * @brief The MeetingScheduleModel class (SequenceModel)
@@ -32,6 +33,7 @@ public:
         // don't need a countdown. Clicking the segment loads this into
         // TimerBackend so the dedicated full-screen timer reflects it.
         int durationMinutes = 0;
+        QStringList workbookMediaIds;
     };
 
     enum Roles {
@@ -73,6 +75,8 @@ public:
     // can be applied to the tab that isn't currently on screen without
     // needing to switch tabs first.
     void setSongNumberForId(const QString &id, int songNum);
+    void setWorkbookMediaForId(const QString &id, const QStringList &mediaIds);
+    void setWorkbookScheduleRows(const QVariantList &rows);
     void setIsLive(int row, bool live);
     void setActiveRow(int row);
 
@@ -91,6 +95,7 @@ signals:
 
 private:
     void ensurePopulated(const QString &type);
+    static QVector<MeetingRow> defaultRows(const QString &type);
 
     QVector<MeetingRow> m_midweekRows;
     QVector<MeetingRow> m_weekendRows;

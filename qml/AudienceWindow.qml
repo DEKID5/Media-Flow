@@ -49,8 +49,8 @@ Window {
     Image {
         anchors.fill: parent; z: 0
         fillMode: Image.PreserveAspectCrop; asynchronous: true
-        sourceSize.width: 1920
-        sourceSize.height: 1080
+        sourceSize.width: Math.round(width * Screen.devicePixelRatio)
+        sourceSize.height: Math.round(height * Screen.devicePixelRatio)
         visible: audienceRoot.isStandby && (MediaFlowBackend || {}).extendedFeedBackgroundType === "image"
         source: visible ? "file:///" + (MediaFlowBackend || {}).extendedFeedBackgroundPath : ""
     }
@@ -111,8 +111,8 @@ Window {
         // Prevents shimmer/aliasing on fine detail (text, thin lines) when a
         // high-res source photo is minified to fit this window.
         mipmap: true
-        sourceSize.width: 1920
-        sourceSize.height: 1080
+        sourceSize.width: Math.round(width * Screen.devicePixelRatio)
+        sourceSize.height: Math.round(height * Screen.devicePixelRatio)
         visible: opacity > 0
         opacity: 0
         Behavior on opacity {
