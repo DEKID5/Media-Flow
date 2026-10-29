@@ -301,12 +301,14 @@ DockPanel {
             anchors.bottomMargin: 8
             Label {
                 text: fmtMs((MediaFlowBackend || {}).bgmPositionMs || 0)
-                color: "#6b7280"; font.family: "JetBrains Mono"; font.pixelSize: Theme.textXs
+                color: "#9ca3af"; font.family: "JetBrains Mono"; font.pixelSize: Theme.textXs
+                font.features: { "tnum": 1 }
             }
             Item { Layout.fillWidth: true }
             Label {
                 text: fmtMs((MediaFlowBackend || {}).bgmDurationMs || 0)
                 color: "#6b7280"; font.family: "JetBrains Mono"; font.pixelSize: Theme.textXs
+                font.features: { "tnum": 1 }
             }
         }
 
@@ -316,17 +318,17 @@ DockPanel {
             anchors.right: parent.right
             anchors.bottom: parent.bottom
             height: 40
-            spacing: 8
+            spacing: 6
 
             BgmButton {
-                Layout.preferredWidth: 36
+                Layout.preferredWidth: 34
                 iconName: "shuffle"
                 active: (MediaFlowBackend || {}).bgmShuffle
                 onClicked: (MediaFlowBackend || {}).toggleBgmShuffle()
             }
 
             BgmButton {
-                Layout.preferredWidth: 40
+                Layout.preferredWidth: 36
                 iconName: "skip-back"
                 onClicked: (MediaFlowBackend || {}).backBgm()
             }
@@ -351,7 +353,7 @@ DockPanel {
 
                 background: Rectangle {
                     radius: 8
-                    color: "#2563eb"
+                    color: (MediaFlowBackend || {}).isPlayingBgm ? "#1d4ed8" : "#2563eb"
                     border.color: "#3B82F6"
                     border.width: 1
                 }
@@ -361,13 +363,25 @@ DockPanel {
             }
 
             BgmButton {
-                Layout.preferredWidth: 40
+                Layout.preferredWidth: 36
                 iconName: "skip-forward"
                 onClicked: (MediaFlowBackend || {}).nextBgm()
             }
 
             BgmButton {
-                Layout.preferredWidth: 50
+                Layout.preferredWidth: 46
+                label: "FADE"
+                onClicked: {
+                    if (MediaFlowBackend && MediaFlowBackend.fadeOutBgm) MediaFlowBackend.fadeOutBgm(2500)
+                    else (MediaFlowBackend || {}).stopBgm()
+                }
+                ToolTip.visible: hovered
+                ToolTip.delay: 400
+                ToolTip.text: "Smooth 2.5s fade out to stop"
+            }
+
+            BgmButton {
+                Layout.preferredWidth: 46
                 label: "STOP"
                 onClicked: (MediaFlowBackend || {}).stopBgm()
             }

@@ -310,6 +310,7 @@ public:
     Q_INVOKABLE void nextBgm();
     Q_INVOKABLE void backBgm();
     Q_INVOKABLE void stopBgm();
+    Q_INVOKABLE void fadeOutBgm(int durationMs = 2500);
     Q_INVOKABLE void scanBgmFolder();
     Q_INVOKABLE void addFilesToBgm(const QStringList &paths);
     Q_INVOKABLE void refreshBgmLibrary();

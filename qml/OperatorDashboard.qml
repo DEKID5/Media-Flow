@@ -353,7 +353,8 @@ Item {
 
                         Label {
                             text: (MediaFlowBackend || {}).masterVolume + "%"
-                            color: Theme.accentBlue; font.pixelSize: Theme.textXs; font.bold: true; Layout.preferredWidth: 32; horizontalAlignment: Text.AlignHCenter
+                            color: Theme.accentBlue; font.pixelSize: Theme.textXs; font.bold: true; Layout.preferredWidth: 34; horizontalAlignment: Text.AlignHCenter
+                            font.features: { "tnum": 1 }
                         }
 
                         Label {
@@ -388,7 +389,7 @@ Item {
 
                     Rectangle {
                         Layout.preferredHeight: 36
-                        Layout.preferredWidth: root.compactHeader ? 44 : 130
+                        Layout.preferredWidth: root.compactHeader ? 44 : 136
                         Layout.minimumWidth: root.compactHeader ? 44 : 90
                         radius: Theme.radius
                         color: (MediaFlowBackend || {}).isMeetingLive ? "#1AEF4444" : Theme.surfaceRaised
@@ -412,13 +413,23 @@ Item {
                                 text: (MediaFlowBackend || {}).isMeetingLive ? "MEETING LIVE" : "GO LIVE"
                                 color: Theme.textPrimary; font.pixelSize: Theme.textXs; font.bold: true
                             }
+                            Rectangle {
+                                visible: !root.compactHeader
+                                width: 16; height: 16; radius: 3; color: "#22FFFFFF"
+                                border.color: "#33FFFFFF"; border.width: 1
+                                Label {
+                                    anchors.centerIn: parent
+                                    text: root.keyFor("goLive") || "G"
+                                    color: Theme.textSecondary; font.pixelSize: 8; font.bold: true; font.family: "JetBrains Mono"
+                                }
+                            }
                         }
                         MouseArea { id: goLiveMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: (MediaFlowBackend || {}).toggleMeetingLive() }
                     }
 
                     Rectangle {
                         Layout.preferredHeight: 36
-                        Layout.preferredWidth: root.compactHeader ? 44 : 190
+                        Layout.preferredWidth: root.compactHeader ? 44 : 196
                         Layout.minimumWidth: root.compactHeader ? 44 : 130
                         radius: Theme.radius
                         color: (MediaFlowBackend || {}).vcamEnabled ? "#1A3B82F6" : Theme.surfaceRaised
@@ -449,6 +460,17 @@ Item {
                                 color: (MediaFlowBackend || {}).vcamEnabled ? "white" : Theme.textSecondary
                                 font.pixelSize: Theme.textXs; font.bold: true
                                 elide: Text.ElideRight
+                            }
+                            Rectangle {
+                                visible: !root.compactHeader
+                                width: 16; height: 16; radius: 3; color: "#22FFFFFF"
+                                border.color: "#33FFFFFF"; border.width: 1
+                                Label {
+                                    anchors.centerIn: parent
+                                    text: root.keyFor("broadcastZoom") || "Z"
+                                    color: (MediaFlowBackend || {}).vcamEnabled ? "white" : Theme.textSecondary
+                                    font.pixelSize: 8; font.bold: true; font.family: "JetBrains Mono"
+                                }
                             }
                         }
                         MouseArea { id: zoomMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: requestZoomBroadcast() }
@@ -497,7 +519,7 @@ Item {
 
                     Rectangle {
                         Layout.preferredHeight: 36
-                        Layout.preferredWidth: root.compactHeader ? 44 : 144
+                        Layout.preferredWidth: root.compactHeader ? 44 : 150
                         Layout.minimumWidth: root.compactHeader ? 44 : 95
                         radius: Theme.radius
                         color: {
@@ -512,10 +534,9 @@ Item {
                         ToolTip.visible: extMa.containsMouse
                         ToolTip.delay: 500
                         ToolTip.text: ((MediaFlowBackend || {}).feedExtended ? "Feed active" : "Extend feed") + root.keyHint("extendFeed")
-                        Row {
+                        RowLayout {
                             anchors.centerIn: parent; spacing: Theme.space2
                             BroadcastIcon {
-                                anchors.verticalCenter: parent.verticalCenter
                                 name: (MediaFlowBackend || {}).feedExtended ? "eye" : "screen"
                                 iconSize: 13; color: "white"
                             }
@@ -523,6 +544,16 @@ Item {
                                 visible: !root.compactHeader
                                 text: (MediaFlowBackend || {}).feedExtended ? "FEED ACTIVE" : "EXTEND FEED"
                                 color: "white"; font.pixelSize: Theme.textXs; font.bold: true
+                            }
+                            Rectangle {
+                                visible: !root.compactHeader
+                                width: 16; height: 16; radius: 3; color: "#22FFFFFF"
+                                border.color: "#44FFFFFF"; border.width: 1
+                                Label {
+                                    anchors.centerIn: parent
+                                    text: root.keyFor("extendFeed") || "F"
+                                    color: "white"; font.pixelSize: 8; font.bold: true; font.family: "JetBrains Mono"
+                                }
                             }
                         }
                         MouseArea {
@@ -680,6 +711,17 @@ Item {
                                     opacity: isSelected ? 0.3 : 0
                                 }
 
+                                // Left status rail / accent marker
+                                Rectangle {
+                                    anchors.left: parent.left
+                                    anchors.top: parent.top
+                                    anchors.bottom: parent.bottom
+                                    anchors.margins: 4
+                                    width: 3
+                                    radius: 1.5
+                                    color: isSelected ? segmentDelegate.accent : (model.isLive ? Theme.accentRed : "transparent")
+                                }
+
                                 ColumnLayout {
                                     anchors.fill: parent; anchors.margins: Theme.space4; spacing: Theme.space2
 
@@ -798,6 +840,8 @@ Item {
                                                 model: (typeof associatedMediaIds !== "undefined") ? associatedMediaIds : []
                                                 delegate: Rectangle {
                                                     width: 64; height: 36; radius: Theme.radiusSm; color: "black"; clip: true
+                                                    border.color: isSelected ? Theme.panelBorderStrong : Theme.panelBorder
+                                                    border.width: 1
                                                     readonly property var mediaLibrary: (MediaFlowBackend || {}).mediaLibrary || null
                                                     readonly property var asset: {
                                                         if (!mediaLibrary)
@@ -811,16 +855,19 @@ Item {
                                                         sourceSize: Qt.size(64, 36)
                                                         asynchronous: true
                                                         source: asset.thumbnailPath || "qrc:/MediaFlow/qml/assets/video_placeholder.png"
-                                                        opacity: 0.8
+                                                        opacity: 0.85
                                                     }
 
                                                     // Unlink button
                                                     Rectangle {
                                                         anchors.top: parent.top; anchors.right: parent.right; anchors.margins: 2
                                                         width: 15; height: 15; radius: 7.5; color: Theme.accentRed
+                                                        opacity: unlinkMa.containsMouse ? 1.0 : (isSelected ? 0.75 : 0.0)
+                                                        Behavior on opacity { NumberAnimation { duration: Theme.durationFast } }
                                                         Label { text: "×"; anchors.centerIn: parent; color: "white"; font.pixelSize: Theme.textSm; font.bold: true }
                                                         MouseArea {
-                                                            anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                                            id: unlinkMa
+                                                            anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                                                             onClicked: (MediaFlowBackend || {}).removeMediaFromSequence(segmentDelegate.segmentId, modelData)
                                                         }
                                                     }

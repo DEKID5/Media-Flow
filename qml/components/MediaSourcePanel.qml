@@ -615,6 +615,23 @@ Item {
                     ToolTip.text: "Add to selected segment"
                 }
 
+                // Quick Stage indicator on hover
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 74; height: 26; radius: 13
+                    color: "#D90A0A0C"
+                    border.color: Theme.accentBlue
+                    border.width: 1
+                    visible: cardMa.containsMouse && !cardMa.drag.active && !addBtn.visible
+                    opacity: visible ? 1.0 : 0.0
+                    Behavior on opacity { NumberAnimation { duration: 120 } }
+                    RowLayout {
+                        anchors.centerIn: parent; spacing: 4
+                        BroadcastIcon { name: "play"; iconSize: 10; color: Theme.accentBlue }
+                        Label { text: "STAGE"; color: "white"; font.pixelSize: 9; font.bold: true; font.letterSpacing: 0.5 }
+                    }
+                }
+
                 MouseArea {
                     id: cardMa
                     anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
@@ -630,6 +647,39 @@ Item {
                         // deliberate action via the "+" button above, not a
                         // side effect of browsing/previewing media.
                         MediaFlowBackend.stageMedia(model.id)
+                    }
+                }
+            }
+        }
+
+        footer: Item {
+            width: grid.width
+            height: (grid.count > 0 && grid.count <= 2) ? 76 : 0
+            visible: height > 0
+            clip: true
+
+            Rectangle {
+                anchors.fill: parent
+                anchors.margins: 6
+                radius: Theme.radius
+                color: "#08FFFFFF"
+                border.color: "#1FFFFFFF"
+                border.width: 1
+
+                RowLayout {
+                    anchors.centerIn: parent
+                    spacing: 10
+                    BroadcastIcon { name: "folder"; iconSize: 16; color: Theme.textDim }
+                    Column {
+                        spacing: 2
+                        Label {
+                            text: root.currentView === "segment" ? "DRAG FILES HERE TO LINK" : "DRAG & DROP TO IMPORT"
+                            color: Theme.textSecondary; font.pixelSize: 9; font.bold: true; font.letterSpacing: 0.8
+                        }
+                        Label {
+                            text: "Supports images, videos & audio"
+                            color: Theme.textFaint; font.pixelSize: 8
+                        }
                     }
                 }
             }

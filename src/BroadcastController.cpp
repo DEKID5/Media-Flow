@@ -36,6 +36,7 @@
 #include <QSet>
 #include <QSettings>
 #include <QMediaMetaData>
+#include <QVariantAnimation>
 
 #include <mmdeviceapi.h>
 #include <audiopolicy.h>
@@ -983,6 +984,35 @@ void BroadcastController::backBgm()
 }
 
 void BroadcastController::stopBgm() { m_bgmPlayer->stop(); emit bgmChanged(); }
+
+void BroadcastController::fadeOutBgm(int durationMs)
+{
+    if (!m_bgmPlayer || m_bgmPlayer->playbackState() != QMediaPlayer::PlayingState || !m_bgmAudio) {
+        stopBgm();
+        return;
+    }
+
+    const float startVolume = m_bgmAudio->volume();
+    if (startVolume <= 0.01f) {
+        stopBgm();
+        m_bgmAudio->setVolume(0.6f);
+        return;
+    }
+
+    auto *anim = new QVariantAnimation(this);
+    anim->setStartValue(startVolume);
+    anim->setEndValue(0.0f);
+    anim->setDuration(qMax(300, durationMs));
+    connect(anim, &QVariantAnimation::valueChanged, this, [this](const QVariant &value) {
+        if (m_bgmAudio) m_bgmAudio->setVolume(value.toFloat());
+    });
+    connect(anim, &QVariantAnimation::finished, this, [this, anim, startVolume]() {
+        stopBgm();
+        if (m_bgmAudio) m_bgmAudio->setVolume(startVolume);
+        anim->deleteLater();
+    });
+    anim->start(QAbstractAnimation::DeleteWhenStopped);
+}
 
 void BroadcastController::setBgmShuffle(bool enabled)
 {
