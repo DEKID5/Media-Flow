@@ -17,14 +17,27 @@
 #include <timeapi.h>
 #endif
 
-#include <QFile>
-#include <QTextStream>
 #include <QDateTime>
+#include <QDir>
+#include <QFile>
+#include <QStandardPaths>
+#include <QTextStream>
 
 void myMessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg)
 {
-    QFile logFile("app_log.txt");
-    if (logFile.open(QIODevice::WriteOnly | QIODevice::Append)) {
+    static QString logPath;
+    if (logPath.isEmpty()) {
+        const QString appData = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+        if (!appData.isEmpty()) {
+            QDir().mkpath(appData);
+            logPath = QDir(appData).filePath(QStringLiteral("app_log.txt"));
+        } else {
+            logPath = QStringLiteral("app_log.txt");
+        }
+    }
+
+    QFile logFile(logPath);
+    if (logFile.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
         QTextStream stream(&logFile);
         stream << QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss.zzz ") << msg << Qt::endl;
     }

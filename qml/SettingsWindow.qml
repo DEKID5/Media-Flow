@@ -280,14 +280,24 @@ Popup {
                 Label {
                     Layout.fillWidth: true
                     text: updateSection.updater ? updateSection.updater.status : "Update checker unavailable"
-                    color: updateSection.updater && updateSection.updater.updateAvailable ? Theme.accentBlue : Theme.textPrimary
+                    color: updateSection.updater && (updateSection.updater.updateAvailable || updateSection.updater.downloadReady)
+                           ? Theme.accentBlue
+                           : (updateSection.updater && updateSection.updater.downloadFailed ? Theme.accentRed : Theme.textPrimary)
                     font.pixelSize: Theme.textSm; wrapMode: Text.WordWrap
                 }
                 ProgressBar {
                     Layout.fillWidth: true
                     visible: updateSection.updater ? updateSection.updater.downloading : false
                     from: 0; to: 100
+                    indeterminate: updateSection.updater ? (updateSection.updater.downloading && updateSection.updater.downloadProgress <= 0) : false
                     value: updateSection.updater ? Math.max(0, updateSection.updater.downloadProgress) : 0
+                }
+                Label {
+                    Layout.fillWidth: true
+                    visible: updateSection.updater ? (updateSection.updater.downloading && updateSection.updater.downloadDetail.length > 0) : false
+                    text: updateSection.updater ? updateSection.updater.downloadDetail : ""
+                    color: Theme.textSecondary
+                    font.pixelSize: Theme.textXs
                 }
                 RowLayout {
                     Layout.fillWidth: true
@@ -300,8 +310,15 @@ Popup {
                         onClicked: updateSection.updater.checkForUpdates()
                     }
                     PillButton {
-                        visible: updateSection.updater ? updateSection.updater.updateAvailable && !updateSection.updater.downloadReady && !updateSection.updater.downloading : false
+                        visible: updateSection.updater ? updateSection.updater.updateAvailable && !updateSection.updater.downloadReady && !updateSection.updater.downloading && !updateSection.updater.downloadFailed : false
                         text: "DOWNLOAD UPDATE"
+                        primary: true
+                        accentColor: Theme.accentBlue
+                        onClicked: updateSection.updater.downloadUpdate()
+                    }
+                    PillButton {
+                        visible: updateSection.updater ? updateSection.updater.downloadFailed && !updateSection.updater.downloading : false
+                        text: "RETRY DOWNLOAD"
                         primary: true
                         accentColor: Theme.accentBlue
                         onClicked: updateSection.updater.downloadUpdate()
