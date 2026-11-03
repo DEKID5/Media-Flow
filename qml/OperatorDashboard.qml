@@ -712,7 +712,7 @@ Item {
             // floor here (200px, tried previously) let DOCK get squeezed
             // well below what its own children need on smaller screens.
             Layout.preferredHeight: (parent.height - 64) / 2
-            Layout.minimumHeight: 460
+            Layout.minimumHeight: 480
             color: "transparent"
             Rectangle { anchors.top: parent.top; width: parent.width; height: 1; color: Theme.panelBorder }
 
