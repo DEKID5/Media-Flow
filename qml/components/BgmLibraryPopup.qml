@@ -192,27 +192,27 @@ Popup {
             Layout.fillWidth: true
             Layout.leftMargin: 22
             Layout.rightMargin: 22
-            Layout.bottomMargin: 18
-            Layout.preferredHeight: 112
-            radius: 14
-            color: "#17171d"
-            border.color: "#25252d"
+            Layout.bottomMargin: 14
+            Layout.preferredHeight: 84
+            radius: 12
+            color: "#16161c"
+            border.color: (backend.isPlayingBgm || false) ? "#1E3B30" : "#24242c"
 
             RowLayout {
                 anchors.fill: parent
-                anchors.margins: 12
-                spacing: 14
+                anchors.margins: 10
+                spacing: 12
 
                 Item {
-                    Layout.preferredWidth: 86
-                    Layout.preferredHeight: 86
+                    Layout.preferredWidth: 64
+                    Layout.preferredHeight: 64
 
                     Rectangle {
                         id: vinylDisc
                         anchors.centerIn: parent
-                        width: 78
-                        height: 78
-                        radius: 39
+                        width: 58
+                        height: 58
+                        radius: 29
                         visible: (backend.bgmCoverArt || "") === ""
                         gradient: Gradient {
                             GradientStop { position: 0; color: "#27272f" }
@@ -228,23 +228,23 @@ Popup {
                         }
                         Rectangle {
                             anchors.centerIn: parent
-                            width: 25
-                            height: 25
-                            radius: 13
+                            width: 18
+                            height: 18
+                            radius: 9
                             color: Theme.accentEmerald
                         }
                         Rectangle {
                             anchors.centerIn: parent
-                            width: 7
-                            height: 7
-                            radius: 4
+                            width: 6
+                            height: 6
+                            radius: 3
                             color: "#111115"
                         }
                     }
 
                     Rectangle {
                         anchors.fill: parent
-                        radius: 11
+                        radius: 10
                         color: "#22222a"
                         visible: (backend.bgmCoverArt || "") !== ""
                         clip: true
@@ -253,27 +253,27 @@ Popup {
                             source: backend.bgmCoverArt || ""
                             fillMode: Image.PreserveAspectCrop
                             asynchronous: true
-                            sourceSize.width: 180
-                            sourceSize.height: 180
+                            sourceSize.width: 140
+                            sourceSize.height: 140
                         }
                     }
 
                     Row {
                         anchors.centerIn: parent
-                        spacing: 3
+                        spacing: 2
                         visible: musicPopup.visible && (backend.isPlayingBgm || false)
                         Repeater {
-                            model: [19, 29, 23, 34, 17]
+                            model: [14, 22, 17, 26, 13]
                             delegate: Rectangle {
                                 required property int index
                                 required property int modelData
-                                width: 4
+                                width: 3
                                 height: modelData
-                                radius: 2
+                                radius: 1.5
                                 color: "#E6FFFFFF"
                                 SequentialAnimation on height {
                                     loops: Animation.Infinite
-                                    NumberAnimation { to: 7; duration: 180 + index * 35; easing.type: Easing.InOutSine }
+                                    NumberAnimation { to: 5; duration: 180 + index * 35; easing.type: Easing.InOutSine }
                                     NumberAnimation { to: modelData; duration: 230 + index * 30; easing.type: Easing.InOutSine }
                                 }
                             }
@@ -283,7 +283,7 @@ Popup {
 
                 ColumnLayout {
                     Layout.fillWidth: true
-                    spacing: 5
+                    spacing: 3
                     Label {
                         text: (backend.isPlayingBgm ? "NOW PLAYING" : "SELECTED TRACK")
                         color: Theme.accentEmerald
@@ -297,7 +297,7 @@ Popup {
                         text: backend.bgmTrackName || "No track selected"
                         color: Theme.textPrimary
                         font.family: "Inter"
-                        font.pixelSize: Theme.textLg
+                        font.pixelSize: Theme.textMd
                         font.bold: true
                         elide: Text.ElideRight
                     }
@@ -312,19 +312,19 @@ Popup {
                 }
 
                 Button {
-                    implicitWidth: 42
-                    implicitHeight: 42
+                    implicitWidth: 38
+                    implicitHeight: 38
                     text: backend.isPlayingBgm ? "Ⅱ" : "▶"
                     onClicked: backend.toggleBgmPlayback()
                     contentItem: Label {
                         text: parent.text
                         color: "white"
-                        font.pixelSize: 16
+                        font.pixelSize: 15
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                     }
                     background: Rectangle {
-                        radius: 12
+                        radius: 10
                         color: "#2563EB"
                     }
                 }
@@ -587,11 +587,12 @@ Popup {
             Layout.leftMargin: 22
             Layout.rightMargin: 22
             Layout.bottomMargin: 8
+            spacing: 8
+
             Label {
-                Layout.fillWidth: true
                 text: musicPopup.activeTab === "library"
                     ? (musicPopup.selectedTrackPaths.length > 0
-                        ? musicPopup.selectedTrackPaths.length + " TRACKS SELECTED"
+                        ? musicPopup.selectedTrackPaths.length + " SELECTED"
                         : "SELECT MUSIC TO ADD")
                     : "UP NEXT · " + (backend.currentBgmPlaylistName || "PLAYLIST")
                 color: Theme.textFaint
@@ -600,6 +601,86 @@ Popup {
                 font.bold: true
                 font.letterSpacing: 0.8
             }
+
+            // Library batch selection buttons
+            Button {
+                visible: musicPopup.activeTab === "library" && musicPopup.libraryTracks.length > 0
+                text: "SELECT ALL"
+                implicitHeight: 22
+                implicitWidth: 68
+                padding: 0
+                contentItem: Label {
+                    text: parent.text
+                    color: "#9CA3AF"
+                    font.family: "Inter"
+                    font.pixelSize: 8
+                    font.bold: true
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                background: Rectangle {
+                    radius: 5
+                    color: parent.hovered ? "#24242e" : "#17171d"
+                    border.color: "#2e2e38"
+                }
+                onClicked: {
+                    var all = []
+                    for (var i = 0; i < musicPopup.libraryTracks.length; ++i) {
+                        all.push(musicPopup.libraryTracks[i].path)
+                    }
+                    musicPopup.selectedTrackPaths = all
+                }
+            }
+
+            Button {
+                visible: musicPopup.activeTab === "library" && musicPopup.selectedTrackPaths.length > 0
+                text: "DESELECT"
+                implicitHeight: 22
+                implicitWidth: 64
+                padding: 0
+                contentItem: Label {
+                    text: parent.text
+                    color: "#EF4444"
+                    font.family: "Inter"
+                    font.pixelSize: 8
+                    font.bold: true
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                background: Rectangle {
+                    radius: 5
+                    color: parent.hovered ? "#2d1b1e" : "#1f1517"
+                    border.color: "#3f2025"
+                }
+                onClicked: musicPopup.selectedTrackPaths = []
+            }
+
+            // Playlist clear button
+            Button {
+                visible: musicPopup.activeTab === "playlist" && musicPopup.playlistTracks.length > 0
+                text: "CLEAR PLAYLIST"
+                implicitHeight: 22
+                implicitWidth: 92
+                padding: 0
+                contentItem: Label {
+                    text: parent.text
+                    color: parent.hovered ? "#EF4444" : "#9CA3AF"
+                    font.family: "Inter"
+                    font.pixelSize: 8
+                    font.bold: true
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                background: Rectangle {
+                    radius: 5
+                    color: parent.hovered ? "#2d1b1e" : "transparent"
+                    border.color: parent.hovered ? "#3f2025" : "transparent"
+                }
+                onClicked: confirmClearDialog.open()
+            }
+
+            Item { Layout.fillWidth: true }
+
             Label {
                 text: musicPopup.activeTab === "library"
                     ? musicPopup.libraryTracks.length + " TRACKS"
@@ -680,7 +761,9 @@ Popup {
                 property string displayName: modelData.name || "Unknown track"
                 property string displayThumbnailPath: modelData.thumbnailPath || ""
                 readonly property bool isPlaylist: musicPopup.activeTab === "playlist"
-                readonly property bool isCurrent: isPlaylist && (modelData.index === (musicPopup.backend.bgmIndex ?? -1))
+                readonly property bool isCurrent: isPlaylist
+                    ? (modelData.index === (musicPopup.backend.bgmIndex ?? -1))
+                    : (Boolean(modelData.path) && modelData.path === (musicPopup.backend.bgmPath || ""))
                 readonly property bool isKeyboardCurrent: trackList.activeFocus && index === trackList.currentIndex
                 onModelDataChanged: {
                     displayName = modelData.name || "Unknown track"
@@ -992,6 +1075,65 @@ Popup {
             playlistNameError.text = ""
             playlistNameField.clear()
             playlistNameField.forceActiveFocus()
+        }
+    }
+
+    Dialog {
+        id: confirmClearDialog
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: Math.min(360, Overlay.overlay ? Overlay.overlay.width - 40 : 360)
+        modal: true
+        focus: true
+        title: "Clear Playlist"
+        standardButtons: Dialog.NoButton
+        padding: 20
+
+        background: Rectangle {
+            color: "#17171d"
+            radius: 14
+            border.color: "#34343d"
+        }
+
+        ColumnLayout {
+            width: parent.width
+            spacing: 14
+            Label {
+                text: "Are you sure you want to remove all tracks from this playlist?"
+                color: Theme.textPrimary
+                font.family: "Inter"
+                font.pixelSize: Theme.textSm
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Item { Layout.fillWidth: true }
+                Button {
+                    text: "CANCEL"
+                    onClicked: confirmClearDialog.close()
+                }
+                Button {
+                    text: "CLEAR"
+                    onClicked: {
+                        backend.clearBgmPlaylist()
+                        confirmClearDialog.close()
+                    }
+                    contentItem: Label {
+                        text: parent.text
+                        color: "white"
+                        font.family: "Inter"
+                        font.pixelSize: 10
+                        font.bold: true
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Rectangle {
+                        radius: 8
+                        color: Theme.accentRed
+                    }
+                }
+            }
         }
     }
 }

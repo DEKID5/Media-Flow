@@ -463,16 +463,36 @@ QString localVideoPathForMultimedia(const QString &keySymbol, int track,
             } else {
                 {
                     QSqlQuery query(db);
-                    query.prepare(QStringLiteral(
-                        "SELECT v.FilePath FROM MediaKey mk "
-                        "JOIN Video v ON v.MediaKeyId = mk.MediaKeyId "
-                        "WHERE mk.KeySymbol = ? AND mk.Track = ? "
-                        "AND mk.MepsLanguageIndex = ? AND mk.IssueTagNumber = ? "
-                        "ORDER BY v.BitRate DESC"));
-                    query.addBindValue(keySymbol);
-                    query.addBindValue(track);
-                    query.addBindValue(mepsLanguageIndex);
-                    query.addBindValue(issueTagNumber);
+                    if (mepsLanguageIndex >= 0 && issueTagNumber >= 0) {
+                        query.prepare(QStringLiteral(
+                            "SELECT v.FilePath FROM MediaKey mk "
+                            "JOIN Video v ON v.MediaKeyId = mk.MediaKeyId "
+                            "WHERE mk.KeySymbol = ? AND mk.Track = ? "
+                            "AND mk.MepsLanguageIndex = ? AND mk.IssueTagNumber = ? "
+                            "ORDER BY v.BitRate DESC"));
+                        query.addBindValue(keySymbol);
+                        query.addBindValue(track);
+                        query.addBindValue(mepsLanguageIndex);
+                        query.addBindValue(issueTagNumber);
+                    } else if (mepsLanguageIndex >= 0) {
+                        query.prepare(QStringLiteral(
+                            "SELECT v.FilePath FROM MediaKey mk "
+                            "JOIN Video v ON v.MediaKeyId = mk.MediaKeyId "
+                            "WHERE mk.KeySymbol = ? AND mk.Track = ? "
+                            "AND mk.MepsLanguageIndex = ? "
+                            "ORDER BY v.BitRate DESC"));
+                        query.addBindValue(keySymbol);
+                        query.addBindValue(track);
+                        query.addBindValue(mepsLanguageIndex);
+                    } else {
+                        query.prepare(QStringLiteral(
+                            "SELECT v.FilePath FROM MediaKey mk "
+                            "JOIN Video v ON v.MediaKeyId = mk.MediaKeyId "
+                            "WHERE mk.KeySymbol = ? AND mk.Track = ? "
+                            "ORDER BY v.BitRate DESC"));
+                        query.addBindValue(keySymbol);
+                        query.addBindValue(track);
+                    }
                     if (!query.exec()) {
                         qWarning() << "WorkbookManager: couldn't query JW Library media catalog:"
                                    << query.lastError().text();
@@ -636,12 +656,232 @@ void WorkbookManager::refreshNow()
         fetchPublication(QStringLiteral("mwb"), hasLocalMwb);
     if (!applyFromLocalWatchtower(lang, targetDate) && !m_selectedDate.isValid())
         fetchPublication(QStringLiteral("w"));
+
+    const int ptNumber = m_controller->meetingSchedule()->talkOutlineNumberForId(QStringLiteral("w2"));
+    if (ptNumber > 0)
+        lookupPublicTalk(ptNumber);
 }
 
 void WorkbookManager::selectWeek(const QDate &date)
 {
     m_selectedDate = date;
     refreshNow();
+}
+
+void WorkbookManager::lookupPublicTalk(int talkNumber)
+{
+    if (talkNumber <= 0) {
+        m_controller->meetingSchedule()->setTalkOutlineNumberForId(QStringLiteral("w2"), 0);
+        m_controller->meetingSchedule()->updateSegmentTitle(QStringLiteral("w2"), QStringLiteral("PUBLIC TALK"));
+        m_controller->setWorkbookMediaForSegment(QStringLiteral("w2"), {});
+        m_controller->persistWorkbookChanges();
+        emit publicTalkResolved(0, QStringLiteral("PUBLIC TALK"), false);
+        return;
+    }
+
+    const QString lang = currentLanguageCode();
+    QString talkTitle;
+    QString finalTitle;
+
+    // 1. Search for Talk Outline Title
+    // Candidates: S-34_<lang>*, S-34mp_<lang>*, S-34_E*, S-34mp_E*, then any S-34* / S-34mp*
+    QList<QFileInfo> titleCandidates;
+    for (const QString &root : publicationsRoots()) {
+        const QDir rootDir(root);
+        if (!rootDir.exists()) continue;
+        const QFileInfoList entries = rootDir.entryInfoList(
+            {QStringLiteral("S-34*")}, QDir::Dirs | QDir::NoDotAndDotDot);
+        titleCandidates.append(entries);
+    }
+
+    // Sort: exact language first, then S-34 before S-34mp (since S-34 is the full outline book), then English
+    std::stable_sort(titleCandidates.begin(), titleCandidates.end(), [&lang](const QFileInfo &a, const QFileInfo &b) {
+        auto score = [&lang](const QFileInfo &fi) {
+            const QString name = fi.fileName();
+            int s = 0;
+            if (name.contains(QStringLiteral("_") + lang, Qt::CaseInsensitive)) s += 100;
+            if (name.startsWith(QStringLiteral("S-34_"), Qt::CaseInsensitive)) s += 20;
+            else if (name.startsWith(QStringLiteral("S-34mp_"), Qt::CaseInsensitive)) s += 10;
+            if (name.contains(QStringLiteral("_E"), Qt::CaseInsensitive)) s += 5;
+            return s;
+        };
+        return score(a) > score(b);
+    });
+
+    for (const QFileInfo &candidateDir : titleCandidates) {
+        const QDir dir(candidateDir.absoluteFilePath());
+        const QStringList dbFiles = dir.entryList({QStringLiteral("*.db")}, QDir::Files);
+        if (dbFiles.isEmpty()) continue;
+
+        const QString dbPath = dir.absoluteFilePath(dbFiles.first());
+        const QString connName = QUuid::createUuid().toString();
+        {
+            QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
+            db.setDatabaseName(dbPath);
+            if (db.open()) {
+                {
+                    QSqlQuery q(db);
+                    q.prepare(QStringLiteral("SELECT DocumentId, Title FROM Document WHERE DocumentId = ? OR Title LIKE ? OR Title LIKE ?"));
+                    q.addBindValue(talkNumber - 1);
+                    q.addBindValue(QStringLiteral("%1.%").arg(talkNumber));
+                    q.addBindValue(QStringLiteral("No. %1 %").arg(talkNumber));
+                    if (q.exec()) {
+                        while (q.next()) {
+                            const int docId = q.value(0).toInt();
+                            const QString rawTitle = q.value(1).toString().trimmed();
+                            if (rawTitle.isEmpty()) continue;
+
+                            static const QRegularExpression numRe(QStringLiteral(R"RX(^(?:No\.?\s*)?(\d+)\b)RX"), QRegularExpression::CaseInsensitiveOption);
+                            const auto match = numRe.match(rawTitle);
+                            if (match.hasMatch()) {
+                                if (match.captured(1).toInt() == talkNumber) {
+                                    talkTitle = rawTitle;
+                                    break;
+                                }
+                            } else if (candidateDir.fileName().startsWith(QStringLiteral("S-34_"), Qt::CaseInsensitive) && docId == talkNumber - 1) {
+                                talkTitle = rawTitle;
+                                break;
+                            }
+                        }
+                    }
+                }
+                db.close();
+            }
+        }
+        QSqlDatabase::removeDatabase(connName);
+        if (!talkTitle.isEmpty()) break;
+    }
+
+    if (!talkTitle.isEmpty()) {
+        static const QRegularExpression stripPrefix(QStringLiteral(R"RX(^(?:No\.?\s*)?\d+[\s.:–-]+)RX"), QRegularExpression::CaseInsensitiveOption);
+        QString clean = talkTitle;
+        clean.remove(stripPrefix);
+        clean = clean.trimmed();
+        if (clean.isEmpty()) clean = talkTitle;
+        finalTitle = QStringLiteral("%1. %2").arg(talkNumber).arg(clean);
+    } else {
+        finalTitle = QStringLiteral("TALK %1").arg(talkNumber);
+    }
+
+    // 2. Search for Talk Outline Media in S-34mp Publications
+    QList<QFileInfo> mediaCandidates;
+    for (const QString &root : publicationsRoots()) {
+        const QDir rootDir(root);
+        if (!rootDir.exists()) continue;
+        const QFileInfoList entries = rootDir.entryInfoList(
+            {QStringLiteral("S-34mp*")}, QDir::Dirs | QDir::NoDotAndDotDot);
+        mediaCandidates.append(entries);
+    }
+
+    std::stable_sort(mediaCandidates.begin(), mediaCandidates.end(), [&lang](const QFileInfo &a, const QFileInfo &b) {
+        auto score = [&lang](const QFileInfo &fi) {
+            const QString name = fi.fileName();
+            if (name.contains(QStringLiteral("_") + lang, Qt::CaseInsensitive)) return 20;
+            if (name.contains(QStringLiteral("_E"), Qt::CaseInsensitive)) return 10;
+            return 1;
+        };
+        return score(a) > score(b);
+    });
+
+    QStringList resolvedMediaPaths;
+
+    for (const QFileInfo &cand : mediaCandidates) {
+        const QDir dir(cand.absoluteFilePath());
+        const QStringList dbFiles = dir.entryList({QStringLiteral("*.db")}, QDir::Files);
+        if (dbFiles.isEmpty()) continue;
+
+        const QString dbPath = dir.absoluteFilePath(dbFiles.first());
+        const QString connName = QUuid::createUuid().toString();
+        int matchedDocId = -1;
+
+        {
+            QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connName);
+            db.setDatabaseName(dbPath);
+            if (db.open()) {
+                {
+                    QSqlQuery q(db);
+                    if (q.exec(QStringLiteral("SELECT DocumentId, Title FROM Document ORDER BY DocumentId"))) {
+                        static const QRegularExpression numRe(QStringLiteral(R"RX(^(?:No\.?\s*)?(\d+)\b)RX"), QRegularExpression::CaseInsensitiveOption);
+                        while (q.next()) {
+                            const int dId = q.value(0).toInt();
+                            const QString t = q.value(1).toString().trimmed();
+                            const auto m = numRe.match(t);
+                            if (m.hasMatch() && m.captured(1).toInt() == talkNumber) {
+                                matchedDocId = dId;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (matchedDocId >= 0) {
+                    QSqlQuery mq(db);
+                    mq.prepare(QStringLiteral(
+                        "SELECT m.MimeType, m.FilePath, m.KeySymbol, m.Track, m.MepsLanguageIndex, m.IssueTagNumber "
+                        "FROM DocumentMultimedia dm "
+                        "JOIN Multimedia m ON dm.MultimediaId = m.MultimediaId "
+                        "WHERE dm.DocumentId = ? "
+                        "ORDER BY dm.DocumentMultimediaId"));
+                    mq.addBindValue(matchedDocId);
+                    if (mq.exec()) {
+                        while (mq.next()) {
+                            const QString mime = mq.value(0).toString().toLower();
+                            const QString filePath = mq.value(1).toString();
+                            const QString keySymbol = mq.value(2).toString();
+                            const int track = mq.value(3).toInt();
+                            const int mepsLang = mq.value(4).toInt();
+                            const int issueTag = mq.value(5).toInt();
+
+                            if (mime.startsWith(QStringLiteral("image/")) || !filePath.isEmpty()) {
+                                QString fullPath = filePath;
+                                if (QDir::isRelativePath(fullPath))
+                                    fullPath = dir.filePath(filePath);
+                                if (QFileInfo::exists(fullPath)) {
+                                    resolvedMediaPaths.append(fullPath);
+                                }
+                            } else if (mime.startsWith(QStringLiteral("video/")) || !keySymbol.isEmpty()) {
+                                QString videoPath = localVideoPathForMultimedia(keySymbol, track, mepsLang, issueTag);
+                                if (videoPath.isEmpty() && mepsLang != 0) {
+                                    videoPath = localVideoPathForMultimedia(keySymbol, track, 0, issueTag);
+                                }
+                                if (videoPath.isEmpty()) {
+                                    videoPath = localVideoPathForMultimedia(keySymbol, track, -1, -1);
+                                }
+                                if (!videoPath.isEmpty() && QFileInfo::exists(videoPath)) {
+                                    resolvedMediaPaths.append(videoPath);
+                                }
+                            }
+                        }
+                    }
+                }
+                db.close();
+            }
+        }
+        QSqlDatabase::removeDatabase(connName);
+
+        if (!resolvedMediaPaths.isEmpty())
+            break;
+    }
+
+    // 3. Link Media into Media Library and update MeetingScheduleModel
+    QStringList mediaIds;
+    for (const QString &path : resolvedMediaPaths) {
+        const QString mediaId = m_controller->ensureWorkbookMedia(path);
+        if (!mediaId.isEmpty()) {
+            m_controller->mediaLibrary()->markImported(mediaId, tr("Public Talk"));
+            mediaIds.append(mediaId);
+        }
+    }
+
+    m_controller->meetingSchedule()->setTalkOutlineNumberForId(QStringLiteral("w2"), talkNumber);
+    m_controller->meetingSchedule()->updateSegmentTitle(QStringLiteral("w2"), finalTitle.toUpper());
+    m_controller->setWorkbookMediaForSegment(QStringLiteral("w2"), mediaIds);
+    m_controller->persistWorkbookChanges();
+
+    qInfo() << "WorkbookManager: Public Talk" << talkNumber << "resolved as" << finalTitle
+            << "with" << mediaIds.size() << "media item(s)";
+    setStatus(tr("Public Talk %1: %2 (%3 media)").arg(talkNumber).arg(finalTitle).arg(mediaIds.size()));
+    emit publicTalkResolved(talkNumber, finalTitle, !mediaIds.isEmpty());
 }
 
 QVariantList WorkbookManager::availableWeeks() const

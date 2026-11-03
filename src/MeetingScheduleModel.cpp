@@ -29,6 +29,7 @@ QVariant MeetingScheduleModel::data(const QModelIndex &index, int role) const
         case AssociatedMediaIdsRole: return s.linkedMediaIds;
         case SongNumberRole: return s.songNumber;
         case DurationMinutesRole: return s.durationMinutes;
+        case TalkOutlineNumberRole: return s.talkOutlineNumber;
     }
     return {};
 }
@@ -45,6 +46,7 @@ QHash<int, QByteArray> MeetingScheduleModel::roleNames() const
     roles[AssociatedMediaIdsRole] = "associatedMediaIds";
     roles[SongNumberRole] = "songNumber";
     roles[DurationMinutesRole] = "durationMinutes";
+    roles[TalkOutlineNumberRole] = "talkOutlineNumber";
     return roles;
 }
 
@@ -177,7 +179,7 @@ void MeetingScheduleModel::clearAllMedia()
 {
     beginResetModel();
     for (auto &r : m_midweekRows) { r.linkedMediaIds.clear(); r.workbookMediaIds.clear(); r.isLive = false; r.songNumber = 0; }
-    for (auto &r : m_weekendRows) { r.linkedMediaIds.clear(); r.workbookMediaIds.clear(); r.isLive = false; r.songNumber = 0; }
+    for (auto &r : m_weekendRows) { r.linkedMediaIds.clear(); r.workbookMediaIds.clear(); r.isLive = false; r.songNumber = 0; r.talkOutlineNumber = 0; }
     endResetModel();
 }
 
@@ -224,6 +226,27 @@ void MeetingScheduleModel::setSongNumberForId(const QString &id, int songNum)
         if (wk[i].id == id) {
             wk[i].songNumber = songNum;
             if (m_activeType == "weekend") emit dataChanged(index(i), index(i), {SongNumberRole});
+            return;
+        }
+    }
+}
+
+void MeetingScheduleModel::setTalkOutlineNumberForId(const QString &id, int number)
+{
+    // Search both row lists so this works regardless of which tab is active.
+    auto &mid = m_midweekRows;
+    for (int i = 0; i < mid.size(); ++i) {
+        if (mid[i].id == id) {
+            mid[i].talkOutlineNumber = number;
+            if (m_activeType == "midweek") emit dataChanged(index(i), index(i), {TalkOutlineNumberRole});
+            return;
+        }
+    }
+    auto &wk = m_weekendRows;
+    for (int i = 0; i < wk.size(); ++i) {
+        if (wk[i].id == id) {
+            wk[i].talkOutlineNumber = number;
+            if (m_activeType == "weekend") emit dataChanged(index(i), index(i), {TalkOutlineNumberRole});
             return;
         }
     }
@@ -389,6 +412,17 @@ int MeetingScheduleModel::rowOfId(const QString &id) const
     return -1;
 }
 
+int MeetingScheduleModel::talkOutlineNumberForId(const QString &id) const
+{
+    for (const MeetingRow &r : m_weekendRows) {
+        if (r.id == id) return r.talkOutlineNumber;
+    }
+    for (const MeetingRow &r : m_midweekRows) {
+        if (r.id == id) return r.talkOutlineNumber;
+    }
+    return 0;
+}
+
 QVariantList MeetingScheduleModel::getFullState(const QString &type) const
 {
     const auto &rows = (type == "midweek") ? m_midweekRows : m_weekendRows;
@@ -404,6 +438,7 @@ QVariantList MeetingScheduleModel::getFullState(const QString &type) const
         m.insert("time", s.time);
         m.insert("type", s.type);
         m.insert("isSong", s.isSong);
+        m.insert("talkOutlineNumber", s.talkOutlineNumber);
         list.append(m);
     }
     return list;
@@ -443,6 +478,8 @@ void MeetingScheduleModel::setFullState(const QString &type, const QVariantList 
             row.title = m.value(QStringLiteral("title")).toString();
         if (m.contains(QStringLiteral("time")))
             row.time = m.value(QStringLiteral("time")).toString();
+        if (m.contains(QStringLiteral("talkOutlineNumber")))
+            row.talkOutlineNumber = m.value(QStringLiteral("talkOutlineNumber")).toInt();
         restored.append(row);
     }
     for (const MeetingRow &row : rows) {

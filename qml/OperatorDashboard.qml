@@ -827,6 +827,12 @@ Item {
                                             text: model.durationMinutes + " MIN"
                                             color: Theme.textDim; font.pixelSize: Theme.textXs; font.bold: true
                                         }
+                                        Label {
+                                            visible: model.id === "w2" && model.talkOutlineNumber > 0
+                                            text: "• PUBLIC TALK"
+                                            color: Theme.accentAmber
+                                            font.pixelSize: Theme.textXs; font.bold: true
+                                        }
                                         Item { Layout.fillWidth: true }
                                         BroadcastIcon {
                                             visible: model.isLive; name: "activity"; color: Theme.accentRed; iconSize: 13
@@ -899,6 +905,66 @@ Item {
                                             text: (typeof associatedMediaIds !== "undefined" && associatedMediaIds && associatedMediaIds.length > 0) ? "LINKED" : "UNLINKED"
                                             font.pixelSize: Theme.textXs; font.bold: true
                                             color: (typeof associatedMediaIds !== "undefined" && associatedMediaIds && associatedMediaIds.length > 0) ? Theme.accentEmerald : Theme.textFaint
+                                            font.letterSpacing: 1
+                                        }
+                                    }
+
+                                    // Public Talk Outline Selector (w2)
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        visible: model.id === "w2" && isSelected
+                                        spacing: Theme.space3
+
+                                        Rectangle {
+                                            width: 100; height: 32; radius: Theme.radiusSm; color: Theme.surfaceHover; border.color: Theme.panelBorderStrong
+                                            TextInput {
+                                                id: talkInput
+                                                anchors.centerIn: parent; width: parent.width - 16
+                                                color: Theme.textPrimary; font.pixelSize: Theme.textMd; font.bold: true; horizontalAlignment: TextInput.AlignHCenter
+                                                inputMethodHints: Qt.ImhDigitsOnly
+                                                validator: IntValidator { bottom: 1; top: 999 }
+                                                text: (model.talkOutlineNumber && model.talkOutlineNumber > 0) ? model.talkOutlineNumber : ""
+
+                                                function submitTalk() {
+                                                    if (MediaFlowBackend) {
+                                                        var num = parseInt(text)
+                                                        if (!isNaN(num) && num > 0) {
+                                                            MediaFlowBackend.lookupPublicTalk(num)
+                                                        } else {
+                                                            MediaFlowBackend.lookupPublicTalk(0)
+                                                        }
+                                                    }
+                                                    focus = false
+                                                }
+
+                                                Text {
+                                                    text: "Talk #"
+                                                    anchors.centerIn: parent
+                                                    color: Theme.textFaint
+                                                    visible: talkInput.text === "" && !talkInput.activeFocus
+                                                    font: talkInput.font
+                                                }
+
+                                                onAccepted: submitTalk()
+                                            }
+                                        }
+
+                                        Rectangle {
+                                            width: 32; height: 32; radius: Theme.radiusSm; color: Theme.accentBlue
+                                            BroadcastIcon { anchors.centerIn: parent; name: "check"; color: "white"; iconSize: 14 }
+                                            MouseArea {
+                                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                                onClicked: talkInput.submitTalk()
+                                            }
+                                        }
+
+                                        Label {
+                                            text: (typeof associatedMediaIds !== "undefined" && associatedMediaIds && associatedMediaIds.length > 0)
+                                                  ? associatedMediaIds.length + " MEDIA"
+                                                  : ((model.talkOutlineNumber && model.talkOutlineNumber > 0) ? "NO MEDIA" : "UNSET")
+                                            font.pixelSize: Theme.textXs; font.bold: true
+                                            color: (typeof associatedMediaIds !== "undefined" && associatedMediaIds && associatedMediaIds.length > 0)
+                                                   ? Theme.accentEmerald : Theme.textFaint
                                             font.letterSpacing: 1
                                         }
                                     }
@@ -1125,6 +1191,11 @@ Item {
         }
         function onSongNotFoundInLanguage(num, languageName) {
             toast.show("Song " + num + " not found in " + languageName + ".")
+        }
+        function onPublicTalkResolved(num, title, hasMedia) {
+            if (num > 0) {
+                toast.show("Talk " + num + " loaded" + (hasMedia ? " with media" : " (no media found)") + ".")
+            }
         }
     }
 

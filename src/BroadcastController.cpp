@@ -310,7 +310,7 @@ BroadcastController::BroadcastController(QQmlApplicationEngine *engine, QObject 
     // Same fixed device as room audio -- BGM shouldn't get dragged along by
     // Zoom changing Windows' default device role either.
     m_bgmAudio->setDevice(m_roomAudioOutputDevice);
-    m_bgmAudio->setVolume(0.6);
+    m_bgmAudio->setVolume(m_bgmVolume);
     m_bgmPlayer = new QMediaPlayer(this);
     m_bgmPlayer->setAudioOutput(m_bgmAudio);
     connect(m_bgmPlayer, &QMediaPlayer::mediaStatusChanged,
@@ -389,6 +389,7 @@ BroadcastController::BroadcastController(QQmlApplicationEngine *engine, QObject 
     // then keep checking periodically -- see WorkbookManager::startAutoRefresh.
     m_workbookManager = new WorkbookManager(this, this);
     connect(m_workbookManager, &WorkbookManager::statusChanged, this, &BroadcastController::workbookStatusChanged);
+    connect(m_workbookManager, &WorkbookManager::publicTalkResolved, this, &BroadcastController::publicTalkResolved);
     connect(m_extractor, &MediaExtractor::scanFinished, m_workbookManager, [this]() {
         if (!m_workbookAutoRefreshStarted) {
             m_workbookAutoRefreshStarted = true;
@@ -844,6 +845,27 @@ void BroadcastController::removeBgmTrack(int index)
     saveState();
 }
 
+void BroadcastController::clearBgmPlaylist()
+{
+    if (m_bgmPlaylist.isEmpty())
+        return;
+
+    stopBgm();
+    m_bgmPlaylist.clear();
+    m_bgmShuffleHistory.clear();
+    m_bgmIndex = 0;
+    m_bgmCoverArt.clear();
+    if (m_bgmPlayer)
+        m_bgmPlayer->setSource({});
+
+    storeActiveBgmPlaylist();
+    invalidateBgmCaches();
+    emit bgmPlaylistTracksChanged();
+    emit bgmChanged();
+    emit bgmLibraryChanged();
+    saveState();
+}
+
 void BroadcastController::browseAndAddBgmFiles()
 {
     const QString startDir = m_bgmCustomFolder.isEmpty()
@@ -914,6 +936,12 @@ void BroadcastController::selectWorkbookWeek(const QString &isoDate)
     if (!m_workbookManager) return;
     const QDate date = isoDate.isEmpty() ? QDate() : QDate::fromString(isoDate, Qt::ISODate);
     m_workbookManager->selectWeek(date);
+}
+
+void BroadcastController::lookupPublicTalk(int talkNumber)
+{
+    if (m_workbookManager)
+        m_workbookManager->lookupPublicTalk(talkNumber);
 }
 
 void BroadcastController::clearExtendedFeedBackground()
@@ -995,7 +1023,7 @@ void BroadcastController::fadeOutBgm(int durationMs)
     const float startVolume = m_bgmAudio->volume();
     if (startVolume <= 0.01f) {
         stopBgm();
-        m_bgmAudio->setVolume(0.6f);
+        m_bgmAudio->setVolume(static_cast<float>(m_bgmVolume));
         return;
     }
 
@@ -1008,7 +1036,7 @@ void BroadcastController::fadeOutBgm(int durationMs)
     });
     connect(anim, &QVariantAnimation::finished, this, [this, anim, startVolume]() {
         stopBgm();
-        if (m_bgmAudio) m_bgmAudio->setVolume(startVolume);
+        if (m_bgmAudio) m_bgmAudio->setVolume(startVolume > 0.01f ? startVolume : static_cast<float>(m_bgmVolume));
         anim->deleteLater();
     });
     anim->start(QAbstractAnimation::DeleteWhenStopped);
@@ -1020,6 +1048,35 @@ void BroadcastController::setBgmShuffle(bool enabled)
     m_bgmShuffle = enabled;
     m_bgmShuffleHistory.clear();
     emit bgmShuffleChanged();
+}
+
+qreal BroadcastController::bgmVolume() const
+{
+    return m_bgmAudio ? static_cast<qreal>(m_bgmAudio->volume()) : m_bgmVolume;
+}
+
+void BroadcastController::setBgmVolume(qreal volume)
+{
+    volume = qBound(0.0, volume, 1.0);
+    if (qAbs(m_bgmVolume - volume) < 0.001) return;
+    m_bgmVolume = volume;
+    if (m_bgmAudio) m_bgmAudio->setVolume(static_cast<float>(m_bgmVolume));
+    emit bgmVolumeChanged();
+    saveState();
+}
+
+void BroadcastController::setBgmRepeatMode(int mode)
+{
+    mode = qBound(0, mode, 2);
+    if (m_bgmRepeatMode == mode) return;
+    m_bgmRepeatMode = mode;
+    emit bgmRepeatModeChanged();
+    saveState();
+}
+
+void BroadcastController::cycleBgmRepeatMode()
+{
+    setBgmRepeatMode((m_bgmRepeatMode + 1) % 3);
 }
 
 int BroadcastController::bgmPositionMs() const
@@ -1164,7 +1221,25 @@ QString BroadcastController::bgmTrackName() const {
 }
 
 void BroadcastController::onBgmStatusChanged(QMediaPlayer::MediaStatus status) {
-    if (status == QMediaPlayer::EndOfMedia) nextBgm();
+    if (status == QMediaPlayer::EndOfMedia) {
+        if (m_bgmRepeatMode == 2) {
+            // Repeat one: replay same track from beginning
+            if (m_bgmPlayer) {
+                m_bgmPlayer->setPosition(0);
+                m_bgmPlayer->play();
+            }
+        } else if (m_bgmRepeatMode == 0) {
+            // Repeat off: if sequential and at the end of playlist, stop
+            if (!m_bgmShuffle && m_bgmIndex >= m_bgmPlaylist.count() - 1) {
+                stopBgm();
+            } else {
+                nextBgm();
+            }
+        } else {
+            // Repeat all (default)
+            nextBgm();
+        }
+    }
 }
 
 void BroadcastController::requestScanJwMedia()
@@ -1800,6 +1875,8 @@ void BroadcastController::saveState()
     root["shortcutKeys"] = QJsonObject::fromVariantMap(m_shortcutKeys);
     root["bgmUseCustomFolder"] = m_bgmUseCustomFolder;
     root["bgmCustomFolder"] = m_bgmCustomFolder;
+    root["bgmVolume"] = m_bgmVolume;
+    root["bgmRepeatMode"] = m_bgmRepeatMode;
     root["bgmPlaylist"] = QJsonArray::fromStringList(m_bgmPlaylist);
     QJsonObject savedBgmPlaylists;
     for (auto it = m_bgmPlaylists.cbegin(); it != m_bgmPlaylists.cend(); ++it)
@@ -1875,6 +1952,15 @@ void BroadcastController::loadState()
     }
     m_bgmUseCustomFolder = root["bgmUseCustomFolder"].toBool(false);
     m_bgmCustomFolder = root["bgmCustomFolder"].toString();
+    if (root.contains("bgmVolume")) {
+        m_bgmVolume = qBound(0.0, root["bgmVolume"].toDouble(0.6), 1.0);
+        if (m_bgmAudio) m_bgmAudio->setVolume(static_cast<float>(m_bgmVolume));
+        emit bgmVolumeChanged();
+    }
+    if (root.contains("bgmRepeatMode")) {
+        m_bgmRepeatMode = qBound(0, root["bgmRepeatMode"].toInt(1), 2);
+        emit bgmRepeatModeChanged();
+    }
     m_bgmPlaylists.clear();
     const QJsonObject savedBgmPlaylists = root["bgmPlaylists"].toObject();
     for (auto playlistIt = savedBgmPlaylists.constBegin();

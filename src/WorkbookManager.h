@@ -55,8 +55,15 @@ public:
     // every future periodic refresh, until selectWeek is called again.
     void selectWeek(const QDate &date);
 
+    // Queries JW Library's public talk outline publications (S-34 / S-34mp)
+    // for the outline title and all associated media (images and videos).
+    // Updates segment "w2" in MeetingScheduleModel and links the media.
+    // If talkNumber <= 0, resets "w2" to default "PUBLIC TALK" with no media.
+    Q_INVOKABLE void lookupPublicTalk(int talkNumber);
+
 signals:
     void statusChanged();
+    void publicTalkResolved(int talkNumber, const QString &title, bool hasMedia);
 
 private:
     void setStatus(const QString &text);

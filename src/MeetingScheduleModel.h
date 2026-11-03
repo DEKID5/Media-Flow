@@ -34,6 +34,9 @@ public:
         // TimerBackend so the dedicated full-screen timer reflects it.
         int durationMinutes = 0;
         QStringList workbookMediaIds;
+        // PUBLIC TALK segment (w2) only: the assigned talk outline number
+        // (1–220). 0 = not set. Persisted so it survives an app restart.
+        int talkOutlineNumber = 0;
     };
 
     enum Roles {
@@ -45,7 +48,8 @@ public:
         IsLiveRole,
         AssociatedMediaIdsRole,
         SongNumberRole,
-        DurationMinutesRole
+        DurationMinutesRole,
+        TalkOutlineNumberRole
     };
 
     explicit MeetingScheduleModel(QObject *parent = nullptr);
@@ -76,6 +80,9 @@ public:
     // needing to switch tabs first.
     void setSongNumberForId(const QString &id, int songNum);
     void setWorkbookMediaForId(const QString &id, const QStringList &mediaIds);
+    // Sets the assigned talk outline number for the PUBLIC TALK segment (w2).
+    // Cross-tab-safe (searches both midweek and weekend rows).
+    void setTalkOutlineNumberForId(const QString &id, int number);
     void setWorkbookScheduleRows(const QVariantList &rows);
     void setIsLive(int row, bool live);
     void setActiveRow(int row);
@@ -85,6 +92,7 @@ public:
      */
     QString rowIdAt(int row) const;
     int rowOfId(const QString &id) const;
+    int talkOutlineNumberForId(const QString &id) const;
  
     QVariantList getFullState(const QString &type) const;
     void setFullState(const QString &type, const QVariantList &data);

@@ -119,6 +119,8 @@ class BroadcastController final : public QObject
     Q_PROPERTY(int bgmPositionMs READ bgmPositionMs NOTIFY bgmPositionChanged)
     Q_PROPERTY(int bgmDurationMs READ bgmDurationMs NOTIFY bgmDurationChanged)
     Q_PROPERTY(int bgmIndex READ bgmIndex NOTIFY bgmChanged)
+    Q_PROPERTY(qreal bgmVolume READ bgmVolume WRITE setBgmVolume NOTIFY bgmVolumeChanged)
+    Q_PROPERTY(int bgmRepeatMode READ bgmRepeatMode WRITE setBgmRepeatMode NOTIFY bgmRepeatModeChanged)
     Q_PROPERTY(QVariantList bgmPlaylistTracks READ bgmPlaylistTracks NOTIFY bgmPlaylistTracksChanged)
     Q_PROPERTY(QVariantList bgmLibraryTracks READ bgmLibraryTracks NOTIFY bgmLibraryChanged)
     Q_PROPERTY(QStringList bgmPlaylistNames READ bgmPlaylistNames NOTIFY bgmLibraryChanged)
@@ -199,6 +201,7 @@ public:
     // availableWorkbookWeeks) instead of always matching today; an empty
     // string goes back to automatic (today-based) matching.
     Q_INVOKABLE void selectWorkbookWeek(const QString &isoDate);
+    Q_INVOKABLE void lookupPublicTalk(int talkNumber);
 
     // --- Legacy Timer Getters Removed ---
 
@@ -212,6 +215,10 @@ public:
     int bgmPositionMs() const;
     int bgmDurationMs() const;
     int bgmIndex() const { return m_bgmIndex; }
+    qreal bgmVolume() const;
+    void setBgmVolume(qreal volume);
+    int bgmRepeatMode() const { return m_bgmRepeatMode; }
+    void setBgmRepeatMode(int mode);
     QVariantList bgmPlaylistTracks() const;
     QVariantList bgmLibraryTracks() const;
     QStringList bgmPlaylistNames() const { return m_bgmPlaylists.keys(); }
@@ -321,8 +328,10 @@ public:
     Q_INVOKABLE void playBgmTrack(int index);
     Q_INVOKABLE void playBgmFile(const QString &path);
     Q_INVOKABLE void removeBgmTrack(int index);
+    Q_INVOKABLE void clearBgmPlaylist();
     Q_INVOKABLE void browseAndAddBgmFiles();
     Q_INVOKABLE void toggleBgmShuffle() { setBgmShuffle(!m_bgmShuffle); }
+    Q_INVOKABLE void cycleBgmRepeatMode();
     Q_INVOKABLE void seekBgm(int ms);
 
     // --- Pinned Folders ---
@@ -359,6 +368,7 @@ signals:
     void bgmSettingsChanged();
     void extendedFeedBackgroundChanged();
     void workbookStatusChanged();
+    void publicTalkResolved(int talkNumber, const QString &title, bool hasMedia);
     void previewPlaylistChanged();
     void livePlaylistChanged();
     void languagesChanged();
@@ -373,6 +383,8 @@ signals:
     void bgmShuffleChanged();
     void bgmPositionChanged();
     void bgmDurationChanged();
+    void bgmVolumeChanged();
+    void bgmRepeatModeChanged();
     void feedExtendedChanged();
 
 private slots:
@@ -465,6 +477,8 @@ private:
     QSet<QString> m_bgmThumbnailRequests;
     int m_bgmIndex = 0;
     bool m_bgmShuffle = false;
+    int m_bgmRepeatMode = 1; // 0 = off, 1 = repeat all, 2 = repeat one
+    qreal m_bgmVolume = 0.6;
     QList<int> m_bgmShuffleHistory; // indices played this shuffle session, for "back"
 
     mutable QVariantList m_cachedBgmLibraryTracks;
