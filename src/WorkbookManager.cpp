@@ -683,8 +683,14 @@ void WorkbookManager::lookupPublicTalk(int talkNumber)
     QString talkTitle;
     QString finalTitle;
 
+    // Helper to extract the exact language code from a publication folder name:
+    // JW Library folders are formatted "<pub>_<lang>" or "<pub>_<lang>_<issue>" (e.g. S-34_EW, S-34mp_E, S-34_EW_051)
+    auto extractFolderLang = [](const QString &folderName) -> QString {
+        const QStringList parts = folderName.split(QLatin1Char('_'));
+        return parts.size() >= 2 ? parts.at(1).toUpper() : QString();
+    };
+
     // 1. Search for Talk Outline Title
-    // Candidates: S-34_<lang>*, S-34mp_<lang>*, S-34_E*, S-34mp_E*, then any S-34* / S-34mp*
     QList<QFileInfo> titleCandidates;
     for (const QString &root : publicationsRoots()) {
         const QDir rootDir(root);
@@ -694,21 +700,36 @@ void WorkbookManager::lookupPublicTalk(int talkNumber)
         titleCandidates.append(entries);
     }
 
-    // Sort: exact language first, then S-34 before S-34mp (since S-34 is the full outline book), then English
-    std::stable_sort(titleCandidates.begin(), titleCandidates.end(), [&lang](const QFileInfo &a, const QFileInfo &b) {
-        auto score = [&lang](const QFileInfo &fi) {
-            const QString name = fi.fileName();
-            int s = 0;
-            if (name.contains(QStringLiteral("_") + lang, Qt::CaseInsensitive)) s += 100;
-            if (name.startsWith(QStringLiteral("S-34_"), Qt::CaseInsensitive)) s += 20;
-            else if (name.startsWith(QStringLiteral("S-34mp_"), Qt::CaseInsensitive)) s += 10;
-            if (name.contains(QStringLiteral("_E"), Qt::CaseInsensitive)) s += 5;
-            return s;
-        };
-        return score(a) > score(b);
+    auto scoreTitleCandidate = [&lang, &extractFolderLang](const QFileInfo &fi) -> int {
+        const QString name = fi.fileName();
+        const QString folderLang = extractFolderLang(name);
+        int s = 0;
+        if (folderLang.compare(lang, Qt::CaseInsensitive) == 0) {
+            s += 1000; // Exact language match is top priority
+        } else if (folderLang.compare(QStringLiteral("E"), Qt::CaseInsensitive) == 0) {
+            s += 100;  // English fallback if requested language outline is not downloaded
+        } else {
+            return 0;  // Never leak unrelated languages (e.g. Ewe into English)
+        }
+        if (name.startsWith(QStringLiteral("S-34_"), Qt::CaseInsensitive)) {
+            s += 20;   // Full outline book preferred over media-only playlist for titles
+        } else if (name.startsWith(QStringLiteral("S-34mp_"), Qt::CaseInsensitive)) {
+            s += 10;
+        }
+        return s;
+    };
+
+    QList<QFileInfo> validTitleCandidates;
+    for (const QFileInfo &fi : titleCandidates) {
+        if (scoreTitleCandidate(fi) > 0)
+            validTitleCandidates.append(fi);
+    }
+    std::stable_sort(validTitleCandidates.begin(), validTitleCandidates.end(),
+                     [&scoreTitleCandidate](const QFileInfo &a, const QFileInfo &b) {
+        return scoreTitleCandidate(a) > scoreTitleCandidate(b);
     });
 
-    for (const QFileInfo &candidateDir : titleCandidates) {
+    for (const QFileInfo &candidateDir : validTitleCandidates) {
         const QDir dir(candidateDir.absoluteFilePath());
         const QStringList dbFiles = dir.entryList({QStringLiteral("*.db")}, QDir::Files);
         if (dbFiles.isEmpty()) continue;
@@ -721,24 +742,27 @@ void WorkbookManager::lookupPublicTalk(int talkNumber)
             if (db.open()) {
                 {
                     QSqlQuery q(db);
-                    q.prepare(QStringLiteral("SELECT DocumentId, Title FROM Document WHERE DocumentId = ? OR Title LIKE ? OR Title LIKE ?"));
-                    q.addBindValue(talkNumber - 1);
-                    q.addBindValue(QStringLiteral("%1.%").arg(talkNumber));
-                    q.addBindValue(QStringLiteral("No. %1 %").arg(talkNumber));
-                    if (q.exec()) {
+                    if (q.exec(QStringLiteral("SELECT DocumentId, Title FROM Document ORDER BY DocumentId"))) {
+                        static const QRegularExpression numRe(
+                            QStringLiteral(R"RX(^(?:No\.?[\s\x{00A0}\x{200B}]*)?(\d+)\b)RX"),
+                            QRegularExpression::CaseInsensitiveOption);
                         while (q.next()) {
                             const int docId = q.value(0).toInt();
-                            const QString rawTitle = q.value(1).toString().trimmed();
+                            QString rawTitle = q.value(1).toString().trimmed();
                             if (rawTitle.isEmpty()) continue;
 
-                            static const QRegularExpression numRe(QStringLiteral(R"RX(^(?:No\.?\s*)?(\d+)\b)RX"), QRegularExpression::CaseInsensitiveOption);
+                            // Normalize non-breaking and zero-width spaces
+                            rawTitle.replace(QChar(0x00A0), QLatin1Char(' '));
+                            rawTitle.replace(QChar(0x200B), QString());
+
                             const auto match = numRe.match(rawTitle);
                             if (match.hasMatch()) {
                                 if (match.captured(1).toInt() == talkNumber) {
                                     talkTitle = rawTitle;
                                     break;
                                 }
-                            } else if (candidateDir.fileName().startsWith(QStringLiteral("S-34_"), Qt::CaseInsensitive) && docId == talkNumber - 1) {
+                            } else if (candidateDir.fileName().startsWith(QStringLiteral("S-34_"), Qt::CaseInsensitive)
+                                       && docId == talkNumber - 1) {
                                 talkTitle = rawTitle;
                                 break;
                             }
@@ -753,7 +777,9 @@ void WorkbookManager::lookupPublicTalk(int talkNumber)
     }
 
     if (!talkTitle.isEmpty()) {
-        static const QRegularExpression stripPrefix(QStringLiteral(R"RX(^(?:No\.?\s*)?\d+[\s.:–-]+)RX"), QRegularExpression::CaseInsensitiveOption);
+        static const QRegularExpression stripPrefix(
+            QStringLiteral(R"RX(^(?:No\.?[\s\x{00A0}\x{200B}]*)?\d+[\s\x{00A0}\x{200B}.:–-]+)RX"),
+            QRegularExpression::CaseInsensitiveOption);
         QString clean = talkTitle;
         clean.remove(stripPrefix);
         clean = clean.trimmed();
@@ -770,15 +796,22 @@ void WorkbookManager::lookupPublicTalk(int talkNumber)
         if (!rootDir.exists()) continue;
         const QFileInfoList entries = rootDir.entryInfoList(
             {QStringLiteral("S-34mp*")}, QDir::Dirs | QDir::NoDotAndDotDot);
-        mediaCandidates.append(entries);
+        for (const QFileInfo &cand : entries) {
+            const QString folderLang = extractFolderLang(cand.fileName());
+            if (folderLang.compare(lang, Qt::CaseInsensitive) == 0 ||
+                folderLang.compare(QStringLiteral("E"), Qt::CaseInsensitive) == 0) {
+                mediaCandidates.append(cand);
+            }
+        }
     }
 
-    std::stable_sort(mediaCandidates.begin(), mediaCandidates.end(), [&lang](const QFileInfo &a, const QFileInfo &b) {
-        auto score = [&lang](const QFileInfo &fi) {
-            const QString name = fi.fileName();
-            if (name.contains(QStringLiteral("_") + lang, Qt::CaseInsensitive)) return 20;
-            if (name.contains(QStringLiteral("_E"), Qt::CaseInsensitive)) return 10;
-            return 1;
+    std::stable_sort(mediaCandidates.begin(), mediaCandidates.end(),
+                     [&lang, &extractFolderLang](const QFileInfo &a, const QFileInfo &b) {
+        auto score = [&lang, &extractFolderLang](const QFileInfo &fi) {
+            const QString folderLang = extractFolderLang(fi.fileName());
+            if (folderLang.compare(lang, Qt::CaseInsensitive) == 0) return 20;
+            if (folderLang.compare(QStringLiteral("E"), Qt::CaseInsensitive) == 0) return 10;
+            return 0;
         };
         return score(a) > score(b);
     });
@@ -801,10 +834,14 @@ void WorkbookManager::lookupPublicTalk(int talkNumber)
                 {
                     QSqlQuery q(db);
                     if (q.exec(QStringLiteral("SELECT DocumentId, Title FROM Document ORDER BY DocumentId"))) {
-                        static const QRegularExpression numRe(QStringLiteral(R"RX(^(?:No\.?\s*)?(\d+)\b)RX"), QRegularExpression::CaseInsensitiveOption);
+                        static const QRegularExpression numRe(
+                            QStringLiteral(R"RX(^(?:No\.?[\s\x{00A0}\x{200B}]*)?(\d+)\b)RX"),
+                            QRegularExpression::CaseInsensitiveOption);
                         while (q.next()) {
                             const int dId = q.value(0).toInt();
-                            const QString t = q.value(1).toString().trimmed();
+                            QString t = q.value(1).toString().trimmed();
+                            t.replace(QChar(0x00A0), QLatin1Char(' '));
+                            t.replace(QChar(0x200B), QString());
                             const auto m = numRe.match(t);
                             if (m.hasMatch() && m.captured(1).toInt() == talkNumber) {
                                 matchedDocId = dId;

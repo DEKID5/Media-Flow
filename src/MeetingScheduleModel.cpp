@@ -423,6 +423,17 @@ int MeetingScheduleModel::talkOutlineNumberForId(const QString &id) const
     return 0;
 }
 
+int MeetingScheduleModel::songNumberForId(const QString &id) const
+{
+    for (const MeetingRow &r : m_midweekRows) {
+        if (r.id == id) return r.songNumber;
+    }
+    for (const MeetingRow &r : m_weekendRows) {
+        if (r.id == id) return r.songNumber;
+    }
+    return 0;
+}
+
 QVariantList MeetingScheduleModel::getFullState(const QString &type) const
 {
     const auto &rows = (type == "midweek") ? m_midweekRows : m_weekendRows;

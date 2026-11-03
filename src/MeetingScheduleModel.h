@@ -93,6 +93,7 @@ public:
     QString rowIdAt(int row) const;
     int rowOfId(const QString &id) const;
     int talkOutlineNumberForId(const QString &id) const;
+    int songNumberForId(const QString &id) const;
  
     QVariantList getFullState(const QString &type) const;
     void setFullState(const QString &type, const QVariantList &data);
