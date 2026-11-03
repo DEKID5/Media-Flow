@@ -87,7 +87,7 @@ DockPanel {
             }
         }
 
-        // Main layout
+        // Main column layout
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: 6
@@ -102,9 +102,9 @@ DockPanel {
                 // ── Artwork Card ──
                 Rectangle {
                     id: bgmArtworkCard
-                    Layout.preferredWidth: 72
-                    Layout.preferredHeight: 72
-                    radius: 10
+                    Layout.preferredWidth: 68
+                    Layout.preferredHeight: 68
+                    radius: 8
                     color: "#12141a"
                     border.color: (MediaFlowBackend || {}).isPlayingBgm ? "#1F4236" : "#222630"
                     border.width: 1
@@ -113,9 +113,9 @@ DockPanel {
                     // Fallback disc
                     Rectangle {
                         anchors.centerIn: parent
-                        width: 58
-                        height: 58
-                        radius: 29
+                        width: 54
+                        height: 54
+                        radius: 27
                         visible: ((MediaFlowBackend || {}).bgmCoverArt || "") === ""
                         gradient: Gradient {
                             GradientStop { position: 0; color: "#1c2b2a" }
@@ -135,9 +135,9 @@ DockPanel {
                         // Center hub
                         Rectangle {
                             anchors.centerIn: parent
-                            width: 18
-                            height: 18
-                            radius: 9
+                            width: 16
+                            height: 16
+                            radius: 8
                             color: "#101e1d"
                             border.color: Theme.accentEmerald
                             border.width: 1
@@ -147,7 +147,7 @@ DockPanel {
                             anchors.centerIn: parent
                             text: "\u266B"
                             color: Theme.accentEmerald
-                            font.pixelSize: 14
+                            font.pixelSize: 13
                             font.bold: true
                         }
                     }
@@ -163,36 +163,36 @@ DockPanel {
                         sourceSize.height: 160
                     }
 
-                    // Overlay playing equalizer wave bars
+                    // Playing equalizer overlay
                     Rectangle {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.bottom: parent.bottom
-                        height: 20
+                        height: 18
                         visible: (MediaFlowBackend || {}).isPlayingBgm || false
                         gradient: Gradient {
                             GradientStop { position: 0; color: "transparent" }
-                            GradientStop { position: 1; color: "#D90B1015" }
+                            GradientStop { position: 1; color: "#E00B1015" }
                         }
 
                         Row {
                             anchors.horizontalCenter: parent.horizontalCenter
                             anchors.bottom: parent.bottom
-                            anchors.bottomMargin: 3
-                            spacing: 3
+                            anchors.bottomMargin: 2
+                            spacing: 2.5
                             Repeater {
-                                model: [7, 13, 17, 10, 14]
+                                model: [6, 12, 15, 9, 13]
                                 delegate: Rectangle {
                                     required property int index
                                     required property int modelData
-                                    width: 3
+                                    width: 2.5
                                     height: modelData
-                                    radius: 1.5
+                                    radius: 1.25
                                     color: index === 2 ? "#D1FAE5" : Theme.accentEmerald
                                     SequentialAnimation on height {
                                         loops: Animation.Infinite
                                         running: bgmRoot.visible && ((MediaFlowBackend || {}).isPlayingBgm || false)
-                                        NumberAnimation { to: 4; duration: 170 + index * 26; easing.type: Easing.InOutSine }
+                                        NumberAnimation { to: 3; duration: 170 + index * 26; easing.type: Easing.InOutSine }
                                         NumberAnimation { to: modelData; duration: 210 + index * 22; easing.type: Easing.InOutSine }
                                     }
                                 }
@@ -207,10 +207,10 @@ DockPanel {
                     Layout.alignment: Qt.AlignVCenter
                     spacing: 4
 
-                    // Status & Track count badge
+                    // Status line + Shuffle/Repeat mode buttons
                     RowLayout {
                         Layout.fillWidth: true
-                        spacing: 6
+                        spacing: 5
 
                         Rectangle {
                             width: 6; height: 6; radius: 3
@@ -246,9 +246,72 @@ DockPanel {
                             font.letterSpacing: 0.5
                             elide: Text.ElideRight
                         }
+
+                        // Mini Mode Buttons: Shuffle & Repeat
+                        RowLayout {
+                            spacing: 3
+
+                            // Shuffle button
+                            Rectangle {
+                                width: 22; height: 20; radius: 4
+                                color: (MediaFlowBackend || {}).bgmShuffle ? "#1E293B" : (shufMa.containsMouse ? "#202430" : "transparent")
+                                border.color: (MediaFlowBackend || {}).bgmShuffle ? "#3B82F6" : "transparent"
+                                border.width: 1
+
+                                BroadcastIcon {
+                                    anchors.centerIn: parent
+                                    name: "shuffle"
+                                    iconSize: 11
+                                    color: (MediaFlowBackend || {}).bgmShuffle ? "#60A5FA" : (shufMa.containsMouse ? "#E5E7EB" : "#6B7280")
+                                }
+
+                                MouseArea {
+                                    id: shufMa
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: (MediaFlowBackend || {}).toggleBgmShuffle()
+                                }
+
+                                ToolTip.visible: shufMa.containsMouse
+                                ToolTip.delay: 300
+                                ToolTip.text: (MediaFlowBackend || {}).bgmShuffle ? "Shuffle: On" : "Shuffle: Off"
+                            }
+
+                            // Repeat button
+                            Rectangle {
+                                width: 22; height: 20; radius: 4
+                                readonly property int repMode: (MediaFlowBackend || {}).bgmRepeatMode || 0
+                                color: repMode > 0 ? "#1E293B" : (repMa.containsMouse ? "#202430" : "transparent")
+                                border.color: repMode > 0 ? "#3B82F6" : "transparent"
+                                border.width: 1
+
+                                BroadcastIcon {
+                                    anchors.centerIn: parent
+                                    name: parent.repMode === 2 ? "repeat-1" : "repeat"
+                                    iconSize: 11
+                                    color: parent.repMode > 0 ? "#60A5FA" : (repMa.containsMouse ? "#E5E7EB" : "#6B7280")
+                                }
+
+                                MouseArea {
+                                    id: repMa
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: (MediaFlowBackend || {}).cycleBgmRepeatMode()
+                                }
+
+                                ToolTip.visible: repMa.containsMouse
+                                ToolTip.delay: 300
+                                ToolTip.text: {
+                                    let m = (MediaFlowBackend || {}).bgmRepeatMode || 0
+                                    return m === 2 ? "Repeat: Single track" : (m === 1 ? "Repeat: All tracks" : "Repeat: Off")
+                                }
+                            }
+                        }
                     }
 
-                    // Track Title with Marquee support for long text
+                    // Track Title with Marquee support for long titles
                     Item {
                         id: titleClipItem
                         Layout.fillWidth: true
@@ -298,7 +361,7 @@ DockPanel {
                     Item {
                         id: progressRow
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 14
+                        Layout.preferredHeight: 12
 
                         readonly property real ratio: {
                             let d = (MediaFlowBackend || {}).bgmDurationMs || 0
@@ -310,8 +373,8 @@ DockPanel {
                             id: progressTrack
                             anchors.verticalCenter: parent.verticalCenter
                             width: parent.width
-                            height: scrubMa.containsMouse || scrubMa.pressed ? 6 : 5
-                            radius: 3
+                            height: scrubMa.containsMouse || scrubMa.pressed ? 6 : 4
+                            radius: 2.5
                             color: "#22252e"
                             Behavior on height { NumberAnimation { duration: 100 } }
 
@@ -327,7 +390,7 @@ DockPanel {
                             // Thumb knob
                             Rectangle {
                                 visible: scrubMa.containsMouse || scrubMa.pressed || ((MediaFlowBackend || {}).isPlayingBgm || false)
-                                width: scrubMa.containsMouse || scrubMa.pressed ? 12 : 9
+                                width: scrubMa.containsMouse || scrubMa.pressed ? 12 : 8
                                 height: width
                                 radius: width / 2
                                 color: "white"
@@ -353,13 +416,14 @@ DockPanel {
                         }
                     }
 
-                    // Time & Volume Row
+                    // Timestamps & Volume Row
                     RowLayout {
                         Layout.fillWidth: true
-                        spacing: 8
+                        spacing: 6
 
+                        // Elapsed / Total Duration (Unified)
                         Label {
-                            text: fmtMs((MediaFlowBackend || {}).bgmPositionMs || 0)
+                            text: fmtMs((MediaFlowBackend || {}).bgmPositionMs || 0) + " / " + fmtMs((MediaFlowBackend || {}).bgmDurationMs || 0)
                             color: "#9CA3AF"
                             font.family: "JetBrains Mono"
                             font.pixelSize: Theme.textXs
@@ -368,9 +432,9 @@ DockPanel {
 
                         Item { Layout.fillWidth: true }
 
-                        // Mini Volume Control
+                        // Dedicated Volume Control on the right
                         RowLayout {
-                            spacing: 4
+                            spacing: 5
 
                             BroadcastIcon {
                                 name: ((MediaFlowBackend || {}).bgmVolume || 0) <= 0.01 ? "mute" : "speaker"
@@ -400,7 +464,7 @@ DockPanel {
 
                             Rectangle {
                                 id: volTrack
-                                width: 48
+                                width: 50
                                 height: 4
                                 radius: 2
                                 color: "#252833"
@@ -444,16 +508,15 @@ DockPanel {
                                 ToolTip.delay: 200
                                 ToolTip.text: "Volume: " + Math.round(((MediaFlowBackend || {}).bgmVolume ?? 0.6) * 100) + "%"
                             }
-                        }
 
-                        Item { Layout.fillWidth: true }
-
-                        Label {
-                            text: fmtMs((MediaFlowBackend || {}).bgmDurationMs || 0)
-                            color: "#6B7280"
-                            font.family: "JetBrains Mono"
-                            font.pixelSize: Theme.textXs
-                            font.features: { "tnum": 1 }
+                            Label {
+                                text: Math.round(((MediaFlowBackend || {}).bgmVolume ?? 0.6) * 100) + "%"
+                                color: "#6B7280"
+                                font.family: "JetBrains Mono"
+                                font.pixelSize: 9
+                                font.features: { "tnum": 1 }
+                                Layout.preferredWidth: 24
+                            }
                         }
                     }
                 }
@@ -463,36 +526,11 @@ DockPanel {
             RowLayout {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 38
-                spacing: 5
-
-                // Shuffle Button
-                BgmButton {
-                    Layout.preferredWidth: 32
-                    iconName: "shuffle"
-                    active: (MediaFlowBackend || {}).bgmShuffle || false
-                    onClicked: (MediaFlowBackend || {}).toggleBgmShuffle()
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: (MediaFlowBackend || {}).bgmShuffle ? "Shuffle: On" : "Shuffle: Off"
-                }
-
-                // Repeat Button (Off / All / One)
-                BgmButton {
-                    Layout.preferredWidth: 32
-                    iconName: ((MediaFlowBackend || {}).bgmRepeatMode || 0) === 2 ? "repeat-1" : "repeat"
-                    active: ((MediaFlowBackend || {}).bgmRepeatMode || 0) > 0
-                    onClicked: (MediaFlowBackend || {}).cycleBgmRepeatMode()
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: {
-                        let m = (MediaFlowBackend || {}).bgmRepeatMode || 0
-                        return m === 2 ? "Repeat: Single track" : (m === 1 ? "Repeat: All tracks" : "Repeat: Off")
-                    }
-                }
+                spacing: 6
 
                 // Previous Track Button
                 BgmButton {
-                    Layout.preferredWidth: 34
+                    Layout.preferredWidth: 36
                     iconName: "skip-back"
                     onClicked: (MediaFlowBackend || {}).backBgm()
                     ToolTip.visible: hovered
@@ -504,7 +542,7 @@ DockPanel {
                 Button {
                     id: playButton
                     Layout.fillWidth: true
-                    Layout.minimumWidth: 64
+                    Layout.minimumWidth: 80
                     Layout.preferredHeight: 38
                     onClicked: (MediaFlowBackend || {}).toggleBgmPlayback()
 
@@ -520,7 +558,7 @@ DockPanel {
                             text: (MediaFlowBackend || {}).isPlayingBgm ? "PAUSE" : "PLAY"
                             color: "#ffffff"
                             font.family: "Inter"
-                            font.pixelSize: 10
+                            font.pixelSize: 11
                             font.bold: true
                             font.letterSpacing: 1.1
                         }
@@ -529,7 +567,7 @@ DockPanel {
                     background: Rectangle {
                         radius: 8
                         color: (MediaFlowBackend || {}).isPlayingBgm ? "#1d4ed8" : "#2563eb"
-                        border.color: (MediaFlowBackend || {}).isPlayingBgm ? "#2563eb" : "#3B82F6"
+                        border.color: (MediaFlowBackend || {}).isPlayingBgm ? "#3b82f6" : "#60a5fa"
                         border.width: 1
                     }
 
@@ -539,7 +577,7 @@ DockPanel {
 
                 // Next Track Button
                 BgmButton {
-                    Layout.preferredWidth: 34
+                    Layout.preferredWidth: 36
                     iconName: "skip-forward"
                     onClicked: (MediaFlowBackend || {}).nextBgm()
                     ToolTip.visible: hovered
@@ -549,21 +587,21 @@ DockPanel {
 
                 // Fade Out Button (smooth 2.5s fade to stop)
                 BgmButton {
-                    Layout.preferredWidth: 34
-                    iconName: "fade"
+                    Layout.preferredWidth: 50
+                    label: "FADE"
                     onClicked: {
                         if (MediaFlowBackend && MediaFlowBackend.fadeOutBgm) MediaFlowBackend.fadeOutBgm(2500)
                         else (MediaFlowBackend || {}).stopBgm()
                     }
                     ToolTip.visible: hovered
                     ToolTip.delay: 400
-                    ToolTip.text: "Smooth 2.5s fade out"
+                    ToolTip.text: "Smooth 2.5s fade out to stop"
                 }
 
                 // Stop Button
                 BgmButton {
-                    Layout.preferredWidth: 34
-                    iconName: "stop"
+                    Layout.preferredWidth: 50
+                    label: "STOP"
                     onClicked: (MediaFlowBackend || {}).stopBgm()
                     ToolTip.visible: hovered
                     ToolTip.delay: 400
@@ -589,8 +627,8 @@ DockPanel {
 
         background: Rectangle {
             radius: 8
-            color: control.active ? "#1E293B" : (control.hovered ? "#222632" : "#171920")
-            border.color: control.active ? Theme.accentEmerald : (control.hovered ? "#363C4C" : "#252834")
+            color: control.active ? "#1E293B" : (control.hovered ? "#222634" : "#171922")
+            border.color: control.active ? Theme.accentBlue : (control.hovered ? "#3B4254" : "#242836")
             border.width: 1
             Behavior on color { ColorAnimation { duration: Theme.durationFast } }
         }
@@ -601,13 +639,13 @@ DockPanel {
                 anchors.centerIn: parent
                 name: control.iconName
                 iconSize: 14
-                color: control.active ? Theme.accentEmerald : (control.hovered ? Theme.textPrimary : "#9CA3AF")
+                color: control.active ? Theme.accentBlue : (control.hovered ? Theme.textPrimary : "#9CA3AF")
             }
             Label {
                 visible: control.label !== ""
                 anchors.centerIn: parent
                 text: control.label
-                color: control.active ? Theme.accentEmerald : (control.hovered ? Theme.textPrimary : "#9CA3AF")
+                color: control.hovered ? (control.label === "STOP" ? "#EF4444" : Theme.textPrimary) : "#9CA3AF"
                 font.family: "Inter"
                 font.pixelSize: Theme.textXs
                 font.bold: true
@@ -615,7 +653,7 @@ DockPanel {
             }
         }
 
-        scale: bgmMa.pressed ? 0.93 : 1.0
+        scale: bgmMa.pressed ? 0.94 : 1.0
         Behavior on scale { SpringAnimation { spring: 6; damping: 0.5 } }
 
         MouseArea {
