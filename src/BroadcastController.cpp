@@ -63,13 +63,13 @@ void exemptSessionsOnDevice(IMMDevice *device, DWORD myPid, bool verbose)
                                    reinterpret_cast<void **>(sessionManager.GetAddressOf()));
     if (FAILED(hr)) {
         if (verbose) qWarning() << "DUCKDIAG: Activate(IAudioSessionManager2) failed hr=" << Qt::hex << hr;
-    
+        return;
     }
 
     ComPtr<IAudioSessionEnumerator> sessionEnumerator;
     if (FAILED(sessionManager->GetSessionEnumerator(&sessionEnumerator))) {
         if (verbose) qWarning() << "DUCKDIAG: GetSessionEnumerator failed";
-    
+        return;
     }
 
     int count = 0;
@@ -319,7 +319,7 @@ BroadcastController::BroadcastController(QQmlApplicationEngine *engine, QObject 
     connect(m_bgmPlayer, &QMediaPlayer::durationChanged, this, &BroadcastController::bgmDurationChanged);
     connect(m_bgmPlayer, &QMediaPlayer::metaDataChanged, this, [this]() {
         if (m_bgmPlaylist.isEmpty() || m_bgmIndex >= m_bgmPlaylist.size())
-        
+            return;
         const QString title = m_bgmPlayer->metaData().value(QMediaMetaData::Title).toString().trimmed();
         const QString path = m_bgmPlaylist.at(m_bgmIndex);
         if (!title.isEmpty() && m_bgmTrackTitles.value(path) != title) {
@@ -362,12 +362,12 @@ BroadcastController::BroadcastController(QQmlApplicationEngine *engine, QObject 
             emit bgmTrackMetadataUpdated(path, trackTitle, thumbnailUrl);
             if (bgmPath() == path || !trackTitle.isEmpty())
                 emit bgmChanged();
-        
+            return;
         }
         if (id == QStringLiteral("bgm-cover")) {
             m_bgmCoverArt = QUrl::fromLocalFile(cachePath).toString();
             emit bgmChanged();
-        
+            return;
         }
         m_libraryModel->updateThumbnail(id, QUrl::fromLocalFile(cachePath).toString());
         if (!title.isEmpty()) {
@@ -428,7 +428,7 @@ void BroadcastController::selectSegment(const QString &id)
 
     if (id.isEmpty()) {
         m_filterProxy->setStagedIds({});
-    
+        return;
     }
 
     int row = m_meetingModel->rowOfId(id);
@@ -499,7 +499,7 @@ void BroadcastController::setWorkbookScheduleRows(const QVariantList &rows)
 {
     m_meetingModel->setWorkbookScheduleRows(rows);
     if (m_meetingType != QStringLiteral("midweek"))
-    
+        return;
 
     if (!m_selectedSegmentId.isEmpty()
         && m_meetingModel->rowOfId(m_selectedSegmentId) == -1)
@@ -693,11 +693,11 @@ void BroadcastController::selectBgmPlaylist(const QString &name)
     const auto playlist = m_bgmPlaylists.constFind(name);
     if (playlist == m_bgmPlaylists.cend()) {
         qWarning() << "BroadcastController: cannot select unknown BGM playlist:" << name;
-    
+        return;
     }
 
     if (m_currentBgmPlaylistName == name)
-    
+        return;
 
     m_bgmPlayer->stop();
     m_currentBgmPlaylistName = name;
@@ -734,7 +734,7 @@ void BroadcastController::addBgmTracksToPlaylist(const QStringList &paths)
     }
 
     if (!changed)
-    
+        return;
 
     storeActiveBgmPlaylist();
     invalidateBgmCaches();
@@ -786,7 +786,7 @@ void BroadcastController::addFilesToBgm(const QStringList &paths)
 void BroadcastController::playBgmTrack(int index)
 {
     if (index < 0 || index >= m_bgmPlaylist.count())
-    
+        return;
     loadBgmTrack(index);
     m_bgmPlayer->play();
     emit bgmChanged();
@@ -797,13 +797,13 @@ void BroadcastController::playBgmFile(const QString &path)
     const int existing = m_bgmPlaylist.indexOf(path);
     if (existing >= 0) {
         playBgmTrack(existing);
-    
+        return;
     }
     const QString absPath = QFileInfo(path).absoluteFilePath();
     const int existingAbs = m_bgmPlaylist.indexOf(absPath);
     if (existingAbs >= 0) {
         playBgmTrack(existingAbs);
-    
+        return;
     }
     addFilesToBgm({path});
     const int index = m_bgmPlaylist.indexOf(absPath);
@@ -814,7 +814,7 @@ void BroadcastController::playBgmFile(const QString &path)
 void BroadcastController::removeBgmTrack(int index)
 {
     if (index < 0 || index >= m_bgmPlaylist.count())
-    
+        return;
 
     const bool wasPlaying = isPlayingBgm();
     const bool removingCurrent = index == m_bgmIndex;
@@ -848,7 +848,7 @@ void BroadcastController::removeBgmTrack(int index)
 void BroadcastController::clearBgmPlaylist()
 {
     if (m_bgmPlaylist.isEmpty())
-    
+        return;
 
     stopBgm();
     m_bgmPlaylist.clear();
@@ -957,7 +957,7 @@ void BroadcastController::loadBgmTrack(int index)
 {
     if (index < 0 || index >= m_bgmPlaylist.count()) return;
     if (m_bgmIndex == index && m_bgmPlayer->source() == QUrl::fromLocalFile(m_bgmPlaylist.at(index))) {
-    
+        return;
     }
     m_bgmIndex = index;
     const QString path = m_bgmPlaylist.at(index);
@@ -1017,14 +1017,14 @@ void BroadcastController::fadeOutBgm(int durationMs)
 {
     if (!m_bgmPlayer || m_bgmPlayer->playbackState() != QMediaPlayer::PlayingState || !m_bgmAudio) {
         stopBgm();
-    
+        return;
     }
 
     const float startVolume = m_bgmAudio->volume();
     if (startVolume <= 0.01f) {
         stopBgm();
         m_bgmAudio->setVolume(static_cast<float>(m_bgmVolume));
-    
+        return;
     }
 
     auto *anim = new QVariantAnimation(this);
@@ -1148,7 +1148,7 @@ QVariantList BroadcastController::bgmLibraryTracks() const
                                  const QString &fallbackName,
                                  const QString &fallbackThumbnail) {
         if (path.isEmpty() || seenPaths.contains(path))
-        
+            return;
         seenPaths.insert(path);
         QString name = fallbackName;
         QString thumbnail = fallbackThumbnail;
@@ -1191,7 +1191,7 @@ void BroadcastController::requestBgmThumbnail(const QString &path)
 {
     if (!m_thumbManager || path.isEmpty()
         || m_bgmThumbnailPaths.contains(path) || m_bgmThumbnailRequests.contains(path)) {
-    
+        return;
     }
 
     m_bgmThumbnailRequests.insert(path);
@@ -1452,7 +1452,7 @@ void BroadcastController::openAudienceWindow()
             qWarning() << "AudienceWindow component failed:" << component.errors();
             m_feedExtended = false;
             emit feedExtendedChanged();
-        
+            return;
         }
         QObject *created = component.create();
         m_audienceWindow = qobject_cast<QQuickWindow *>(created);
@@ -1462,7 +1462,7 @@ void BroadcastController::openAudienceWindow()
                 created->deleteLater();
             m_feedExtended = false;
             emit feedExtendedChanged();
-        
+            return;
         }
     }
 
@@ -1506,7 +1506,7 @@ void BroadcastController::setTimerFullScreenActive(bool active)
 {
     if (!active) {
         if (m_timerWindow) m_timerWindow->hide();
-    
+        return;
     }
 
     const QList<QScreen *> screens = QGuiApplication::screens();
@@ -1522,21 +1522,21 @@ void BroadcastController::setTimerFullScreenActive(bool active)
         // TimerPanel's confirmation dialog is what normally prevents
         // reaching this path at all.
         qWarning() << "Full-screen timer: no dedicated screen configured (Settings > Displays > Timer).";
-    
+        return;
     }
 
     if (!m_timerWindow) {
         QQmlComponent component(m_engine, QUrl(QStringLiteral("qrc:/MediaFlow/qml/TimerWindow.qml")));
         if (component.status() != QQmlComponent::Ready) {
             qWarning() << "TimerWindow component failed:" << component.errors();
-        
+            return;
         }
         QObject *created = component.create();
         m_timerWindow = qobject_cast<QQuickWindow *>(created);
         if (!m_timerWindow) {
             qWarning() << "TimerWindow did not create a QQuickWindow:" << created;
             if (created) created->deleteLater();
-        
+            return;
         }
     }
 
@@ -1726,7 +1726,7 @@ void BroadcastController::indexMediaAsset(const QVariantMap &asset)
 {
     const QString path = asset.value(QStringLiteral("absolutePath")).toString();
     if (path.isEmpty())
-    
+        return;
 
     QVariantMap indexed = asset;
     const QVariantMap songMetadata = parseSongMetadata(path);
@@ -1741,14 +1741,14 @@ void BroadcastController::indexMediaAsset(const QVariantMap &asset)
     m_mediaIndexByPath.insert(normalizedMediaPath(path), indexed);
 
     if (!indexed.value(QStringLiteral("isSong")).toBool())
-    
+        return;
 
     const QString languageCode = indexed.value(QStringLiteral("languageCode")).toString();
     const int songNumber = indexed.value(QStringLiteral("songNumber")).toInt();
     const QString type = indexed.value(QStringLiteral("type")).toString();
     const QString track = indexed.value(QStringLiteral("trackType")).toString();
     if (languageCode.isEmpty() || songNumber <= 0)
-    
+        return;
 
     indexed.insert(QStringLiteral("found"), true);
     indexed.insert(QStringLiteral("code"), languageCode);
@@ -1773,7 +1773,7 @@ void BroadcastController::flushPendingMediaBatch()
     if (m_mediaBatchTimer && m_mediaBatchTimer->isActive())
         m_mediaBatchTimer->stop();
     if (m_pendingMediaBatch.isEmpty())
-    
+        return;
     m_libraryModel->appendFromVariantList(m_pendingMediaBatch);
     m_pendingMediaBatch.clear();
     m_pendingMediaPaths.clear();
@@ -1785,7 +1785,7 @@ void BroadcastController::onMediaFound(MediaType type, const QString &name, cons
     if (m_libraryModel->containsPath(absolutePath) || m_pendingMediaPaths.contains(absolutePath)) {
         if (m_libraryModel->containsPath(absolutePath))
             indexMediaAsset(m_libraryModel->getRowById(m_libraryModel->idOfPath(absolutePath)));
-    
+        return;
     }
 
     QVariantMap m;
@@ -1900,14 +1900,14 @@ void BroadcastController::loadState()
         // schedule so the operator doesn't see an empty SEQUENCE panel.
         if (m_meetingModel) m_meetingModel->loadMeeting(m_meetingType);
         applyLanguageCode(m_languageCode, false, false);
-    
+        return;
     }
     QJsonParseError parseError;
     QJsonObject root = QJsonDocument::fromJson(file.readAll(), &parseError).object();
     if (parseError.error != QJsonParseError::NoError) {
         if (m_meetingModel) m_meetingModel->loadMeeting(m_meetingType);
         applyLanguageCode(m_languageCode, false, false);
-    
+        return;
     }
     const QVariantList importedMedia = root["importedMedia"].toArray().toVariantList();
     m_libraryModel->appendFromVariantList(importedMedia);
@@ -2170,14 +2170,14 @@ void BroadcastController::addCustomLanguage(const QString &name, const QString &
     const QString trimmedName = name.trimmed();
     const QString upperCode = code.trimmed().toUpper();
     if (trimmedName.isEmpty() || upperCode.isEmpty() || upperCode.length() > 3)
-    
+        return;
 
     // Reject duplicates against both built-ins and existing customs -- the
     // filename marker filter matches by code, so two languages sharing one
     // would be indistinguishable in Active Media.
     for (const auto &v : getSupportedLanguages()) {
         if (v.toMap().value("code").toString().compare(upperCode, Qt::CaseInsensitive) == 0)
-        
+            return;
     }
 
     QVariantMap lang;
@@ -2195,7 +2195,7 @@ void BroadcastController::removeCustomLanguage(const QString &code)
             m_customLanguages.removeAt(i);
             emit languagesChanged();
             saveState();
-        
+            return;
         }
     }
 }
@@ -2306,15 +2306,7 @@ QString BroadcastController::resolveSongToSegment(int songNumber, const QString 
 void BroadcastController::reResolveSongSegmentsForCurrentLanguage()
 {
     if (!m_meetingModel)
-    
-
-    for (const QString &segId : {QStringLiteral("m1"), QStringLiteral("m7"), QStringLiteral("m11"),
-                                 QStringLiteral("w1"), QStringLiteral("w3"), QStringLiteral("w6")}) {
-        const int songNumber = m_meetingModel->songNumberForId(segId);
-        if (songNumber > 0)
-            resolveSongToSegment(songNumber, m_languageCode, segId, true, false);
-    }
-    saveState();
+        return;
 
     for (const QString &segId : {QStringLiteral("m1"), QStringLiteral("m7"), QStringLiteral("m11"),
                                  QStringLiteral("w1"), QStringLiteral("w3"), QStringLiteral("w6")}) {
@@ -2356,7 +2348,7 @@ void BroadcastController::deletePinnedFolder(const QString &folderId)
 {
     const QString folderName = m_pinnedFolders->nameForFolder(folderId);
     if (folderName.isEmpty())
-    
+        return;
 
     m_pinnedFolders->deleteFolder(folderId);
     m_libraryModel->renameCategory(folderName, QStringLiteral("General"));
