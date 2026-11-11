@@ -45,15 +45,7 @@
 
 namespace {
 
-// Windows ducks (lowers/mutes, per the user's "Communications" sound setting)
-// every other app's audio session automatically whenever a call becomes
-// active in an app it recognizes as a communications app -- Zoom included.
-// The room's audio output is a separate physical device/purpose from the
-// Zoom call feed and must stay at full quality regardless, so every audio
-// session belonging to this process is explicitly opted out via WASAPI's
-// per-session ducking preference (the officially supported way to exempt an
-// app, rather than relying on the user's global system-wide setting, which
-// may not retroactively apply to sessions that were already open).
+// Keep room audio loud while Zoom is active. This app opts out of Windows communication ducking.
 void exemptSessionsOnDevice(IMMDevice *device, DWORD myPid, bool verbose)
 {
     using Microsoft::WRL::ComPtr;
@@ -98,14 +90,7 @@ void exemptSessionsOnDevice(IMMDevice *device, DWORD myPid, bool verbose)
     }
 }
 
-// Every new media source (a Cut/Take to a different video, a fresh BGM
-// track) can tear down and recreate the underlying WASAPI audio session, and
-// a role mismatch (room audio may not land on the "eMultimedia" role
-// endpoint specifically) can also leave a session unexempted -- so this
-// enumerates every active render endpoint, not just the default one, and is
-// called repeatedly (see m_duckingExemptionTimer) rather than once, so any
-// newly created session is caught within a couple of seconds regardless of
-// when/why it was (re)created.
+// Recheck active audio endpoints regularly so new sessions are still exempted after a media change.
 void exemptProcessAudioFromDucking(bool verbose = false)
 {
     using Microsoft::WRL::ComPtr;

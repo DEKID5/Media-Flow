@@ -23,11 +23,7 @@ MediaExtractor::MediaExtractor(QObject *parent)
 {
     QString home = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
 
-    // Scans %LOCALAPPDATA%\Packages for JW Library's own package folder
-    // instead of hardcoding its exact name -- the package id's random hash
-    // suffix (and even its publisher id) has already changed across JW
-    // Library releases, so a fixed path silently stops working on a machine
-    // with a different install. See JwLibraryPaths.h.
+    // Scan JW Library’s install folders instead of assuming one fixed package name.
     for (const QString &root : JwLibraryPaths::packageRoots()) {
         m_targetDirs << root + "/LocalState/Publications";
         m_targetDirs << root + "/LocalState/Data/Media";
@@ -43,7 +39,7 @@ void MediaExtractor::startScan()
             scanDir(dirPath);
         }
 
-        // Setup live watcher after initial scan completes
+        // Set up the live watcher after the first scan finishes.
         QMetaObject::invokeMethod(this, &MediaExtractor::setupWatcher, Qt::QueuedConnection);
 
         emit scanFinished();
@@ -56,7 +52,7 @@ void MediaExtractor::scanDirectory(const QString &dirPath)
     auto future = QtConcurrent::run([this, dirPath]() {
         scanDir(dirPath);
 
-        // Also watch this new directory
+        // Watch the new directory too.
         QMetaObject::invokeMethod(this, [this, dirPath]() {
             if (!m_watcher) {
                 m_watcher = new QFileSystemWatcher(this);
@@ -113,7 +109,7 @@ void MediaExtractor::setupWatcher()
         if (!dir.exists()) continue;
         if (!m_watcher->directories().contains(dirPath))
             m_watcher->addPath(dirPath);
-        // Also watch subdirectories
+        // Watch subfolders as well.
         QDirIterator it(dirPath, QDir::Dirs | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
         while (it.hasNext()) {
             const QString subdir = it.next();

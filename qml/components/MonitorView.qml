@@ -25,9 +25,9 @@ Rectangle {
     signal takeClicked()
     signal cutClicked()
 
-    color: "#0A0A0A"
+    color: "#0B0D12"
     radius: 12
-    border.color: isLive ? "#EF4444" : "#1AFFFFFF"
+    border.color: isLive ? "#EF4444" : "#252936"
     border.width: isLive ? 2 : 1
     clip: true
 
@@ -277,18 +277,44 @@ Rectangle {
     // ── Standby ──
     Rectangle {
         anchors.fill: parent; z: 0
-        color: "black"
         visible: (!asset || !asset.absolutePath) && mediaType !== "input" && !monitorCamera.active
+        gradient: Gradient {
+            GradientStop { position: 0.0; color: "#11141C" }
+            GradientStop { position: 1.0; color: "#090B10" }
+        }
+
+        // Studio safe-area 16:9 corner reticles -- inset clear of top corner badges
+        Item {
+            anchors.left: parent.left; anchors.right: parent.right
+            anchors.top: parent.top; anchors.bottom: parent.bottom
+            anchors.leftMargin: 36; anchors.rightMargin: 36
+            anchors.topMargin: 48; anchors.bottomMargin: 28
+
+            // Top-left L
+            Rectangle { anchors.top: parent.top; anchors.left: parent.left; width: 16; height: 1; color: "#28FFFFFF" }
+            Rectangle { anchors.top: parent.top; anchors.left: parent.left; width: 1; height: 16; color: "#28FFFFFF" }
+            // Top-right L
+            Rectangle { anchors.top: parent.top; anchors.right: parent.right; width: 16; height: 1; color: "#28FFFFFF" }
+            Rectangle { anchors.top: parent.top; anchors.right: parent.right; width: 1; height: 16; color: "#28FFFFFF" }
+            // Bottom-left L
+            Rectangle { anchors.bottom: parent.bottom; anchors.left: parent.left; width: 16; height: 1; color: "#28FFFFFF" }
+            Rectangle { anchors.bottom: parent.bottom; anchors.left: parent.left; width: 1; height: 16; color: "#28FFFFFF" }
+            // Bottom-right L
+            Rectangle { anchors.bottom: parent.bottom; anchors.right: parent.right; width: 16; height: 1; color: "#28FFFFFF" }
+            Rectangle { anchors.bottom: parent.bottom; anchors.right: parent.right; width: 1; height: 16; color: "#28FFFFFF" }
+        }
+
         Column {
-            anchors.centerIn: parent; spacing: 12
+            anchors.centerIn: parent; spacing: 10
             Rectangle {
-                width: 48; height: 48; color: "#0A0A0A"; radius: 4
+                width: 50; height: 50; radius: 10
+                color: "#151924"; border.color: "#272C3A"; border.width: 1
                 anchors.horizontalCenter: parent.horizontalCenter
-                BroadcastIcon { anchors.centerIn: parent; name: "video"; iconSize: 20; color: "#1AFFFFFF" }
+                BroadcastIcon { anchors.centerIn: parent; name: "video"; iconSize: 20; color: "#64748B" }
             }
             Label {
                 text: "STANDBY \u25CF NO SIGNAL"
-                color: "#1AFFFFFF"; font.bold: true; font.pixelSize: 10; font.letterSpacing: 2
+                color: "#64748B"; font.bold: true; font.pixelSize: Theme.textXs; font.letterSpacing: 1.8
                 anchors.horizontalCenter: parent.horizontalCenter
             }
         }
@@ -457,8 +483,10 @@ Rectangle {
     // Header badge
     Rectangle {
         anchors.top: parent.top; anchors.left: parent.left; anchors.margins: 16; z: 20
-        width: badgeRow.width + 16; height: 24; radius: 4
-        color: isLive ? "#EF4444" : "#1AFFFFFF"
+        width: badgeRow.width + 18; height: 24; radius: 6
+        color: isLive ? "#EF4444" : "#D9171B24"
+        border.color: isLive ? "#FCA5A5" : "#2E3444"
+        border.width: 1
         Row {
             id: badgeRow; anchors.centerIn: parent; spacing: 6
             Rectangle { width: 6; height: 6; radius: 3; color: "white"; visible: isLive
@@ -469,7 +497,7 @@ Rectangle {
                     NumberAnimation { to: 1.0; duration: 800 }
                 }
             }
-            Label { text: monitor.title; color: "white"; font.bold: true; font.pixelSize: 9; font.letterSpacing: 1 }
+            Label { text: monitor.title; color: "white"; font.bold: true; font.pixelSize: Theme.textXs; font.letterSpacing: 1 }
         }
     }
 
@@ -500,9 +528,9 @@ Rectangle {
 
     // Status
     Label {
-        anchors.top: parent.top; anchors.right: parent.right; anchors.margins: 12; z: 20
+        anchors.top: parent.top; anchors.right: parent.right; anchors.margins: 16; z: 20
         text: isLive ? "PROGRAM OUTPUT" : "PREVIEW BUS"
-        color: isLive ? "#EF4444" : Theme.textSecondary; font.pixelSize: Theme.textXs; font.bold: true; font.letterSpacing: 1.2
+        color: isLive ? "#F87171" : "#8B95A5"; font.pixelSize: Theme.textXs; font.bold: true; font.letterSpacing: 1.2
     }
 
     // Controls

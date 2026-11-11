@@ -45,11 +45,7 @@ class BroadcastController final : public QObject
     Q_PROPERTY(CameraDeviceModel *cameraDevices READ cameraDevices CONSTANT)
     Q_PROPERTY(BroadcastEngine *broadcastEngine READ broadcastEngine CONSTANT)
     Q_PROPERTY(QCameraDevice programCameraDevice READ programCameraDevice WRITE setProgramCameraDevice NOTIFY programCameraDeviceChanged)
-    // Captured once at startup rather than left to track "system default"
-    // live -- Zoom (and other communications apps) can silently change
-    // Windows' default audio device role when joining a call, which would
-    // otherwise drag the room/audience audio along with it. Room audio is
-    // deliberately independent of anything Zoom-related.
+    // Capture the room device once at startup so it does not drift with Zoom’s default changes.
     Q_PROPERTY(QAudioDevice roomAudioOutputDevice READ roomAudioOutputDevice CONSTANT)
 
     // --- State Properties ---
@@ -61,49 +57,30 @@ class BroadcastController final : public QObject
     Q_PROPERTY(bool mixerMuted READ mixerMuted WRITE setMixerMuted NOTIFY mixerMutedChanged)
     Q_PROPERTY(bool isMeetingLive READ isMeetingLive WRITE setMeetingLive NOTIFY isMeetingLiveChanged)
     Q_PROPERTY(bool vcamEnabled READ vcamEnabled NOTIFY vcamEnabledChanged)
-    // Gates the Zoom feed's automatic webcam fallback (see
-    // VirtualCameraWindow.qml's Camera.active) -- when false, the feed
-    // shows black whenever nothing is on Program, instead of the webcam.
+    // Keep the webcam fallback off when the program is empty so the feed stays black instead of showing a camera.
     Q_PROPERTY(bool webcamFallbackEnabled READ webcamFallbackEnabled WRITE setWebcamFallbackEnabled NOTIFY webcamFallbackEnabledChanged)
-    // Operator-customizable keyboard shortcuts (action name -> single-key
-    // sequence string, e.g. "C", "Ctrl+T"). Always contains every known
-    // action -- unbound ones map to "". See defaultShortcutKeys() for the
-    // action names and factory defaults.
+    // Action-to-shortcut map for the operator’s custom key bindings.
     Q_PROPERTY(QVariantMap shortcutKeys READ shortcutKeys NOTIFY shortcutKeysChanged)
     Q_PROPERTY(bool feedExtended READ feedExtended NOTIFY feedExtendedChanged)
     Q_PROPERTY(bool hasSecondaryScreen READ hasSecondaryScreen NOTIFY hasSecondaryScreenChanged)
     Q_PROPERTY(QString scanStatus READ scanStatus NOTIFY scanStatusChanged)
-    // True once the first (startup) library scan has finished. The splash
-    // uses this to remain visible during quick scans, but yields to the
-    // dashboard after its short startup grace period for large libraries.
+    // Set after the initial media scan so the splash can wait for the library to settle.
     Q_PROPERTY(bool initialScanComplete READ initialScanComplete NOTIFY initialScanCompleteChanged)
 
     // --- Settings ---
-    // -1 = automatic (today's screens.at(1)-or-primary behavior).
+    // -1 means auto-pick the best screen.
     Q_PROPERTY(int extendedFeedScreenIndex READ extendedFeedScreenIndex WRITE setExtendedFeedScreenIndex NOTIFY extendedFeedScreenIndexChanged)
-    // Independent from extendedFeedScreenIndex -- the full-screen timer is
-    // its own dedicated window (qml/TimerWindow.qml, opened/closed via
-    // setTimerFullScreenActive) so it can target a different monitor than
-    // wherever Extended Feed/audience content is shown. -1 = automatic
-    // (same second-screen-or-primary default as Extended Feed).
+    // The full-screen timer can live on a different screen than the extended feed.
     Q_PROPERTY(int timerScreenIndex READ timerScreenIndex WRITE setTimerScreenIndex NOTIFY timerScreenIndexChanged)
     Q_PROPERTY(bool bgmUseCustomFolder READ bgmUseCustomFolder WRITE setBgmUseCustomFolder NOTIFY bgmSettingsChanged)
     Q_PROPERTY(QString bgmCustomFolder READ bgmCustomFolder NOTIFY bgmSettingsChanged)
-    // Shown on the Extended Feed screen whenever nothing is live (standby),
-    // instead of a plain black screen -- "" means no background configured.
-    // extendedFeedBackgroundType is "image" or "video", derived from the
-    // chosen file's extension at browse time.
+    // Standby background shown on the extended feed when nothing is live.
     Q_PROPERTY(QString extendedFeedBackgroundPath READ extendedFeedBackgroundPath NOTIFY extendedFeedBackgroundChanged)
     Q_PROPERTY(QString extendedFeedBackgroundType READ extendedFeedBackgroundType NOTIFY extendedFeedBackgroundChanged)
     Q_PROPERTY(QString workbookStatus READ workbookStatus NOTIFY workbookStatusChanged)
     Q_PROPERTY(bool previewPlaylistActive READ previewPlaylistActive NOTIFY previewPlaylistChanged)
     Q_PROPERTY(QString previewPlaylistFolderName READ previewPlaylistFolderName NOTIFY previewPlaylistChanged)
-    // Same idea as the preview playlist above, but drives Program directly --
-    // each advance stages the next video/image then calls takeLive() so it
-    // goes out through the normal crossfade, instead of just sitting in
-    // Preview. MonitorView's LIVE instance checks this before treating a
-    // video's EndOfMedia as "clear to standby", so a video mid-playlist
-    // advances to the next item instead of cutting to black.
+    // Live playlist advances straight into the program feed instead of preview.
     Q_PROPERTY(bool livePlaylistActive READ livePlaylistActive NOTIFY livePlaylistChanged)
     Q_PROPERTY(QString livePlaylistFolderName READ livePlaylistFolderName NOTIFY livePlaylistChanged)
 

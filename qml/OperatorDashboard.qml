@@ -102,13 +102,20 @@ Item {
                 anchors.fill: parent
                 anchors.leftMargin: Theme.space3
                 anchors.rightMargin: Theme.space3
-                spacing: Theme.space3
+                spacing: Theme.space2
 
                 // 1. BRANDING
                 RowLayout {
                     spacing: Theme.space3
                     Rectangle {
                         width: 36; height: 36; radius: Theme.radiusSm; color: Theme.accentBlue
+                        Rectangle {
+                            anchors.fill: parent; radius: parent.radius
+                            gradient: Gradient {
+                                GradientStop { position: 0.0; color: "#26FFFFFF" }
+                                GradientStop { position: 1.0; color: "transparent" }
+                            }
+                        }
                         Label {
                             anchors.centerIn: parent; text: "MF"; color: "white"
                             font.bold: true; font.pixelSize: Theme.textMd; font.letterSpacing: 1
@@ -159,16 +166,18 @@ Item {
                 // 1d. MEETING WEEK PICKER
                 Rectangle {
                     Layout.preferredHeight: 36
-                    Layout.preferredWidth: root.veryCompactHeader ? 70 : 180
-                    Layout.minimumWidth: root.veryCompactHeader ? 70 : 130
+                    Layout.preferredWidth: root.veryCompactHeader ? 70 : 166
+                    Layout.minimumWidth: root.veryCompactHeader ? 70 : 120
                     radius: Theme.radius; color: Theme.surfaceRaised; border.color: Theme.panelBorder
                     RowLayout {
                         anchors.fill: parent; anchors.margins: 4; spacing: 4
-                        ComboBox {
+                        DarkComboBox {
                             id: weekCombo
                             Layout.fillWidth: true
-                            flat: true
+                            Layout.fillHeight: true
                             textRole: "label"
+                            textLeftPadding: 8
+                            minPopupWidth: 220
                             property string loadedMonthKey: ""
                             model: ListModel { id: weekModel }
 
@@ -205,15 +214,6 @@ Item {
                             onActivated: (index) => {
                                 if (MediaFlowBackend) MediaFlowBackend.selectWorkbookWeek(weekModel.get(index).iso)
                             }
-
-                            contentItem: Label {
-                                text: weekCombo.currentText
-                                font.pixelSize: Theme.textXs; font.bold: true; color: Theme.textPrimary
-                                verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignLeft
-                                elide: Text.ElideRight
-                                leftPadding: 8
-                            }
-                            background: Rectangle { color: "transparent" }
                         }
                     }
                     ToolTip.visible: weekMa.containsMouse
@@ -225,8 +225,8 @@ Item {
                 // 2. MEETING TYPE SELECTOR
                 Rectangle {
                     Layout.preferredHeight: 36
-                    Layout.preferredWidth: root.veryCompactHeader ? 80 : 190
-                    Layout.minimumWidth: root.veryCompactHeader ? 80 : 140
+                    Layout.preferredWidth: root.veryCompactHeader ? 80 : 166
+                    Layout.minimumWidth: root.veryCompactHeader ? 80 : 124
                     radius: Theme.radius; color: Theme.surfaceRaised; border.color: Theme.panelBorder
                     RowLayout {
                         anchors.fill: parent; anchors.margins: 4; spacing: 0
@@ -262,19 +262,21 @@ Item {
                 // 3. LANGUAGE SELECTOR
                 Rectangle {
                     Layout.preferredHeight: 36
-                    Layout.preferredWidth: root.veryCompactHeader ? 70 : 150
-                    Layout.minimumWidth: root.veryCompactHeader ? 70 : 110
+                    Layout.preferredWidth: root.veryCompactHeader ? 70 : 132
+                    Layout.minimumWidth: root.veryCompactHeader ? 70 : 100
                     radius: Theme.radius; color: Theme.surfaceRaised; border.color: Theme.panelBorder
                     RowLayout {
                         anchors.fill: parent; anchors.margins: 4; spacing: 4
                         BroadcastIcon { name: "globe"; iconSize: 13; Layout.leftMargin: 8; opacity: 0.7; color: Theme.textPrimary }
-                        ComboBox {
+                        DarkComboBox {
                             id: langCombo
                             property bool syncingFromBackend: false
                             Layout.fillWidth: true
-                            flat: true
-                            model: (MediaFlowBackend || {}).getSupportedLanguages() || []
+                            Layout.fillHeight: true
                             textRole: "name"
+                            textLeftPadding: 4
+                            minPopupWidth: 165
+                            model: (MediaFlowBackend || {}).getSupportedLanguages() || []
                             Component.onCompleted: syncFromBackend()
 
                             function indexOfLanguage(code) {
@@ -308,14 +310,6 @@ Item {
                                     langCombo.syncFromBackend()
                                 }
                             }
-
-                            contentItem: Label {
-                                text: langCombo.currentText
-                                font.pixelSize: Theme.textXs; font.bold: true; color: Theme.textPrimary
-                                verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignLeft
-                                elide: Text.ElideRight
-                            }
-                            background: Rectangle { color: "transparent" }
                         }
                     }
                 }
@@ -324,7 +318,7 @@ Item {
 
                 // 4. ROOM AUDIO (the audience window's volume/mute — the single audio channel out of the PC)
                 Rectangle {
-                    Layout.preferredHeight: 36; Layout.preferredWidth: 150; Layout.minimumWidth: 110; radius: Theme.radius; color: Theme.surfaceRaised; border.color: Theme.panelBorder
+                    Layout.preferredHeight: 36; Layout.preferredWidth: 132; Layout.minimumWidth: 106; radius: Theme.radius; color: Theme.surfaceRaised; border.color: Theme.panelBorder
                     RowLayout {
                         anchors.centerIn: parent; spacing: Theme.space2
                         BroadcastIcon {
@@ -768,6 +762,7 @@ Item {
                         // cut off after scrolling).
                         snapMode: ListView.SnapToItem
                         model: (MediaFlowBackend || {}).meetingSchedule
+                        ScrollBar.vertical: SlimScrollBar { }
                         delegate: Item {
                             id: segmentDelegate
                             width: sList.width
@@ -1158,17 +1153,20 @@ Item {
     // Toast Notification
     Rectangle {
         id: toast
+        property color toastBorder: "#33FFFFFF"
         anchors.bottom: parent.bottom; anchors.bottomMargin: 120
         anchors.horizontalCenter: parent.horizontalCenter
-        width: toastLabel.width + 40; height: 44; radius: 22
+        width: toastLabel.width + 36; height: 40; radius: 20
         color: Theme.accentRed; opacity: 0; z: 9999
-        border.color: "white"; border.width: 1
+        border.color: toast.toastBorder; border.width: 1
 
         Label {
-            id: toastLabel; anchors.centerIn: parent; color: "white"; font.bold: true; font.pixelSize: Theme.textMd
+            id: toastLabel; anchors.centerIn: parent; color: "white"; font.bold: true; font.pixelSize: Theme.textSm
         }
 
-        function show(msg) {
+        function show(msg, bgColor, borderColor) {
+            toast.color = bgColor || Theme.accentRed
+            toast.toastBorder = borderColor || "#55FFFFFF"
             toastLabel.text = msg
             anim.restart()
         }
@@ -1194,7 +1192,11 @@ Item {
         }
         function onPublicTalkResolved(num, title, hasMedia) {
             if (num > 0) {
-                toast.show("Talk " + num + " loaded" + (hasMedia ? " with media" : " (no media found)") + ".")
+                toast.show(
+                    "Talk " + num + " loaded" + (hasMedia ? " with media" : " (no media found)") + ".",
+                    hasMedia ? "#122620" : "#1A202E",
+                    hasMedia ? Theme.accentEmerald : Theme.accentBlue
+                )
             }
         }
     }

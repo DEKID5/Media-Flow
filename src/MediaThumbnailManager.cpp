@@ -9,12 +9,7 @@
 #endif
 
 namespace {
-// Every ffmpeg invocation below is a background helper the operator should
-// never see -- without this, launching a console executable (ffmpeg.exe)
-// from this app pops up its own visible console window with raw ffmpeg
-// stderr spam for the whole thumbnail-generation duration, confirmed live
-// in production (Windows creates a new console for a child console
-// process unless explicitly told not to).
+// Keep ffmpeg calls quiet so the app does not flash a console window.
 void runHidden(QProcess &process)
 {
 #ifdef Q_OS_WIN
@@ -137,12 +132,7 @@ bool ThumbnailJob::extractAudioArt(const QString &input, const QString &output) 
     QProcess ffmpeg;
     runHidden(ffmpeg);
     QStringList args;
-    // Embedded ID3/cover art comes in whatever size and aspect ratio the
-    // publisher shipped (square, portrait, odd sizes are all common) --
-    // "-vcodec copy" preserved that as-is, which left it looking tiny/
-    // off-center in the fixed 16:9 thumbnail chips. Scale-to-cover then
-    // crop to 320x180 here, matching the video frame path exactly, so
-    // every thumbnail (video or song cover art) fills its chip the same way.
+    // Normalize cover art to the same 320x180 crop used for video thumbnails.
     args << "-i" << input << "-an"
          << "-vf" << "scale=320:180:force_original_aspect_ratio=increase,crop=320:180"
          << "-y" << output;
@@ -157,8 +147,7 @@ MediaThumbnailManager::MediaThumbnailManager(QObject *parent) : QObject(parent) 
     connect(m_native, &NativeThumbnailGenerator::finished, this, &MediaThumbnailManager::thumbnailReady);
     connect(m_native, &NativeThumbnailGenerator::failed, this, &MediaThumbnailManager::thumbnailFailed);
 
-    // Remember failures on disk so a file that can't be thumbnailed isn't
-    // retried (up to 8 s of background playback each) on every launch.
+    // Cache thumbnail failures so we do not keep retrying the same bad file.
     connect(this, &MediaThumbnailManager::thumbnailReady, this, [this](const QString &id) {
         m_failMarkers.remove(id);
     });
@@ -193,7 +182,7 @@ void MediaThumbnailManager::enqueue(const QString &id, const QString &path, cons
             return;
     }
 
-    // Keyed to whether ffmpeg is available, so installing it later retries.
+    // Retry later if ffmpeg becomes available.
     const QString failMarker = cachePath
         + (type == QStringLiteral("audio")
                ? (m_ffmpegPath.isEmpty() ? ".failnative-audio" : ".failff-audio")

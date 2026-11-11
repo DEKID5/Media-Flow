@@ -12,7 +12,7 @@ DockPanel {
     title: "BACKGROUND MUSIC"
 
     headerTrailing: RowLayout {
-        spacing: 4
+        spacing: 6
         Repeater {
             model: [
                 { label: "LIBRARY", tab: "library" },
@@ -20,22 +20,26 @@ DockPanel {
             ]
             delegate: Button {
                 required property var modelData
-                implicitWidth: modelData.tab === "playlist" ? 64 : 58
-                implicitHeight: 22
+                implicitWidth: modelData.tab === "playlist" ? 72 : 66
+                implicitHeight: 24
                 padding: 0
                 contentItem: Label {
                     text: modelData.label
-                    color: "#60A5FA"
+                    color: parent.hovered ? "#FFFFFF" : "#93C5FD"
                     font.family: "Inter"
-                    font.pixelSize: 8
+                    font.pixelSize: Theme.textXs
                     font.bold: true
-                    font.letterSpacing: 0.35
+                    font.letterSpacing: 0.5
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
                 background: Rectangle {
-                    radius: 5
-                    color: parent.hovered ? "#202a3a" : "transparent"
+                    radius: 6
+                    color: parent.hovered ? "#1E293B" : "#151822"
+                    border.color: parent.hovered ? Theme.accentBlue : "#283042"
+                    border.width: 1
+                    Behavior on color { ColorAnimation { duration: Theme.durationFast } }
+                    Behavior on border.color { ColorAnimation { duration: Theme.durationFast } }
                 }
                 onClicked: {
                     musicPopup.activeTab = modelData.tab
@@ -218,17 +222,17 @@ DockPanel {
 
                     Label {
                         text: ((MediaFlowBackend || {}).isPlayingBgm || false) ? "NOW PLAYING" : "PAUSED"
-                        color: ((MediaFlowBackend || {}).isPlayingBgm || false) ? Theme.accentEmerald : "#6B7280"
+                        color: ((MediaFlowBackend || {}).isPlayingBgm || false) ? Theme.accentEmerald : "#8B95A5"
                         font.family: "Inter"
-                        font.pixelSize: 8
+                        font.pixelSize: 9
                         font.bold: true
-                        font.letterSpacing: 0.8
+                        font.letterSpacing: 0.7
                     }
 
                     Label {
                         text: "\u2022"
                         color: "#4B5563"
-                        font.pixelSize: 8
+                        font.pixelSize: 9
                     }
 
                     Label {
@@ -240,7 +244,7 @@ DockPanel {
                         }
                         color: "#9CA3AF"
                         font.family: "Inter"
-                        font.pixelSize: 8
+                        font.pixelSize: 9
                         font.bold: true
                         font.letterSpacing: 0.5
                         elide: Text.ElideRight
@@ -248,20 +252,20 @@ DockPanel {
 
                     // Mini Mode Buttons: Shuffle & Repeat
                     RowLayout {
-                        spacing: 3
+                        spacing: 4
 
                         // Shuffle button
                         Rectangle {
-                            width: 20; height: 18; radius: 4
-                            color: (MediaFlowBackend || {}).bgmShuffle ? "#1E293B" : (shufMa.containsMouse ? "#202430" : "transparent")
-                            border.color: (MediaFlowBackend || {}).bgmShuffle ? "#3B82F6" : "transparent"
+                            width: 22; height: 18; radius: 5
+                            color: (MediaFlowBackend || {}).bgmShuffle ? "#1E293B" : (shufMa.containsMouse ? "#222736" : "#151822")
+                            border.color: (MediaFlowBackend || {}).bgmShuffle ? "#3B82F6" : (shufMa.containsMouse ? "#384152" : "#252936")
                             border.width: 1
 
                             BroadcastIcon {
                                 anchors.centerIn: parent
                                 name: "shuffle"
                                 iconSize: 10
-                                color: (MediaFlowBackend || {}).bgmShuffle ? "#60A5FA" : (shufMa.containsMouse ? "#E5E7EB" : "#6B7280")
+                                color: (MediaFlowBackend || {}).bgmShuffle ? "#60A5FA" : (shufMa.containsMouse ? "#E5E7EB" : "#8B95A5")
                             }
 
                             MouseArea {
@@ -279,17 +283,17 @@ DockPanel {
 
                         // Repeat button
                         Rectangle {
-                            width: 20; height: 18; radius: 4
+                            width: 22; height: 18; radius: 5
                             readonly property int repMode: (MediaFlowBackend || {}).bgmRepeatMode || 0
-                            color: repMode > 0 ? "#1E293B" : (repMa.containsMouse ? "#202430" : "transparent")
-                            border.color: repMode > 0 ? "#3B82F6" : "transparent"
+                            color: repMode > 0 ? "#1E293B" : (repMa.containsMouse ? "#222736" : "#151822")
+                            border.color: repMode > 0 ? "#3B82F6" : (repMa.containsMouse ? "#384152" : "#252936")
                             border.width: 1
 
                             BroadcastIcon {
                                 anchors.centerIn: parent
                                 name: parent.repMode === 2 ? "repeat-1" : "repeat"
                                 iconSize: 10
-                                color: parent.repMode > 0 ? "#60A5FA" : (repMa.containsMouse ? "#E5E7EB" : "#6B7280")
+                                color: parent.repMode > 0 ? "#60A5FA" : (repMa.containsMouse ? "#E5E7EB" : "#8B95A5")
                             }
 
                             MouseArea {
@@ -423,9 +427,9 @@ DockPanel {
                     // Elapsed / Total Duration (Unified)
                     Label {
                         text: fmtMs((MediaFlowBackend || {}).bgmPositionMs || 0) + " / " + fmtMs((MediaFlowBackend || {}).bgmDurationMs || 0)
-                        color: "#9CA3AF"
+                        color: "#A1A1AA"
                         font.family: "JetBrains Mono"
-                        font.pixelSize: 9
+                        font.pixelSize: Theme.textXs
                         font.features: { "tnum": 1 }
                     }
 

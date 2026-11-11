@@ -6,10 +6,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 
-/**
- * @brief The MediaLibraryModel class (MediaSourceModel)
- * Holds all discovered or imported media assets for the broadcast suite.
- */
+// Holds all discovered and imported media for the broadcast suite.
 class MediaLibraryModel : public QAbstractListModel
 {
     Q_OBJECT
@@ -51,10 +48,7 @@ public:
     void appendFromVariantList(const QVariantList &items);
     void clear();
 
-    /**
-     * @brief Returns a QVariantMap for a media row by its ID.
-     * Exposed to QML so linked media chips can resolve metadata.
-     */
+    // Return row metadata by ID for QML.
     Q_INVOKABLE QVariantMap getRowById(const QString &id) const;
     Q_INVOKABLE QString idOfPath(const QString &path) const;
     Q_INVOKABLE QVariantList toVariantList() const;
@@ -63,25 +57,17 @@ public:
     void updateName(const QString &id, const QString &newName);
     void markImported(const QString &id, const QString &category);
 
-    /**
-     * @brief Checks if a file path is already indexed.
-     */
+    // Check whether a media path is already indexed.
     bool containsPath(const QString &path) const;
 
-    /**
-     * @brief Returns a list of unique categories.
-     */
+    // Return the list of unique media categories.
     QStringList categories() const;
     quint64 thumbnailRevision() const { return m_thumbnailRevision; }
 
-    /**
-     * @brief Batch updates categories.
-     */
+    // Rename a category across all rows in one pass.
     Q_INVOKABLE void renameCategory(const QString &oldName, const QString &newName);
 
-    /**
-     * @brief Removes a single media asset by ID.
-     */
+    // Remove a single media asset by ID.
     Q_INVOKABLE void removeMedia(const QString &id);
 
 signals:

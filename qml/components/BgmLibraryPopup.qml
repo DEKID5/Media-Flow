@@ -115,6 +115,25 @@ Popup {
         return selectedTrackPaths.indexOf(path) !== -1
     }
 
+    function friendlyTrackTitle(rawName) {
+        const s = (rawName || "").trim()
+        if (!s) return "Unknown track"
+        let m = s.match(/^osg_[A-Za-z]+_(\d+)$/i)
+        if (m) return "Original Song " + m[1]
+        m = s.match(/^sjj[m]?_[A-Za-z]+_(\d+)$/i)
+        if (m) return "Kingdom Song " + parseInt(m[1], 10)
+        return s
+    }
+
+    function friendlySourceMeta(path) {
+        const p = (path || "").replace(/\\/g, "/")
+        if (!p) return ""
+        const parts = p.split("/")
+        const file = parts.length > 0 ? parts[parts.length - 1] : p
+        const folder = parts.length > 1 ? parts[parts.length - 2] : ""
+        return folder ? (folder + "  •  " + file) : file
+    }
+
     function toggleTrackSelection(path, selected) {
         if (selected) {
             if (!isTrackSelected(path))
@@ -160,12 +179,24 @@ Popup {
                 }
             }
 
-            Label {
-                text: (backend.bgmCount || 0) + " IN PLAYLIST"
-                color: Theme.accentEmerald
-                font.family: "Inter"
-                font.pixelSize: Theme.textXs
-                font.bold: true
+            Rectangle {
+                implicitWidth: queueCountLabel.implicitWidth + 18
+                implicitHeight: 24
+                radius: 12
+                color: "#112820"
+                border.color: "#1E4B3B"
+                border.width: 1
+
+                Label {
+                    id: queueCountLabel
+                    anchors.centerIn: parent
+                    text: (backend.bgmCount || 0) + " IN PLAYLIST"
+                    color: Theme.accentEmerald
+                    font.family: "Inter"
+                    font.pixelSize: Theme.textXs
+                    font.bold: true
+                    font.letterSpacing: 0.4
+                }
             }
 
             Button {
@@ -294,7 +325,7 @@ Popup {
                     }
                     Label {
                         Layout.fillWidth: true
-                        text: backend.bgmTrackName || "No track selected"
+                        text: musicPopup.friendlyTrackTitle(backend.bgmTrackName || "No track selected")
                         color: Theme.textPrimary
                         font.family: "Inter"
                         font.pixelSize: Theme.textMd
@@ -303,11 +334,15 @@ Popup {
                     }
                     Label {
                         Layout.fillWidth: true
-                        text: backend.bgmPath || "Add audio files from your library"
-                        color: Theme.textDim
+                        text: backend.bgmPath ? musicPopup.friendlySourceMeta(backend.bgmPath) : "Add audio files from your library"
+                        color: Theme.textSecondary
                         font.family: "Inter"
                         font.pixelSize: Theme.textXs
                         elide: Text.ElideMiddle
+                        ToolTip.visible: bannerPathMa.containsMouse && Boolean(backend.bgmPath)
+                        ToolTip.delay: 400
+                        ToolTip.text: backend.bgmPath || ""
+                        MouseArea { id: bannerPathMa; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
                     }
                 }
 
@@ -371,23 +406,57 @@ Popup {
                 Layout.fillWidth: true
                 implicitHeight: 36
                 placeholderText: "Search tracks..."
+                placeholderTextColor: "#71717A"
                 color: Theme.textPrimary
                 font.family: "Inter"
                 font.pixelSize: Theme.textSm
-                leftPadding: 12
+                leftPadding: 34
+                rightPadding: searchField.text.length > 0 ? 30 : 12
                 onTextChanged: searchDebounce.restart()
                 background: Rectangle {
                     radius: 9
                     color: "#17171d"
-                    border.color: searchField.activeFocus ? "#3B82F6" : "#292930"
+                    border.color: searchField.activeFocus ? "#3B82F6" : "#2D313E"
+                }
+
+                BroadcastIcon {
+                    anchors.left: parent.left
+                    anchors.leftMargin: 12
+                    anchors.verticalCenter: parent.verticalCenter
+                    name: "search"
+                    iconSize: 13
+                    color: searchField.activeFocus ? Theme.accentBlue : "#71717A"
+                }
+
+                Rectangle {
+                    visible: searchField.text.length > 0
+                    anchors.right: parent.right
+                    anchors.rightMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 20; height: 20; radius: 10
+                    color: clearSearchMa.containsMouse ? "#282D3B" : "transparent"
+                    BroadcastIcon { anchors.centerIn: parent; name: "close"; iconSize: 9; color: Theme.textSecondary }
+                    MouseArea {
+                        id: clearSearchMa
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: { searchField.clear(); searchField.forceActiveFocus() }
+                    }
                 }
             }
 
-            ComboBox {
+            DarkComboBox {
                 id: languageSelector
                 visible: musicPopup.activeTab === "library"
-                Layout.preferredWidth: 146
+                Layout.preferredWidth: 152
                 implicitHeight: 36
+                bordered: true
+                boxRadius: 9
+                boxColor: "#17171d"
+                boxBorderColor: "#2D313E"
+                textLeftPadding: 10
+                fontBold: false
                 model: musicPopup.languageOptions
                 textRole: "name"
                 currentIndex: {
@@ -398,132 +467,35 @@ Popup {
                     return 0
                 }
                 onActivated: musicPopup.languageFilterCode = musicPopup.languageOptions[index].code
-                contentItem: Label {
-                    leftPadding: 10
-                    rightPadding: 6
-                    text: languageSelector.currentText
-                    color: Theme.textPrimary
-                    font.family: "Inter"
-                    font.pixelSize: Theme.textXs
-                    verticalAlignment: Text.AlignVCenter
-                    elide: Text.ElideRight
-                }
-                background: Rectangle {
-                    radius: 9
-                    color: "#17171d"
-                    border.color: languageSelector.activeFocus ? "#3B82F6" : "#292930"
-                }
-                delegate: ItemDelegate {
-                    id: languageDelegate
-                    required property int index
-                    required property var modelData
-                    width: languageSelector.width
-                    text: modelData.name
-                    highlighted: languageSelector.highlightedIndex === index
-                    contentItem: Label {
-                        text: languageDelegate.text
-                        color: Theme.textPrimary
-                        font.family: "Inter"
-                        font.pixelSize: Theme.textSm
-                        verticalAlignment: Text.AlignVCenter
-                        elide: Text.ElideRight
-                    }
-                    background: Rectangle {
-                        color: languageDelegate.highlighted ? "#25252d" : "#17171d"
-                    }
-                }
-                popup: Popup {
-                    y: languageSelector.height
-                    width: languageSelector.width
-                    implicitHeight: Math.min(contentItem.implicitHeight, 240)
-                    padding: 4
-                    contentItem: ListView {
-                        clip: true
-                        implicitHeight: contentHeight
-                        model: languageSelector.popup.visible ? languageSelector.delegateModel : null
-                        currentIndex: languageSelector.highlightedIndex
-                        ScrollIndicator.vertical: ScrollIndicator {}
-                    }
-                    background: Rectangle {
-                        radius: 9
-                        color: "#17171d"
-                        border.color: "#292930"
-                    }
-                }
             }
 
-            ComboBox {
+            DarkComboBox {
                 id: playlistSelector
                 visible: musicPopup.activeTab === "playlist"
-                Layout.preferredWidth: 166
+                Layout.preferredWidth: 168
                 implicitHeight: 36
+                bordered: true
+                boxRadius: 9
+                boxColor: "#17171d"
+                boxBorderColor: "#2D313E"
+                textLeftPadding: 10
+                fontBold: false
                 model: backend.bgmPlaylistNames || []
                 currentIndex: Math.max(0, (backend.bgmPlaylistNames || []).indexOf(backend.currentBgmPlaylistName || ""))
                 onActivated: backend.selectBgmPlaylist(currentText)
-                contentItem: Label {
-                    leftPadding: 10
-                    rightPadding: 6
-                    text: playlistSelector.currentText
-                    color: Theme.textPrimary
-                    font.family: "Inter"
-                    font.pixelSize: Theme.textXs
-                    verticalAlignment: Text.AlignVCenter
-                    elide: Text.ElideRight
-                }
-                background: Rectangle {
-                    radius: 9
-                    color: "#17171d"
-                    border.color: playlistSelector.activeFocus ? "#3B82F6" : "#292930"
-                }
-                delegate: ItemDelegate {
-                    required property int index
-                    required property var modelData
-                    width: playlistSelector.width
-                    text: modelData
-                    highlighted: playlistSelector.highlightedIndex === index
-                    contentItem: Label {
-                        text: parent.text
-                        color: Theme.textPrimary
-                        font.family: "Inter"
-                        font.pixelSize: Theme.textSm
-                        verticalAlignment: Text.AlignVCenter
-                        elide: Text.ElideRight
-                    }
-                    background: Rectangle {
-                        color: parent.highlighted ? "#25252d" : "#17171d"
-                    }
-                }
-                popup: Popup {
-                    y: playlistSelector.height
-                    width: playlistSelector.width
-                    implicitHeight: Math.min(contentItem.implicitHeight, 240)
-                    padding: 4
-                    contentItem: ListView {
-                        clip: true
-                        implicitHeight: contentHeight
-                        model: playlistSelector.popup.visible ? playlistSelector.delegateModel : null
-                        currentIndex: playlistSelector.highlightedIndex
-                        ScrollIndicator.vertical: ScrollIndicator {}
-                    }
-                    background: Rectangle {
-                        radius: 9
-                        color: "#17171d"
-                        border.color: "#292930"
-                    }
-                }
             }
 
             Button {
                 visible: musicPopup.activeTab === "playlist"
                 text: "＋ PLAYLIST"
-                implicitWidth: 96
+                implicitWidth: 104
                 implicitHeight: 36
                 onClicked: createPlaylistDialog.open()
                 contentItem: Label {
                     text: parent.text
                     color: Theme.accentEmerald
                     font.family: "Inter"
-                    font.pixelSize: 9
+                    font.pixelSize: Theme.textXs
                     font.bold: true
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
@@ -537,14 +509,14 @@ Popup {
 
             Button {
                 text: "＋ ADD MUSIC"
-                implicitWidth: 112
+                implicitWidth: 116
                 implicitHeight: 36
                 onClicked: backend.browseAndAddBgmFiles()
                 contentItem: Label {
                     text: parent.text
                     color: Theme.textPrimary
                     font.family: "Inter"
-                    font.pixelSize: 9
+                    font.pixelSize: Theme.textXs
                     font.bold: true
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
@@ -559,7 +531,7 @@ Popup {
             Button {
                 visible: musicPopup.activeTab === "library" && musicPopup.selectedTrackPaths.length > 0
                 text: "ADD " + musicPopup.selectedTrackPaths.length
-                implicitWidth: 88
+                implicitWidth: 92
                 implicitHeight: 36
                 onClicked: {
                     backend.addBgmTracksToPlaylist(musicPopup.selectedTrackPaths)
@@ -569,14 +541,14 @@ Popup {
                     text: parent.text
                     color: "white"
                     font.family: "Inter"
-                    font.pixelSize: 9
+                    font.pixelSize: Theme.textXs
                     font.bold: true
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
                 background: Rectangle {
                     radius: 9
-                    color: "#2563EB"
+                    color: parent.hovered ? "#3B82F6" : "#2563EB"
                 }
             }
 
@@ -606,20 +578,20 @@ Popup {
             Button {
                 visible: musicPopup.activeTab === "library" && musicPopup.libraryTracks.length > 0
                 text: "SELECT ALL"
-                implicitHeight: 22
-                implicitWidth: 68
+                implicitHeight: 24
+                implicitWidth: 78
                 padding: 0
                 contentItem: Label {
                     text: parent.text
-                    color: "#9CA3AF"
+                    color: parent.hovered ? Theme.textPrimary : "#A1A1AA"
                     font.family: "Inter"
-                    font.pixelSize: 8
+                    font.pixelSize: Theme.textXs
                     font.bold: true
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
                 background: Rectangle {
-                    radius: 5
+                    radius: 6
                     color: parent.hovered ? "#24242e" : "#17171d"
                     border.color: "#2e2e38"
                 }
@@ -635,20 +607,20 @@ Popup {
             Button {
                 visible: musicPopup.activeTab === "library" && musicPopup.selectedTrackPaths.length > 0
                 text: "DESELECT"
-                implicitHeight: 22
-                implicitWidth: 64
+                implicitHeight: 24
+                implicitWidth: 74
                 padding: 0
                 contentItem: Label {
                     text: parent.text
                     color: "#EF4444"
                     font.family: "Inter"
-                    font.pixelSize: 8
+                    font.pixelSize: Theme.textXs
                     font.bold: true
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
                 background: Rectangle {
-                    radius: 5
+                    radius: 6
                     color: parent.hovered ? "#2d1b1e" : "#1f1517"
                     border.color: "#3f2025"
                 }
@@ -659,20 +631,20 @@ Popup {
             Button {
                 visible: musicPopup.activeTab === "playlist" && musicPopup.playlistTracks.length > 0
                 text: "CLEAR PLAYLIST"
-                implicitHeight: 22
-                implicitWidth: 92
+                implicitHeight: 24
+                implicitWidth: 108
                 padding: 0
                 contentItem: Label {
                     text: parent.text
-                    color: parent.hovered ? "#EF4444" : "#9CA3AF"
+                    color: parent.hovered ? "#EF4444" : "#A1A1AA"
                     font.family: "Inter"
-                    font.pixelSize: 8
+                    font.pixelSize: Theme.textXs
                     font.bold: true
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
                 background: Rectangle {
-                    radius: 5
+                    radius: 6
                     color: parent.hovered ? "#2d1b1e" : "transparent"
                     border.color: parent.hovered ? "#3f2025" : "transparent"
                 }
@@ -685,7 +657,7 @@ Popup {
                 text: musicPopup.activeTab === "library"
                     ? musicPopup.libraryTracks.length + " TRACKS"
                     : musicPopup.playlistTracks.length + " TRACKS"
-                color: Theme.textFaint
+                color: Theme.textDim
                 font.family: "Inter"
                 font.pixelSize: Theme.textXs
                 font.bold: true
@@ -696,11 +668,11 @@ Popup {
             id: trackList
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.leftMargin: 14
-            Layout.rightMargin: 20
+            Layout.leftMargin: 16
+            Layout.rightMargin: 14
             Layout.bottomMargin: 14
             clip: true
-            spacing: 2
+            spacing: 4
             focus: true
             activeFocusOnTab: true
             boundsBehavior: Flickable.StopAtBounds
@@ -711,10 +683,8 @@ Popup {
             model: musicPopup.activeTab === "library"
                 ? musicPopup.libraryTracks
                 : musicPopup.playlistTracks
-            ScrollBar.vertical: ScrollBar {
-                policy: ScrollBar.AlwaysOn
-                interactive: true
-                width: 14
+            ScrollBar.vertical: SlimScrollBar {
+                policy: ScrollBar.AsNeeded
             }
             Keys.onPressed: function(event) {
                 if (trackList.count === 0)
@@ -775,10 +745,12 @@ Popup {
                     if (!displayThumbnailPath && modelData.path)
                         backend.requestBgmThumbnail(modelData.path)
                 }
-                width: trackList.width - 4
+                width: trackList.width - 14
                 height: 58
                 radius: 9
-                color: isCurrent ? "#1b3028" : isKeyboardCurrent ? "#202833" : rowMouse.containsMouse ? "#1c1c23" : "transparent"
+                color: isCurrent ? "#172A24" : isKeyboardCurrent ? "#1E2532" : rowMouse.containsMouse ? "#191B23" : "transparent"
+                border.color: isCurrent ? "#265341" : (rowMouse.containsMouse ? "#252936" : "transparent")
+                border.width: 1
 
                 Connections {
                     target: musicPopup.backend
@@ -879,20 +851,41 @@ Popup {
                         spacing: 3
                         Label {
                             Layout.fillWidth: true
-                            text: displayName
+                            text: musicPopup.friendlyTrackTitle(displayName)
                             color: isCurrent ? Theme.accentEmerald : Theme.textPrimary
                             font.family: "Inter"
                             font.pixelSize: Theme.textSm
-                            font.bold: isCurrent
+                            font.bold: isCurrent || rowMouse.containsMouse
                             elide: Text.ElideRight
                         }
                         Label {
                             Layout.fillWidth: true
-                            text: modelData.path || ""
-                            color: Theme.textFaint
+                            text: musicPopup.friendlySourceMeta(modelData.path)
+                            color: isCurrent ? "#6EE7B7" : Theme.textDim
                             font.family: "Inter"
                             font.pixelSize: Theme.textXs
                             elide: Text.ElideMiddle
+                        }
+                    }
+
+                    Button {
+                        visible: !isPlaylist && (rowMouse.containsMouse || hovered || isCurrent)
+                        text: isCurrent && (backend.isPlayingBgm || false) ? "Ⅱ" : "▶"
+                        implicitWidth: 30
+                        implicitHeight: 30
+                        onClicked: isCurrent ? backend.toggleBgmPlayback() : backend.playBgmFile(modelData.path)
+                        contentItem: Label {
+                            text: parent.text
+                            color: isCurrent ? Theme.accentEmerald : Theme.textSecondary
+                            font.pixelSize: 12
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        background: Rectangle {
+                            radius: 7
+                            color: parent.hovered ? "#252A38" : "#181B24"
+                            border.color: parent.hovered ? Theme.accentBlue : "#282D3B"
+                            border.width: 1
                         }
                     }
 
@@ -906,9 +899,10 @@ Popup {
                             implicitHeight: 20
                             x: parent.leftPadding
                             y: parent.height / 2 - height / 2
-                            radius: 5
-                            color: parent.checked ? "#10B981" : "#17171d"
-                            border.color: parent.checked ? "#10B981" : "#4b5563"
+                            radius: 6
+                            color: parent.checked ? "#10B981" : "#171922"
+                            border.color: parent.checked ? "#10B981" : "#3E4556"
+                            border.width: 1.5
                             Label {
                                 anchors.centerIn: parent
                                 visible: parent.parent.checked

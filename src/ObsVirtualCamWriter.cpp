@@ -32,17 +32,7 @@ bool ObsVirtualCamWriter::start(int width, int height, double fps)
         size = alignUp32(size + frameSize + kFrameHeaderSize);
     }
 
-    // CreateFileMappingW attaches to the existing mapping if one is already
-    // open under this name (e.g. Zoom's/OBS's own DirectShow filter reading
-    // it as a *consumer*) rather than failing -- consumers are expected to
-    // already have it open while idle/showing the placeholder, and this is
-    // the same physical shared memory they're reading, so re-initializing
-    // the header here is exactly how a new producer takes over and starts
-    // feeding them real frames. (A prior pre-check here treated any open
-    // handle -- including a mere reader -- as "another producer running"
-    // and refused to start, which is why frames were never sent even though
-    // Zoom successfully selected the device: Zoom's own filter opening the
-    // mapping to read was mistaken for a competing producer.)
+    // Reuse the shared mapping if Zoom or OBS already has it open; that is how the producer handoff works.
     m_mapping = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, size, kVideoQueueName);
     if (!m_mapping)
         return false;
@@ -59,8 +49,7 @@ bool ObsVirtualCamWriter::start(int width, int height, double fps)
     m_header->state = StateStarting;
     m_header->cx = cx;
     m_header->cy = cy;
-    // 100ns units, matching DirectShow REFERENCE_TIME (obs-studio computes
-    // this the same way: fps_den * 10000000 / fps_num).
+    // Use DirectShow-style time units so OBS and Zoom agree on the frame cadence.
     m_header->interval = static_cast<uint64_t>(10000000.0 / fps);
     for (int i = 0; i < 3; ++i)
         m_header->offsets[i] = offsetFrame[i];
@@ -81,9 +70,7 @@ bool ObsVirtualCamWriter::start(int width, int height, double fps)
 
 void ObsVirtualCamWriter::writeResolutionHintFile(int width, int height, uint64_t interval)
 {
-    // Matches the filter's own fallback path exactly (virtualcam-filter.cpp):
-    // SHGetFolderPathW(CSIDL_APPDATA) + "\obs-virtualcam.txt", content
-    // "%u x %u x %llu" (cx, cy, interval) parsed with sscanf on their side.
+    // Write the same hint file OBS expects so the virtual camera stays in sync.
     wchar_t path[MAX_PATH];
     if (FAILED(SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, SHGFP_TYPE_CURRENT, path)))
         return;
@@ -109,10 +96,7 @@ bool ObsVirtualCamWriter::writeFrame(const uint8_t *nv12Data)
     if (!m_header || !nv12Data)
         return false;
 
-    // Lock-free: advance write_idx first (also the slot selector), fill
-    // that slot's timestamp + frame data, then publish by setting
-    // read_idx = write_idx last -- a reader never observes a slot's new
-    // read_idx before the data in it has been fully written.
+    // Publish the next frame only after the slot is fully written.
     const uint32_t inc = m_header->writeIdx + 1;
     m_header->writeIdx = inc;
     const uint32_t idx = inc % 3;

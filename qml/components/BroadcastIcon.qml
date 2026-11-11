@@ -442,6 +442,30 @@ Item {
                 ctx.textAlign = "center";
                 ctx.textBaseline = "middle";
                 ctx.fillText("1", w * 0.50, h * 0.51);
+            } else if (name === "search") {
+                ctx.lineWidth = 1.6;
+                ctx.beginPath();
+                ctx.arc(w * 0.44, h * 0.44, w * 0.27, 0, 2 * Math.PI);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(w * 0.64, h * 0.64);
+                ctx.lineTo(w * 0.86, h * 0.86);
+                ctx.stroke();
+            } else if (name === "book") {
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(w * 0.50, h * 0.26);
+                ctx.lineTo(w * 0.14, h * 0.18);
+                ctx.lineTo(w * 0.14, h * 0.78);
+                ctx.lineTo(w * 0.50, h * 0.86);
+                ctx.lineTo(w * 0.86, h * 0.78);
+                ctx.lineTo(w * 0.86, h * 0.18);
+                ctx.closePath();
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(w * 0.50, h * 0.26);
+                ctx.lineTo(w * 0.50, h * 0.86);
+                ctx.stroke();
             }
         }
     }

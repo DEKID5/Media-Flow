@@ -7,17 +7,14 @@
 BroadcastEngine::BroadcastEngine(QObject *parent)
     : QObject(parent)
 {
-    // Preview stays dormant -- QML still owns real preview playback
-    // independently (out of scope for the shared-decode refactor).
+    // Preview is intentionally quiet; QML handles real preview playback.
     m_previewAudio = new QAudioOutput(this);
     m_previewAudio->setVolume(0);
     m_previewAudio->setMuted(true);
     m_previewPlayer = new QMediaPlayer(this);
     m_previewPlayer->setAudioOutput(m_previewAudio);
 
-    // Program is a real A/B decoder pair -- every output window (LIVE
-    // monitor, Extended Feed, Zoom) binds its own VideoOutput.videoSink
-    // directly to programSinkA/B instead of decoding the same file itself.
+    // Use a real A/B program pipeline so each output window gets its own video sink.
     m_programSinkA = new QVideoSink(this);
     m_programSinkB = new QVideoSink(this);
 
@@ -43,10 +40,7 @@ BroadcastEngine::BroadcastEngine(QObject *parent)
             emit programEndOfMedia();
     });
 
-    // VideoOutput.videoSink is read-only in Qt6 -- each output window's
-    // VideoOutput owns its own sink, so "sharing" the decode means
-    // re-pushing every frame the real players decode into every
-    // registered window sink instead of pointing them at one sink object.
+    // Each output window owns its own sink, so we fan out every frame to each viewer.
     connect(m_programSinkA, &QVideoSink::videoFrameChanged, this, [this](const QVideoFrame &frame) {
         for (const QPointer<QVideoSink> &out : m_outputSinksA)
             if (out) pushFrame(out, frame);
@@ -56,10 +50,7 @@ BroadcastEngine::BroadcastEngine(QObject *parent)
             if (out) pushFrame(out, frame);
     });
 
-    // These durations mirror each output window's own crossfade (2000ms)
-    // and fade-out (500ms) animations -- the engine only swaps/stops the
-    // real players once the matching visual transition has had time to
-    // actually cover the cut, so nothing pops or freezes mid-fade.
+    // Match the UI transition timing so cuts feel smooth instead of abrupt.
     m_takeFinishTimer = new QTimer(this);
     m_takeFinishTimer->setSingleShot(true);
     m_takeFinishTimer->setInterval(2000);
@@ -85,8 +76,7 @@ void BroadcastEngine::pushFrame(QVideoSink *out, const QVideoFrame &frame)
         if (!m_pushClock.isValid()) m_pushClock.start();
         const qint64 now = m_pushClock.elapsed();
         qint64 &last = m_lastPushMs[out];
-        // 3ms slack: a 30 fps cap on a 30 fps source (33ms apart, jittery)
-        // must not drop every other frame to ~15 fps.
+        // Add a small buffer so the frame cap does not visibly stutter.
         if (last != 0 && now - last < it.value() - 3) return;
         last = now ? now : 1;
     }
@@ -124,12 +114,7 @@ void BroadcastEngine::cutLive()
 
 void BroadcastEngine::takeLive()
 {
-    // A webcam/camera-input asset is preview-only -- Zoom's own fallback
-    // (VirtualCameraWindow.qml, gated by webcamFallbackEnabled) is the one
-    // and only place a webcam is meant to appear. Without this, tapping the
-    // webcam card in Quick Fetch to preview it, then hitting Take Live,
-    // would put a live camera feed onto Program and the operator's own LIVE
-    // monitor -- never intended.
+    // Webcam assets stay preview-only; Zoom handles the live camera fallback.
     if (m_previewAsset.type == "input") {
         qDebug() << "BroadcastEngine: Cannot take webcam live — Zoom-only.";
         return;
@@ -144,9 +129,7 @@ void BroadcastEngine::takeLive()
     emit programAssetChanged();
     emit isProgramPausedChanged();
 
-    // Images/other asset types have no real decode to drive here -- every
-    // window's own image crossfade (takeImageLive()) handles those, same as
-    // before this refactor.
+    // Non-video items are handled by the UI’s own crossfade flow.
     if (m_programAsset.type == "video" || m_programAsset.type == "audio") {
         QMediaPlayer *next = m_programActiveIsA ? m_programPlayerB : m_programPlayerA;
         next->setSource(QUrl::fromLocalFile(m_programAsset.absolutePath));

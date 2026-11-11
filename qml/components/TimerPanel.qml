@@ -11,32 +11,32 @@ DockPanel {
     title: "MEETING TIMER"
 
     headerTrailing: Rectangle {
-        width: 74
+        width: 78
         height: 22
         radius: 11
-        color: "#151519"
-        border.color: "#24242a"
+        color: TimerBackend.isStaged ? "#132C22" : "#151821"
+        border.color: TimerBackend.isStaged ? "#23523E" : "#272C3A"
         border.width: 1
 
         Row {
             anchors.centerIn: parent
-            spacing: 7
+            spacing: 6
 
             Rectangle {
-                width: 5
-                height: 5
-                radius: 2.5
-                color: TimerBackend.isStaged ? "#9ca3af" : "#4b5563"
+                width: 6
+                height: 6
+                radius: 3
+                color: TimerBackend.isStaged ? Theme.accentEmerald : "#4b5563"
                 anchors.verticalCenter: parent.verticalCenter
             }
 
             Label {
                 text: "STAGED"
-                color: TimerBackend.isStaged ? "#9ca3af" : "#4b5563"
+                color: TimerBackend.isStaged ? "#D1FAE5" : "#71717A"
                 font.family: "Inter"
-                font.pixelSize: 8
+                font.pixelSize: Theme.textXs
                 font.bold: true
-                font.letterSpacing: 0.8
+                font.letterSpacing: 0.7
                 anchors.verticalCenter: parent.verticalCenter
             }
         }
@@ -51,7 +51,9 @@ DockPanel {
             anchors.top: parent.top
             anchors.bottom: presetRow.top
             anchors.bottomMargin: 6
-            spacing: 18
+            spacing: 14
+
+            Item { Layout.fillWidth: true }
 
             RoundIconButton {
                 iconName: "chevron-down"
@@ -60,7 +62,7 @@ DockPanel {
             }
 
             Item {
-                Layout.fillWidth: true
+                Layout.preferredWidth: Math.max(176, timeLabel.implicitWidth + 12)
                 Layout.alignment: Qt.AlignVCenter
                 Layout.preferredHeight: timeLabel.implicitHeight
 
@@ -153,6 +155,8 @@ DockPanel {
                 Layout.alignment: Qt.AlignVCenter
                 onClicked: TimerBackend.adjustDuration(1)
             }
+
+            Item { Layout.fillWidth: true }
         }
 
         RowLayout {
@@ -161,13 +165,13 @@ DockPanel {
             anchors.right: parent.right
             anchors.bottom: sizeRow.top
             anchors.bottomMargin: 6
-            height: 20
+            height: 22
             spacing: 6
 
             Label {
                 text: "PRESETS"
                 color: "#71717A"
-                font.family: "Inter"; font.pixelSize: 8; font.bold: true; font.letterSpacing: 0.8
+                font.family: "Inter"; font.pixelSize: Theme.textXs; font.bold: true; font.letterSpacing: 0.7
             }
 
             Item { Layout.fillWidth: true }
@@ -180,17 +184,19 @@ DockPanel {
                 ]
                 delegate: Rectangle {
                     required property var modelData
-                    width: 38; height: 20; radius: 4
-                    color: presetMa.containsMouse ? "#27272a" : "#18181b"
-                    border.color: presetMa.containsMouse ? Theme.accentBlue : "#27272a"
+                    width: 42; height: 22; radius: 6
+                    color: presetMa.containsMouse ? "#232838" : "#151821"
+                    border.color: presetMa.containsMouse ? Theme.accentBlue : "#282D3B"
                     border.width: 1
+                    Behavior on color { ColorAnimation { duration: Theme.durationFast } }
+                    Behavior on border.color { ColorAnimation { duration: Theme.durationFast } }
 
                     Label {
                         anchors.centerIn: parent
                         text: parent.modelData.label
-                        color: presetMa.containsMouse ? "#ffffff" : "#a1a1aa"
+                        color: presetMa.containsMouse ? "#ffffff" : "#CBD5E1"
                         font.family: "JetBrains Mono"
-                        font.pixelSize: 9
+                        font.pixelSize: Theme.textXs
                         font.bold: true
                     }
 
@@ -217,22 +223,52 @@ DockPanel {
             Label {
                 text: "SIZE"
                 color: "#71717A"
-                font.family: "Inter"; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1.0
+                font.family: "Inter"; font.pixelSize: Theme.textXs; font.bold: true; font.letterSpacing: 0.9
             }
-            Label { text: "A"; color: "#71717A"; font.pixelSize: 10; font.bold: true }
+            Label { text: "A"; color: "#71717A"; font.pixelSize: Theme.textXs; font.bold: true }
             Slider {
+                id: scaleSlider
                 Layout.fillWidth: true
+                implicitHeight: 20
                 from: 0.5; to: 1.0; stepSize: 0.05
                 value: TimerBackend.timerScale
                 onMoved: TimerBackend.timerScale = value
                 ToolTip.visible: hovered || pressed
                 ToolTip.text: "Full-screen timer size: " + Math.round(value * 100) + "%"
+
+                background: Rectangle {
+                    x: scaleSlider.leftPadding
+                    y: scaleSlider.topPadding + scaleSlider.availableHeight / 2 - height / 2
+                    width: scaleSlider.availableWidth
+                    height: 4
+                    radius: 2
+                    color: "#252833"
+
+                    Rectangle {
+                        width: scaleSlider.visualPosition * parent.width
+                        height: parent.height
+                        radius: 2
+                        color: scaleSlider.hovered || scaleSlider.pressed ? "#60A5FA" : Theme.accentBlue
+                    }
+                }
+
+                handle: Rectangle {
+                    x: scaleSlider.leftPadding + scaleSlider.visualPosition * (scaleSlider.availableWidth - width)
+                    y: scaleSlider.topPadding + scaleSlider.availableHeight / 2 - height / 2
+                    width: scaleSlider.hovered || scaleSlider.pressed ? 14 : 12
+                    height: width
+                    radius: width / 2
+                    color: "#F8FAFC"
+                    border.color: scaleSlider.hovered || scaleSlider.pressed ? Theme.accentBlue : "#64748B"
+                    border.width: 1.5
+                    Behavior on width { NumberAnimation { duration: 100 } }
+                }
             }
-            Label { text: "A"; color: "#d4d4d8"; font.pixelSize: 16; font.bold: true }
+            Label { text: "A"; color: "#d4d4d8"; font.pixelSize: 15; font.bold: true }
             Label {
                 text: Math.round(TimerBackend.timerScale * 100) + "%"
                 color: "#a1a1aa"
-                font.family: "JetBrains Mono"; font.pixelSize: 10
+                font.family: "JetBrains Mono"; font.pixelSize: Theme.textXs
                 Layout.preferredWidth: 34
                 horizontalAlignment: Text.AlignRight
             }
@@ -260,17 +296,18 @@ DockPanel {
                     text: startButton.text
                     color: "#ffffff"
                     font.family: "Inter"
-                    font.pixelSize: 10
+                    font.pixelSize: Theme.textSm
                     font.bold: true
-                    font.letterSpacing: 1.2
+                    font.letterSpacing: 1.1
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
 
                 background: Rectangle {
+                    readonly property bool activeState: TimerBackend.state === TimerBackend.Running || TimerBackend.state === TimerBackend.Overtime
                     radius: 8
-                    color: (TimerBackend.state === TimerBackend.Running || TimerBackend.state === TimerBackend.Overtime) ? "#f59e0b" : "#10b981"
-                    border.color: "#22c58f"
+                    color: activeState ? "#F59E0B" : "#10B981"
+                    border.color: activeState ? "#FBBF24" : "#34D399"
                     border.width: 1
                 }
 
@@ -355,9 +392,11 @@ DockPanel {
 
         background: Rectangle {
             radius: 17
-            color: control.hovered ? "#151519" : "transparent"
-            border.color: "#333333"
+            color: control.hovered ? "#202534" : "#151822"
+            border.color: control.hovered ? Theme.accentBlue : "#2A2F3D"
             border.width: 1
+            Behavior on color { ColorAnimation { duration: Theme.durationFast } }
+            Behavior on border.color { ColorAnimation { duration: Theme.durationFast } }
         }
 
         contentItem: Item {
@@ -365,7 +404,7 @@ DockPanel {
                 anchors.centerIn: parent
                 name: control.iconName
                 iconSize: 13
-                color: "#9ca3af"
+                color: control.hovered ? Theme.textPrimary : "#CBD5E1"
             }
         }
 
@@ -392,9 +431,11 @@ DockPanel {
 
         background: Rectangle {
             radius: 8
-            color: control.checked ? "#162033" : (control.hovered ? "#202027" : "#1a1a1f")
-            border.color: control.checked ? "#3B82F6" : "#2a2a30"
+            color: control.checked ? "#162033" : (control.hovered ? "#232838" : "#161922")
+            border.color: control.checked ? "#3B82F6" : (control.hovered ? "#3E4659" : "#2A2F3D")
             border.width: 1
+            Behavior on color { ColorAnimation { duration: Theme.durationFast } }
+            Behavior on border.color { ColorAnimation { duration: Theme.durationFast } }
         }
 
         contentItem: Item {

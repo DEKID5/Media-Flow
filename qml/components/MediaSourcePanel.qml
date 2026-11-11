@@ -104,10 +104,14 @@ Item {
                 // Import Button — file dialog supports multi-select, so an
                 // operator can add several images/videos in one pass.
                 Rectangle {
-                    width: 32; height: 32; radius: 8; color: Theme.accentEmerald
+                    width: 32; height: 32; radius: 8
+                    color: importBtnMa.containsMouse ? "#12CA8E" : Theme.accentEmerald
+                    border.color: "#34D399"; border.width: 1
+                    Behavior on color { ColorAnimation { duration: Theme.durationFast } }
                     BroadcastIcon { anchors.centerIn: parent; name: "plus"; color: "white"; iconSize: 14 }
                     MouseArea {
-                        anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                        id: importBtnMa
+                        anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             if (MediaFlowBackend) {
                                 MediaFlowBackend.importMediaToFileSystem(root.selectedCategory || "General")
@@ -116,6 +120,11 @@ Item {
                     }
                 }
             }
+        }
+        Rectangle {
+            anchors.bottom: parent.bottom; anchors.left: parent.left; anchors.right: parent.right
+            anchors.leftMargin: 15; anchors.rightMargin: 15
+            height: 1; color: Theme.panelBorder
         }
     }
 
@@ -430,6 +439,7 @@ Item {
         visible: root.currentView !== "pins" || root.selectedPinFolderId !== ""
         cacheBuffer: 100
         reuseItems: true
+        ScrollBar.vertical: SlimScrollBar { }
 
         model: (MediaFlowBackend && MediaFlowBackend.stagedMediaProxy) ? MediaFlowBackend.stagedMediaProxy : null
 
@@ -688,19 +698,24 @@ Item {
 
     // Empty States
     Column {
-        anchors.centerIn: grid; spacing: 12
+        anchors.centerIn: grid; spacing: 10
         visible: grid.visible && grid.count === 0
-        BroadcastIcon { anchors.horizontalCenter: parent.horizontalCenter; name: "monitor"; iconSize: 40; opacity: 0.1 }
+        Rectangle {
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: 52; height: 52; radius: 12
+            color: "#141720"; border.color: "#252936"; border.width: 1
+            BroadcastIcon { anchors.centerIn: parent; name: "screen"; iconSize: 22; color: "#64748B" }
+        }
         Label {
             anchors.horizontalCenter: parent.horizontalCenter
             text: root.currentView === "segment" ? "NO MEDIA FOR THIS SEGMENT" : (root.currentView === "pins" ? "THIS PIN IS EMPTY" : "CATEGORY IS EMPTY")
-            color: "#4b5563"; font.bold: true; font.pixelSize: 12; font.letterSpacing: 1
+            color: "#71717A"; font.bold: true; font.pixelSize: Theme.textSm; font.letterSpacing: 1
         }
         Label {
             anchors.horizontalCenter: parent.horizontalCenter
             text: root.currentView === "segment" ? "Link files from QUICK FETCH or import new ones"
                 : (root.currentView === "pins" ? "Drag files here from Explorer, drag a card onto this pin, or use ADD FILES" : "Import media using the + button above")
-            color: "#374151"; font.pixelSize: 10
+            color: "#52525B"; font.pixelSize: Theme.textXs
         }
     }
 

@@ -14,20 +14,7 @@
 class QNetworkAccessManager;
 class BroadcastController;
 
-/**
- * @brief Automatically fetches the current week's Life and Ministry Meeting
- * Workbook (mwb) and Watchtower Study (w) content from JW.org's public,
- * unauthenticated pub-media API, and applies the parsed song numbers /
- * article titles into MeetingScheduleModel -- then reuses
- * BroadcastController::resolveWeeklySong (the same language-aware matching
- * the manual song-search popup uses) to auto-link the actual local video for
- * each song number, so the right media just shows up in the right segment
- * without the operator looking anything up by hand.
- *
- * EPUB downloads are standard, unencrypted zip files. Local JW Library
- * meeting-workbook content is decoded from its encrypted/compressed database
- * blobs on Windows before parsing the same assignment headings and durations.
- */
+// Fetches the current workbook, links songs, and matches local media for each segment.
 class WorkbookManager : public QObject
 {
     Q_OBJECT
@@ -38,27 +25,17 @@ public:
 
     QString status() const { return m_status; }
 
-    // Kicks off an immediate check plus a recurring periodic one. Call once,
-    // shortly after startup (after the media library has had a chance to
-    // index local files, since auto-linking needs them already indexed).
+    // Start the refresh loop after the media library has had time to index files.
     void startAutoRefresh();
 
     Q_INVOKABLE void refreshNow();
 
-    // Remaining current-year week starts, merged with weeks found in local
-    // publications for the current language, each as {"label", "iso"}.
-    // Weeks without a local workbook are fetched when selected.
+    // Returns the week list for the current language, including local workbook weeks.
     QVariantList availableWeeks() const;
-    // Pins the workbook to a specific week (from availableWeeks) instead of
-    // "closest to today", and re-runs the lookup immediately. An invalid
-    // date goes back to automatic (today-based) matching -- including on
-    // every future periodic refresh, until selectWeek is called again.
+    // Force a specific workbook week, or return to automatic date matching.
     void selectWeek(const QDate &date);
 
-    // Queries JW Library's public talk outline publications (S-34 / S-34mp)
-    // for the outline title and all associated media (images and videos).
-    // Updates segment "w2" in MeetingScheduleModel and links the media.
-    // If talkNumber <= 0, resets "w2" to default "PUBLIC TALK" with no media.
+    // Look up the public talk outline and attach its media to the weekly schedule.
     Q_INVOKABLE void lookupPublicTalk(int talkNumber);
 
 signals:
@@ -73,20 +50,12 @@ private:
     void applyWatchtowerImages(const QMap<QString, QByteArray> &files,
                                 const QString &articleHtml, const QString &articleStem);
     void commitWatchtowerImages(const QList<QPair<QString, QString>> &idPathPairs);
-    // Prefer publications JW Library has already downloaded locally (exact
-    // language, no month-offset guessing, images already extracted to disk
-    // as plain jpgs) over the network EPUB fetch. Returns false if nothing
-    // matching is found locally, so the caller can fall back to fetching.
-    // targetDate is the week to match against -- QDate::currentDate() during
-    // normal auto-refresh, or the operator's manual pick from selectWeek().
+    // Use local JW Library content when available; otherwise fall back to fetching.
     bool applyFromLocalMwb(const QString &lang, const QDate &targetDate);
     bool applyFromLocalWatchtower(const QString &lang, const QDate &targetDate);
     QStringList bookStudyImages(const QString &lang, const QList<int> &chapters,
                                 const QString &segmentId);
-    // The Congregation Bible Study book has no weekly issue to match --
-    // it's whichever locally downloaded publication is a standalone "Book"
-    // (per JW Library's own manifest.json), as opposed to the Bible,
-    // songbook, daily text, or a dated mwb/w periodical.
+    // Match the local Bible study book by publication type, not by week number.
     bool applyFromLocalBookStudy(const QString &lang);
     QString currentLanguageCode() const;
     static QString mwbIssueFor(const QDate &date);
@@ -96,15 +65,12 @@ private:
     QNetworkAccessManager *m_network;
     QTimer *m_timer;
     QString m_status;
-    // Invalid = automatic (always matches today); set by selectWeek() when
-    // the operator manually picks a week from the dropdown.
+    // Invalid means auto-pick the current week; a chosen date overrides that.
     QDate m_selectedDate;
     QString m_applyPartsLanguage;
     QDate m_applyPartsDate;
     bool m_applyPartsLoaded = false;
-    // Ids of the article images linked into the Watchtower Study segment by
-    // the previous run -- removed from the library if a later run picks a
-    // different article, so stale images don't pile up week after week.
+    // Track the last Watchtower article images so stale ones can be cleaned up.
     QStringList m_lastWatchtowerImageIds;
     QString m_bookStudyPublicationFolder;
 };

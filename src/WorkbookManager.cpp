@@ -43,11 +43,8 @@
 
 namespace {
 
-// Only src/*.cpp files besides main.cpp are compiled as separate
-// translation units in this project's CMakeLists -- miniz's own .c files
-// are added directly as sources there too, so no extra "compiled amalgam"
-// wrapper is needed here; this file just calls the public mz_zip_reader_*
-// API declared in miniz_zip.h.
+// This file uses miniz's zip API directly.
+// The rest of the project still builds as normal C++ translation units.
 
 bool isExtractableEntry(const QString &name)
 {
@@ -61,10 +58,7 @@ bool isExtractableEntry(const QString &name)
     return false;
 }
 
-// Extracts every .xhtml text file plus every image referenced by articles
-// (jpg/png/gif/svg under images/) -- the latter needed so a chosen article's
-// own in-content photos/illustrations can be pulled out and shown in the app,
-// not just its text.
+// Pull out article text and any linked images so the app can display the full piece.
 QMap<QString, QByteArray> extractFilesFromEpub(const QByteArray &zipData)
 {
     QMap<QString, QByteArray> result;
@@ -92,11 +86,7 @@ QMap<QString, QByteArray> extractFilesFromEpub(const QByteArray &zipData)
     return result;
 }
 
-// toc.xhtml lists chapters in true reading/chronological order with the
-// week's date range as the link text -- more reliable than sorting
-// filenames (confirmed live: the Watchtower epub's own chapter filenames
-// are NOT in chronological order, e.g. ...242.xhtml sorts before
-// ...244.xhtml by name but reads after it in the real week sequence).
+// Use the TOC order, not the filename order; the epub chapter names are not always chronological.
 struct TocEntry { QString href; QString text; };
 
 QList<TocEntry> parseToc(const QByteArray &tocXhtml)
@@ -110,9 +100,7 @@ QList<TocEntry> parseToc(const QByteArray &tocXhtml)
     while (it.hasNext()) {
         const QRegularExpressionMatch m = it.next();
         const QString text = m.captured(2).trimmed();
-        // Real dated week/article entries always contain a digit (the day
-        // number); front-matter links ("Table of Contents", "Study
-        // Edition", the full publication title) don't.
+        // Real study entries usually include a day number; front matter does not.
         bool hasDigit = false;
         for (const QChar &c : text) { if (c.isDigit()) { hasDigit = true; break; } }
         if (!hasDigit) continue;
@@ -187,7 +175,7 @@ bool decryptJwpubContent(const QByteArray &encrypted, int mepsLanguageIndex,
     if (!issueTagNumber.isEmpty() && issueTagNumber != QStringLiteral("0"))
         keyParts.append(issueTagNumber);
 
-    // JW Library derives the z-a content key from the publication metadata.
+    // JW Library derives the local content key from the publication metadata.
     QByteArray keyMaterial = QCryptographicHash::hash(
         keyParts.join(QLatin1Char('_')).toUtf8(), QCryptographicHash::Sha256);
     static const QByteArray xorKey = QByteArray::fromHex(

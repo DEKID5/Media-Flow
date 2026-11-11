@@ -5,10 +5,7 @@
 #include <QElapsedTimer>
 #include <QString>
 
-/**
- * @brief The TimerController class manages the meeting timer with high precision.
- * Features: MM:SS formatting, Overtime handling (negative count-up), and Staging.
- */
+// High-precision meeting timer with staging and overtime support.
 class TimerController : public QObject
 {
     Q_OBJECT
@@ -18,13 +15,9 @@ class TimerController : public QObject
     Q_PROPERTY(int elapsedSeconds READ elapsedSeconds NOTIFY timeChanged)
     Q_PROPERTY(QString displayTime READ displayTime NOTIFY timeChanged)
     Q_PROPERTY(bool isStaged READ isStaged WRITE setIsStaged NOTIFY stagingChanged)
-    // Independent from isStaged -- isStaged drives the audience view's small
-    // corner overlay (unchanged); this drives a separate, manually-toggled
-    // full-screen takeover, per the user's explicit choice that the two not
-    // be tied together.
+    // Full-screen timer is separate from the small audience overlay.
     Q_PROPERTY(bool fullScreenTimer READ fullScreenTimer WRITE setFullScreenTimer NOTIFY fullScreenTimerChanged)
-    // Size multiplier for the full-screen timer's digits (0.5 - 1.0, 1.0 = fills the screen), so the
-    // operator can tune legibility for the room/screen. Persisted in QSettings.
+    // Scale the full-screen timer digits for readability on a given screen.
     Q_PROPERTY(double timerScale READ timerScale WRITE setTimerScale NOTIFY timerScaleChanged)
 
 public:

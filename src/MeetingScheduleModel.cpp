@@ -70,10 +70,7 @@ void MeetingScheduleModel::ensurePopulated(const QString &type)
 QVector<MeetingScheduleModel::MeetingRow> MeetingScheduleModel::defaultRows(const QString &type)
 {
     QVector<MeetingRow> rows;
-    // durationMinutes for each non-song segment is just the gap to the next
-    // segment's own scheduled time above -- e.g. Public Talk (10:05 -> 10:35)
-    // is 30 min, Watchtower Study (10:40 -> 11:40) is 60 min -- so it can
-    // never drift out of sync with the times already shown per row.
+    // Duration is based on the next scheduled segment, keeping the times and labels aligned.
     if (type == "midweek") {
         rows << MeetingRow{.id = "m1", .time = "19:00", .title = "OPENING SONG", .type = "song", .isSong = true, .durationMinutes = 0}
              << MeetingRow{.id = "m3", .time = "19:05", .title = "TREASURES", .type = "talk", .durationMinutes = 10}

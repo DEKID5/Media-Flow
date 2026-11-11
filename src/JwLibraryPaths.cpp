@@ -20,10 +20,7 @@ QStringList packageRoots()
             roots << fi.absoluteFilePath();
     }
 
-    // Known package ids as a last-resort fallback, in case the scan above
-    // ever comes back empty on a machine where Packages\ isn't listable for
-    // some reason (e.g. a permissions quirk) -- keeps existing installs
-    // working exactly as before even if the dynamic scan fails.
+    // Fall back to the known package IDs if the scan misses the install folder.
     if (roots.isEmpty()) {
         roots << home + QStringLiteral("/AppData/Local/Packages/48C9FCC0.Watchtower_xzhgwqvnvmbce");
         roots << home + QStringLiteral("/AppData/Local/Packages/WatchtowerBibleandTractSo.45909CDBADF3C_5rz59y55nfz3e");
