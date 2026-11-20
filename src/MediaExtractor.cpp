@@ -11,7 +11,7 @@
 
 static const QStringList kNameFilters = {
     // Videos
-    "*.mp4", "*.mov", "*.mkv", "*.avi",
+    "*.mp4", "*.mov", "*.mkv", "*.avi", "*.mpeg", "*.mpg",
     // Images
     "*.jpg", "*.jpeg", "*.png", "*.webp",
     // Audio
@@ -136,7 +136,7 @@ void MediaExtractor::processFile(const QString &filePath)
     QString ext = fi.suffix().toLower();
     MediaType type;
 
-    if (ext == "mp4" || ext == "mov" || ext == "mkv" || ext == "avi") {
+    if (ext == "mp4" || ext == "mov" || ext == "mkv" || ext == "avi" || ext == "mpeg" || ext == "mpg") {
         type = MediaType::Video;
     } else if (ext == "jpg" || ext == "jpeg" || ext == "png" || ext == "webp") {
         type = MediaType::Image;

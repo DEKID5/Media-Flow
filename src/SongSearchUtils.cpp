@@ -10,6 +10,8 @@ bool isMediaFile(const QString &fileName)
         || fileName.endsWith(QStringLiteral(".m4v"), Qt::CaseInsensitive)
         || fileName.endsWith(QStringLiteral(".mov"), Qt::CaseInsensitive)
         || fileName.endsWith(QStringLiteral(".mkv"), Qt::CaseInsensitive)
+        || fileName.endsWith(QStringLiteral(".mpeg"), Qt::CaseInsensitive)
+        || fileName.endsWith(QStringLiteral(".mpg"), Qt::CaseInsensitive)
         || fileName.endsWith(QStringLiteral(".mp3"), Qt::CaseInsensitive)
         || fileName.endsWith(QStringLiteral(".m4a"), Qt::CaseInsensitive)
         || fileName.endsWith(QStringLiteral(".wav"), Qt::CaseInsensitive);

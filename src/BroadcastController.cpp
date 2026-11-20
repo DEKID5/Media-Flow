@@ -888,7 +888,7 @@ void BroadcastController::browseBgmFolder()
 
 void BroadcastController::browseExtendedFeedBackground()
 {
-    const QString filter = tr("Images and Videos (*.jpg *.jpeg *.png *.webp *.mp4 *.m4v *.mov *.mkv)");
+    const QString filter = tr("Images and Videos (*.jpg *.jpeg *.png *.webp *.mp4 *.m4v *.mov *.mkv *.mpeg *.mpg)");
     const QString startDir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
     const QString file = QFileDialog::getOpenFileName(nullptr, tr("Choose Extended Feed Background"), startDir, filter);
     if (file.isEmpty()) return;
@@ -2041,7 +2041,7 @@ QString BroadcastController::importOneFile(const QString &absolutePath, const QS
 }
 
 void BroadcastController::browseAndAddMedia(const QString &seqId, const QString &mediaType) {
-    QString filter = (mediaType == "video") ? "Videos (*.mp4 *.m4v *.mov *.mkv)" : "Images (*.jpg *.png *.jpeg *.webp)";
+    QString filter = (mediaType == "video") ? "Videos (*.mp4 *.m4v *.mov *.mkv *.mpeg *.mpg)" : "Images (*.jpg *.png *.jpeg *.webp)";
     // Multi-select: an operator adding B-roll or a set of slides typically wants
     // several files in one pass rather than repeating this dialog per file.
     QStringList files = QFileDialog::getOpenFileNames(nullptr, tr("Select Media"), "", filter);
@@ -2058,7 +2058,9 @@ void BroadcastController::previewMediaByPath(const QString &path) {
     MediaAsset asset;
     asset.absolutePath = path;
     asset.name = QFileInfo(path).fileName();
-    asset.type = path.endsWith(".mp4", Qt::CaseInsensitive) ? "video" : "image";
+    const QString suffix = QFileInfo(path).suffix().toLower();
+    static const QStringList videoExt = {"mp4", "m4v", "mov", "mkv", "avi", "mpeg", "mpg"};
+    asset.type = videoExt.contains(suffix) ? "video" : "image";
     m_broadcastEngine->setPreviewAsset(asset);
 }
 
@@ -2066,7 +2068,7 @@ void BroadcastController::importMediaToFileSystem(const QString &category) {
     QString jwVideos = QDir::homePath() + "/Videos/JWLibrary";
     QString startDir = QDir(jwVideos).exists() ? jwVideos : QStandardPaths::writableLocation(QStandardPaths::MoviesLocation);
 
-    QStringList files = QFileDialog::getOpenFileNames(nullptr, tr("Import Media"), startDir, "Media Files (*.mp4 *.m4v *.mov *.mkv *.jpg *.png *.jpeg *.webp *.mp3 *.m4a)");
+    QStringList files = QFileDialog::getOpenFileNames(nullptr, tr("Import Media"), startDir, "Media Files (*.mp4 *.m4v *.mov *.mkv *.mpeg *.mpg *.jpg *.png *.jpeg *.webp *.mp3 *.m4a)");
     if (files.isEmpty()) return;
 
     for (const QString &file : files)
@@ -2113,7 +2115,7 @@ QVariantMap BroadcastController::addMediaToSegment(const QString &segmentId, con
         filter = "Images (*.jpg *.jpeg *.png *.webp)";
     } else {
         startDir = QDir(jwVideos).exists() ? jwVideos : QStandardPaths::writableLocation(QStandardPaths::MoviesLocation);
-        filter = "Videos (*.mp4 *.m4v *.mov *.avi *.mkv)";
+        filter = "Videos (*.mp4 *.m4v *.mov *.avi *.mkv *.mpeg *.mpg)";
     }
 
     // Multi-select: linking several videos/images to one segment in one go.
@@ -2358,7 +2360,7 @@ void BroadcastController::browseAndAddFilesToPinnedFolder(const QString &folderI
     QString startDir = QDir(jwVideos).exists() ? jwVideos : QStandardPaths::writableLocation(QStandardPaths::MoviesLocation);
 
     QStringList files = QFileDialog::getOpenFileNames(nullptr, tr("Add Files to Pin"), startDir,
-        "Media Files (*.mp4 *.m4v *.mov *.mkv *.jpg *.png *.jpeg *.webp *.mp3 *.m4a)");
+        "Media Files (*.mp4 *.m4v *.mov *.mkv *.mpeg *.mpg *.jpg *.png *.jpeg *.webp *.mp3 *.m4a)");
     if (files.isEmpty()) return;
 
     const QString folderName = m_pinnedFolders->nameForFolder(folderId);
@@ -2371,7 +2373,7 @@ void BroadcastController::browseAndAddFilesToPinnedFolder(const QString &folderI
 
 QStringList BroadcastController::expandDroppedMedia(const QStringList &pathsOrUrls)
 {
-    static const QStringList mediaGlobs = {"*.mp4", "*.m4v", "*.mov", "*.mkv", "*.jpg", "*.jpeg", "*.png", "*.webp", "*.mp3", "*.m4a"};
+    static const QStringList mediaGlobs = {"*.mp4", "*.m4v", "*.mov", "*.mkv", "*.mpeg", "*.mpg", "*.jpg", "*.jpeg", "*.png", "*.webp", "*.mp3", "*.m4a"};
     QStringList out;
     for (const QString &raw : pathsOrUrls) {
         const QString path = normalizeDroppedPath(raw);
