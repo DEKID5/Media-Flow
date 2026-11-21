@@ -19,9 +19,37 @@
 
 #include <QDateTime>
 #include <QDir>
+#include <QEvent>
 #include <QFile>
 #include <QStandardPaths>
 #include <QTextStream>
+#include <functional>
+
+namespace {
+
+class ShutdownOnCloseFilter final : public QObject
+{
+public:
+    explicit ShutdownOnCloseFilter(std::function<void()> shutdown)
+        : m_shutdown(shutdown)
+    {
+    }
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (event->type() == QEvent::Close) {
+            m_shutdown();
+            QCoreApplication::quit();
+        }
+        return QObject::eventFilter(watched, event);
+    }
+
+private:
+    std::function<void()> m_shutdown;
+};
+
+} // namespace
 
 void myMessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg)
 {
@@ -149,12 +177,23 @@ int main(int argc, char *argv[])
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
     QQmlApplicationEngine engine;
+    engine.addImportPath(QStringLiteral("qrc:/"));
 
     qmlRegisterUncreatableType<MediaLibraryModel>("MediaFlow", 1, 0, "MediaLibraryModel",
                                                   QStringLiteral("Use MediaFlow.mediaLibrary"));
 
     BroadcastController controller(&engine);
     TimerController timerController;
+
+    bool outputsShutdown = false;
+    const auto shutdownOutputs = [&controller, &timerController, &outputsShutdown]() {
+        if (outputsShutdown)
+            return;
+        outputsShutdown = true;
+        controller.shutdownAllOutputs();
+        timerController.setFullScreenTimer(false);
+        timerController.reset();
+    };
 
     // Register the controller as a singleton instance
     qmlRegisterSingletonInstance("MediaFlow", 1, 0, "MediaFlowBackend", &controller);
@@ -163,6 +202,7 @@ int main(int argc, char *argv[])
     // Also keep context property as fallback
     engine.rootContext()->setContextProperty(QStringLiteral("MediaFlowBackend"), &controller);
     engine.rootContext()->setContextProperty(QStringLiteral("TimerBackend"), &timerController);
+    engine.rootContext()->setContextProperty(QStringLiteral("BgmStore"), controller.bgmStore());
 
     QObject::connect(&engine, &QQmlApplicationEngine::quit, &app, [&app]() {
         qCritical() << "engine.quit signal fired — QML called Qt.quit() or engine.exit(). Shutting down.";
@@ -178,6 +218,8 @@ int main(int argc, char *argv[])
         controller.setTimerFullScreenActive(timerController.fullScreenTimer());
     });
 
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, &controller, shutdownOutputs);
+
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed,
                      &app, [](const QUrl &url) {
         qCritical() << "QML objectCreationFailed for:" << url;
@@ -188,6 +230,14 @@ int main(int argc, char *argv[])
         qCritical() << "engine.rootObjects() is empty after loading Main.qml — QML load failed.";
         return -1;
     }
+
+    auto *mainWindow = qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst());
+    if (!mainWindow) {
+        qCritical() << "Main QML root is not a QQuickWindow; cannot monitor close events.";
+        return -1;
+    }
+    ShutdownOnCloseFilter shutdownOnClose(shutdownOutputs);
+    mainWindow->installEventFilter(&shutdownOnClose);
 
     qInfo() << "app.exec() starting — event loop running.";
     const int result = app.exec();

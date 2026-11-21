@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(MediaFlow VERSION 1.0.62 LANGUAGES CXX C) # C needed for vendored third_party/miniz
+project(MediaFlow VERSION 1.0.63 LANGUAGES CXX C) # C needed for vendored third_party/miniz
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD 20)
@@ -18,6 +18,8 @@ set(MFQ_SOURCES
     src/AppUpdater.h
     src/BroadcastController.cpp
     src/BroadcastController.h
+    src/BgmStore.cpp
+    src/BgmStore.h
     src/MediaExtractor.cpp
     src/MediaExtractor.h
     src/MediaLibraryModel.cpp

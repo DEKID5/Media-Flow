@@ -5,6 +5,8 @@ import MediaFlow 1.0
 
 DockPanel {
     id: bgmRoot
+    property var bgmPlayer: BgmStore
+    property var bgmController: MediaFlowBackend
     Layout.fillHeight: true
     Layout.minimumHeight: 184
     Layout.preferredHeight: 195
@@ -16,6 +18,7 @@ DockPanel {
         Repeater {
             model: [
                 { label: "LIBRARY", tab: "library" },
+                { label: "ALBUMS", tab: "albums" },
                 { label: "PLAYLIST", tab: "playlist" }
             ]
             delegate: Button {
@@ -109,7 +112,7 @@ DockPanel {
                 Layout.alignment: Qt.AlignVCenter
                 radius: 8
                 color: "#12141a"
-                border.color: (MediaFlowBackend || {}).isPlayingBgm ? "#1F4236" : "#222630"
+                border.color: (bgmPlayer || {}).isPlayingBgm ? "#1F4236" : "#222630"
                 border.width: 1
                 clip: true
 
@@ -119,7 +122,7 @@ DockPanel {
                     width: 48
                     height: 48
                     radius: 24
-                    visible: ((MediaFlowBackend || {}).bgmCoverArt || "") === ""
+                    visible: ((bgmPlayer || {}).bgmCoverArt || "") === ""
                     gradient: Gradient {
                         GradientStop { position: 0; color: "#1c2b2a" }
                         GradientStop { position: 1; color: "#0c0e12" }
@@ -132,7 +135,7 @@ DockPanel {
                         to: 360
                         duration: 8000
                         loops: Animation.Infinite
-                        running: bgmRoot.visible && ((MediaFlowBackend || {}).isPlayingBgm || false)
+                        running: bgmRoot.visible && ((bgmPlayer || {}).isPlayingBgm || false)
                     }
 
                     // Center hub
@@ -158,7 +161,7 @@ DockPanel {
                 // Album Art Image
                 Image {
                     anchors.fill: parent
-                    source: (MediaFlowBackend || {}).bgmCoverArt || ""
+                    source: (bgmPlayer || {}).bgmCoverArt || ""
                     visible: source !== ""
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
@@ -172,7 +175,7 @@ DockPanel {
                     anchors.right: parent.right
                     anchors.bottom: parent.bottom
                     height: 16
-                    visible: (MediaFlowBackend || {}).isPlayingBgm || false
+                    visible: (bgmPlayer || {}).isPlayingBgm || false
                     gradient: Gradient {
                         GradientStop { position: 0; color: "transparent" }
                         GradientStop { position: 1; color: "#E00B1015" }
@@ -194,7 +197,7 @@ DockPanel {
                                 color: index === 2 ? "#D1FAE5" : Theme.accentEmerald
                                 SequentialAnimation on height {
                                     loops: Animation.Infinite
-                                    running: bgmRoot.visible && ((MediaFlowBackend || {}).isPlayingBgm || false)
+                                    running: bgmRoot.visible && ((bgmPlayer || {}).isPlayingBgm || false)
                                     NumberAnimation { to: 3; duration: 170 + index * 26; easing.type: Easing.InOutSine }
                                     NumberAnimation { to: modelData; duration: 210 + index * 22; easing.type: Easing.InOutSine }
                                 }
@@ -217,12 +220,12 @@ DockPanel {
 
                     Rectangle {
                         width: 6; height: 6; radius: 3
-                        color: ((MediaFlowBackend || {}).isPlayingBgm || false) ? Theme.accentEmerald : "#6B7280"
+                        color: ((bgmPlayer || {}).isPlayingBgm || false) ? Theme.accentEmerald : "#6B7280"
                     }
 
                     Label {
-                        text: ((MediaFlowBackend || {}).isPlayingBgm || false) ? "NOW PLAYING" : "PAUSED"
-                        color: ((MediaFlowBackend || {}).isPlayingBgm || false) ? Theme.accentEmerald : "#8B95A5"
+                        text: ((bgmPlayer || {}).isPlayingBgm || false) ? "NOW PLAYING" : "PAUSED"
+                        color: ((bgmPlayer || {}).isPlayingBgm || false) ? Theme.accentEmerald : "#8B95A5"
                         font.family: "Inter"
                         font.pixelSize: 9
                         font.bold: true
@@ -238,8 +241,8 @@ DockPanel {
                     Label {
                         Layout.fillWidth: true
                         text: {
-                            let total = (MediaFlowBackend || {}).bgmCount || 0
-                            let idx = (MediaFlowBackend || {}).bgmIndex ?? 0
+                            let total = (bgmPlayer || {}).bgmCount || 0
+                            let idx = (bgmPlayer || {}).bgmIndex ?? 0
                             return total > 0 ? ("TRACK " + (idx + 1) + " OF " + total) : "NO TRACKS"
                         }
                         color: "#9CA3AF"
@@ -257,15 +260,15 @@ DockPanel {
                         // Shuffle button
                         Rectangle {
                             width: 22; height: 18; radius: 5
-                            color: (MediaFlowBackend || {}).bgmShuffle ? "#1E293B" : (shufMa.containsMouse ? "#222736" : "#151822")
-                            border.color: (MediaFlowBackend || {}).bgmShuffle ? "#3B82F6" : (shufMa.containsMouse ? "#384152" : "#252936")
+                            color: (bgmPlayer || {}).bgmShuffle ? "#1E293B" : (shufMa.containsMouse ? "#222736" : "#151822")
+                            border.color: (bgmPlayer || {}).bgmShuffle ? "#3B82F6" : (shufMa.containsMouse ? "#384152" : "#252936")
                             border.width: 1
 
                             BroadcastIcon {
                                 anchors.centerIn: parent
                                 name: "shuffle"
                                 iconSize: 10
-                                color: (MediaFlowBackend || {}).bgmShuffle ? "#60A5FA" : (shufMa.containsMouse ? "#E5E7EB" : "#8B95A5")
+                                color: (bgmPlayer || {}).bgmShuffle ? "#60A5FA" : (shufMa.containsMouse ? "#E5E7EB" : "#8B95A5")
                             }
 
                             MouseArea {
@@ -273,18 +276,18 @@ DockPanel {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: (MediaFlowBackend || {}).toggleBgmShuffle()
+                                onClicked: (bgmController || {}).toggleBgmShuffle()
                             }
 
                             ToolTip.visible: shufMa.containsMouse
                             ToolTip.delay: 300
-                            ToolTip.text: (MediaFlowBackend || {}).bgmShuffle ? "Shuffle: On" : "Shuffle: Off"
+                            ToolTip.text: (bgmPlayer || {}).bgmShuffle ? "Shuffle: On" : "Shuffle: Off"
                         }
 
                         // Repeat button
                         Rectangle {
                             width: 22; height: 18; radius: 5
-                            readonly property int repMode: (MediaFlowBackend || {}).bgmRepeatMode || 0
+                            readonly property int repMode: (bgmPlayer || {}).bgmRepeatMode || 0
                             color: repMode > 0 ? "#1E293B" : (repMa.containsMouse ? "#222736" : "#151822")
                             border.color: repMode > 0 ? "#3B82F6" : (repMa.containsMouse ? "#384152" : "#252936")
                             border.width: 1
@@ -301,13 +304,13 @@ DockPanel {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: (MediaFlowBackend || {}).cycleBgmRepeatMode()
+                                onClicked: (bgmController || {}).cycleBgmRepeatMode()
                             }
 
                             ToolTip.visible: repMa.containsMouse
                             ToolTip.delay: 300
                             ToolTip.text: {
-                                let m = (MediaFlowBackend || {}).bgmRepeatMode || 0
+                                let m = (bgmPlayer || {}).bgmRepeatMode || 0
                                 return m === 2 ? "Repeat: Single track" : (m === 1 ? "Repeat: All tracks" : "Repeat: Off")
                             }
                         }
@@ -323,7 +326,7 @@ DockPanel {
 
                     Label {
                         id: titleLabel
-                        text: ((MediaFlowBackend || {}).bgmCount || 0) > 0 ? ((MediaFlowBackend || {}).bgmTrackName || "NO TRACKS") : "NO TRACKS"
+                        text: ((bgmPlayer || {}).bgmCount || 0) > 0 ? ((bgmPlayer || {}).bgmTrackName || "NO TRACKS") : "NO TRACKS"
                         color: Theme.textPrimary
                         font.family: "Inter"
                         font.pixelSize: 11
@@ -332,12 +335,12 @@ DockPanel {
                         anchors.verticalCenter: parent.verticalCenter
 
                         readonly property bool overflow: width > titleClipItem.width
-                        x: overflow && ((MediaFlowBackend || {}).isPlayingBgm || false) ? marqueeAnim.marqueeX : 0
+                        x: overflow && ((bgmPlayer || {}).isPlayingBgm || false) ? marqueeAnim.marqueeX : 0
 
                         SequentialAnimation {
                             id: marqueeAnim
                             property real marqueeX: 0
-                            running: titleLabel.overflow && ((MediaFlowBackend || {}).isPlayingBgm || false)
+                            running: titleLabel.overflow && ((bgmPlayer || {}).isPlayingBgm || false)
                             loops: Animation.Infinite
                             PauseAnimation { duration: 2500 }
                             NumberAnimation {
@@ -367,8 +370,8 @@ DockPanel {
                     Layout.preferredHeight: 10
 
                     readonly property real ratio: {
-                        let d = (MediaFlowBackend || {}).bgmDurationMs || 0
-                        let p = (MediaFlowBackend || {}).bgmPositionMs || 0
+                        let d = (bgmPlayer || {}).bgmDurationMs || 0
+                        let p = (bgmPlayer || {}).bgmPositionMs || 0
                         return d > 0 ? Math.max(0, Math.min(1, p / d)) : 0
                     }
 
@@ -392,7 +395,7 @@ DockPanel {
 
                         // Thumb knob
                         Rectangle {
-                            visible: scrubMa.containsMouse || scrubMa.pressed || ((MediaFlowBackend || {}).isPlayingBgm || false)
+                            visible: scrubMa.containsMouse || scrubMa.pressed || ((bgmPlayer || {}).isPlayingBgm || false)
                             width: scrubMa.containsMouse || scrubMa.pressed ? 10 : 7
                             height: width
                             radius: width / 2
@@ -410,11 +413,27 @@ DockPanel {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: (mouse) => {
-                            let d = (MediaFlowBackend || {}).bgmDurationMs || 0
-                            if (d <= 0) return
-                            let r = Math.max(0, Math.min(1, mouse.x / width))
-                            MediaFlowBackend.seekBgm(Math.round(r * d))
+                        function seekTo(x) {
+                            let d = (bgmPlayer || {}).bgmDurationMs || 0
+                            if (d <= 0)
+                                return
+                            let r = Math.max(0, Math.min(1, x / width))
+                            bgmPlayer.seekBgm(Math.round(r * d))
+                        }
+                        onPressed: {
+                            bgmPlayer.beginBgmSeek()
+                            seekTo(mouse.x)
+                        }
+                        onPositionChanged: {
+                            if (pressed)
+                                seekTo(mouse.x)
+                        }
+                        onReleased: {
+                            seekTo(mouse.x)
+                            bgmPlayer.endBgmSeek()
+                        }
+                        onCanceled: {
+                            bgmPlayer.endBgmSeek()
                         }
                     }
                 }
@@ -426,7 +445,7 @@ DockPanel {
 
                     // Elapsed / Total Duration (Unified)
                     Label {
-                        text: fmtMs((MediaFlowBackend || {}).bgmPositionMs || 0) + " / " + fmtMs((MediaFlowBackend || {}).bgmDurationMs || 0)
+                        text: fmtMs((bgmPlayer || {}).bgmPositionMs || 0) + " / " + fmtMs((bgmPlayer || {}).bgmDurationMs || 0)
                         color: "#A1A1AA"
                         font.family: "JetBrains Mono"
                         font.pixelSize: Theme.textXs
@@ -440,7 +459,7 @@ DockPanel {
                         spacing: 4
 
                         BroadcastIcon {
-                            name: ((MediaFlowBackend || {}).bgmVolume || 0) <= 0.01 ? "mute" : "speaker"
+                            name: ((bgmPlayer || {}).bgmVolume || 0) <= 0.01 ? "mute" : "speaker"
                             iconSize: 11
                             color: volMouse.containsMouse ? Theme.accentEmerald : "#8B95A5"
 
@@ -450,19 +469,19 @@ DockPanel {
                                 cursorShape: Qt.PointingHandCursor
                                 property real lastNonZeroVol: 0.6
                                 onClicked: {
-                                    if (!MediaFlowBackend) return
-                                    if (MediaFlowBackend.bgmVolume > 0.01) {
-                                        lastNonZeroVol = MediaFlowBackend.bgmVolume
-                                        MediaFlowBackend.bgmVolume = 0.0
+                                    if (!bgmController) return
+                                    if (bgmPlayer.bgmVolume > 0.01) {
+                                        lastNonZeroVol = bgmPlayer.bgmVolume
+                                        bgmController.bgmVolume = 0.0
                                     } else {
-                                        MediaFlowBackend.bgmVolume = lastNonZeroVol > 0.05 ? lastNonZeroVol : 0.6
+                                        bgmController.bgmVolume = lastNonZeroVol > 0.05 ? lastNonZeroVol : 0.6
                                     }
                                 }
                             }
 
                             ToolTip.visible: volMouse.containsMouse
                             ToolTip.delay: 300
-                            ToolTip.text: ((MediaFlowBackend || {}).bgmVolume || 0) <= 0.01 ? "Unmute" : "Mute"
+                            ToolTip.text: ((bgmPlayer || {}).bgmVolume || 0) <= 0.01 ? "Unmute" : "Mute"
                         }
 
                         Rectangle {
@@ -476,7 +495,7 @@ DockPanel {
                                 height: parent.height
                                 radius: parent.radius
                                 color: volSliderArea.containsMouse || volSliderArea.pressed ? Theme.accentEmerald : "#717B8C"
-                                width: parent.width * Math.max(0, Math.min(1, (MediaFlowBackend || {}).bgmVolume ?? 0.6))
+                                width: parent.width * Math.max(0, Math.min(1, (bgmPlayer || {}).bgmVolume ?? 0.6))
                             }
 
                             Rectangle {
@@ -484,7 +503,7 @@ DockPanel {
                                 width: 7; height: 7; radius: 3.5
                                 color: "white"
                                 anchors.verticalCenter: parent.verticalCenter
-                                x: Math.max(0, Math.min(parent.width - width, (parent.width * Math.max(0, Math.min(1, (MediaFlowBackend || {}).bgmVolume ?? 0.6))) - width / 2))
+                                x: Math.max(0, Math.min(parent.width - width, (parent.width * Math.max(0, Math.min(1, (bgmPlayer || {}).bgmVolume ?? 0.6))) - width / 2))
                             }
 
                             MouseArea {
@@ -494,26 +513,26 @@ DockPanel {
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onPositionChanged: (mouse) => {
-                                    if (pressed && MediaFlowBackend) {
+                                    if (pressed && bgmController) {
                                         let r = Math.max(0, Math.min(1, mouse.x / width))
-                                        MediaFlowBackend.bgmVolume = r
+                                        bgmController.bgmVolume = r
                                     }
                                 }
                                 onClicked: (mouse) => {
-                                    if (MediaFlowBackend) {
+                                    if (bgmController) {
                                         let r = Math.max(0, Math.min(1, mouse.x / width))
-                                        MediaFlowBackend.bgmVolume = r
+                                        bgmController.bgmVolume = r
                                     }
                                 }
                             }
 
                             ToolTip.visible: volSliderArea.containsMouse
                             ToolTip.delay: 200
-                            ToolTip.text: "Volume: " + Math.round(((MediaFlowBackend || {}).bgmVolume ?? 0.6) * 100) + "%"
+                            ToolTip.text: "Volume: " + Math.round(((bgmPlayer || {}).bgmVolume ?? 0.6) * 100) + "%"
                         }
 
                         Label {
-                            text: Math.round(((MediaFlowBackend || {}).bgmVolume ?? 0.6) * 100) + "%"
+                            text: Math.round(((bgmPlayer || {}).bgmVolume ?? 0.6) * 100) + "%"
                             color: "#6B7280"
                             font.family: "JetBrains Mono"
                             font.pixelSize: 8
@@ -540,7 +559,7 @@ DockPanel {
                 Layout.preferredWidth: 34
                 Layout.preferredHeight: 34
                 iconName: "skip-back"
-                onClicked: (MediaFlowBackend || {}).backBgm()
+                onClicked: (bgmPlayer || {}).backBgm()
                 ToolTip.visible: hovered
                 ToolTip.delay: 400
                 ToolTip.text: "Previous track"
@@ -552,18 +571,18 @@ DockPanel {
                 Layout.fillWidth: true
                 Layout.minimumWidth: 70
                 Layout.preferredHeight: 34
-                onClicked: (MediaFlowBackend || {}).toggleBgmPlayback()
+                onClicked: (bgmPlayer || {}).toggleBgmPlayback()
 
                 contentItem: RowLayout {
                     anchors.centerIn: parent
                     spacing: 5
                     BroadcastIcon {
-                        name: (MediaFlowBackend || {}).isPlayingBgm ? "pause" : "play"
+                        name: (bgmPlayer || {}).isPlayingBgm ? "pause" : "play"
                         iconSize: 12
                         color: "white"
                     }
                     Label {
-                        text: (MediaFlowBackend || {}).isPlayingBgm ? "PAUSE" : "PLAY"
+                        text: (bgmPlayer || {}).isPlayingBgm ? "PAUSE" : "PLAY"
                         color: "#ffffff"
                         font.family: "Inter"
                         font.pixelSize: 10
@@ -574,8 +593,8 @@ DockPanel {
 
                 background: Rectangle {
                     radius: 7
-                    color: (MediaFlowBackend || {}).isPlayingBgm ? "#1d4ed8" : "#2563eb"
-                    border.color: (MediaFlowBackend || {}).isPlayingBgm ? "#3b82f6" : "#60a5fa"
+                    color: (bgmPlayer || {}).isPlayingBgm ? "#1d4ed8" : "#2563eb"
+                    border.color: (bgmPlayer || {}).isPlayingBgm ? "#3b82f6" : "#60a5fa"
                     border.width: 1
                 }
 
@@ -588,7 +607,7 @@ DockPanel {
                 Layout.preferredWidth: 34
                 Layout.preferredHeight: 34
                 iconName: "skip-forward"
-                onClicked: (MediaFlowBackend || {}).nextBgm()
+                onClicked: (bgmPlayer || {}).nextBgm()
                 ToolTip.visible: hovered
                 ToolTip.delay: 400
                 ToolTip.text: "Next track"
@@ -600,8 +619,8 @@ DockPanel {
                 Layout.preferredHeight: 34
                 label: "FADE"
                 onClicked: {
-                    if (MediaFlowBackend && MediaFlowBackend.fadeOutBgm) MediaFlowBackend.fadeOutBgm(2500)
-                    else (MediaFlowBackend || {}).stopBgm()
+                    if (bgmPlayer && bgmPlayer.fadeOutBgm) bgmPlayer.fadeOutBgm(2500)
+                    else (bgmPlayer || {}).stopBgm()
                 }
                 ToolTip.visible: hovered
                 ToolTip.delay: 400
@@ -613,7 +632,7 @@ DockPanel {
                 Layout.preferredWidth: 46
                 Layout.preferredHeight: 34
                 label: "STOP"
-                onClicked: (MediaFlowBackend || {}).stopBgm()
+                onClicked: (bgmPlayer || {}).stopBgm()
                 ToolTip.visible: hovered
                 ToolTip.delay: 400
                 ToolTip.text: "Stop playback"

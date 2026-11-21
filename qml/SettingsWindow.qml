@@ -48,6 +48,7 @@ Popup {
 
     readonly property var navItems: [
         { label: "Displays", icon: "screen" },
+        { label: "Audio", icon: "music" },
         { label: "Webcam", icon: "webcam" },
         { label: "Shortcuts", icon: "bolt" },
         { label: "Music & Feed", icon: "music" },
@@ -254,7 +255,29 @@ Popup {
                     }
                 }
 
-                // ── 1: Webcam ──
+                // ── 1: Audio ──
+                SettingsPage {
+                    SettingsCard {
+                        Label { text: "AUDIO OUTPUT"; color: Theme.textSecondary; font.bold: true; font.pixelSize: Theme.textXs; font.letterSpacing: 1 }
+                        Label {
+                            text: "Choose where live video/audio and background music play. System default follows Windows; a selected device is used until it is disconnected."
+                            color: Theme.textDim; font.pixelSize: Theme.textSm; wrapMode: Text.WordWrap; Layout.fillWidth: true
+                        }
+                        AudioOutputPicker {
+                            Layout.topMargin: 4
+                            currentDeviceId: (MediaFlowBackend || {}).audioOutputDeviceId || ""
+                            onDeviceChosen: (deviceId) => {
+                                if (MediaFlowBackend) MediaFlowBackend.setAudioOutputDeviceId(deviceId)
+                            }
+                        }
+                        Label {
+                            text: "If the selected device is removed, MediaFlow falls back to the system default and lists the available devices again."
+                            color: Theme.textDim; font.pixelSize: Theme.textXs; wrapMode: Text.WordWrap; Layout.fillWidth: true
+                        }
+                    }
+                }
+
+                // ── 2: Webcam ──
                 SettingsPage {
                     SettingsCard {
                         Label { text: "WEBCAM FALLBACK"; color: Theme.textSecondary; font.bold: true; font.pixelSize: Theme.textXs; font.letterSpacing: 1 }
@@ -270,7 +293,7 @@ Popup {
                     }
                 }
 
-                // ── 2: Shortcuts ──
+                // ── 3: Shortcuts ──
                 SettingsPage {
                     SettingsCard {
                         RowLayout {
@@ -303,7 +326,7 @@ Popup {
                     }
                 }
 
-                // ── 3: Music & Feed ──
+                // ── 4: Music & Feed ──
                 SettingsPage {
                     SettingsCard {
                         Label { text: "BACKGROUND MUSIC"; color: Theme.textSecondary; font.bold: true; font.pixelSize: Theme.textXs; font.letterSpacing: 1 }
@@ -397,7 +420,7 @@ Popup {
                     }
                 }
 
-                // ── 4: App Updates ──
+                // ── 5: App Updates ──
                 SettingsPage {
                     SettingsCard {
                         id: updateSection
@@ -502,7 +525,7 @@ Popup {
                     }
                 }
 
-                // ── 5: Workbook & Languages ──
+                // ── 6: Workbook & Languages ──
                 SettingsPage {
                     SettingsCard {
                         Label { text: "WEEKLY WORKBOOK"; color: Theme.textSecondary; font.bold: true; font.pixelSize: Theme.textXs; font.letterSpacing: 1 }
@@ -610,7 +633,7 @@ Popup {
                     }
                 }
 
-                // ── 6: User Guide ──
+                // ── 7: User Guide ──
                 SettingsPage {
                     SettingsCard {
                         Label { text: "BROADCAST CONTROLS"; color: Theme.textSecondary; font.bold: true; font.pixelSize: Theme.textXs; font.letterSpacing: 1 }
@@ -804,6 +827,48 @@ Popup {
                 const id = model.deviceIdAt(idx)
                 camPickerRoot.deviceChosen(model.deviceForId(id))
             }
+        }
+    }
+
+    component AudioOutputPicker: Rectangle {
+        id: audioPickerRoot
+        property string currentDeviceId: ""
+        signal deviceChosen(string deviceId)
+
+        Layout.fillWidth: true; Layout.preferredHeight: 42
+        radius: Theme.radius; color: "#181B25"; border.color: "#2A3040"; border.width: 1
+
+        DarkComboBox {
+            id: audioCombo
+            anchors.fill: parent; anchors.margins: 4
+            textLeftPadding: 8
+            fontPixelSize: Theme.textMd
+            fontBold: false
+            placeholderLabel: "No audio output found"
+            textRole: "label"
+            model: (MediaFlowBackend || {}).audioOutputDevices || []
+
+            function syncFromCurrent() {
+                const devices = audioCombo.model || []
+                for (let i = 0; i < devices.length; i++) {
+                    if (devices[i].id === audioPickerRoot.currentDeviceId) {
+                        currentIndex = i
+                        return
+                    }
+                }
+                currentIndex = devices.length ? 0 : -1
+            }
+            Component.onCompleted: syncFromCurrent()
+            Connections {
+                target: audioPickerRoot
+                function onCurrentDeviceIdChanged() { audioCombo.syncFromCurrent() }
+            }
+            Connections {
+                target: MediaFlowBackend
+                function onAudioOutputDevicesChanged() { audioCombo.syncFromCurrent() }
+            }
+
+            onActivated: (index) => audioPickerRoot.deviceChosen(model[index].id)
         }
     }
 

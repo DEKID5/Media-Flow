@@ -7,10 +7,13 @@ Popup {
     id: musicPopup
 
     property string activeTab: "library"
-    property var backend: MediaFlowBackend || ({})
+    property var backend: BgmStore
+    property var controller: MediaFlowBackend || ({})
     property var selectedTrackPaths: []
     property var librarySourceTracks: []
     property var playlistSourceTracks: []
+    readonly property var albumTracks: filterTracks(backend.bgmAlbumTracks || [], false)
+    readonly property var albumItems: filterAlbums(backend.bgmAlbums || [])
     property var languageOptions: [{ name: "All languages", code: "" }]
     property string languageFilterCode: ""
     property string appliedSearchQuery: ""
@@ -23,14 +26,30 @@ Popup {
     function refreshTrackSnapshots() {
         if (activeTab === "library") {
             librarySourceTracks = backend.bgmLibraryTracks || []
-        } else {
+        } else if (activeTab === "playlist") {
             playlistSourceTracks = backend.bgmPlaylistTracks || []
         }
     }
+    function syncViewedTab() {
+        if (activeTab === "library")
+            backend.setActiveTab("LIBRARY")
+        else if (activeTab === "playlist")
+            backend.viewPlaylist(backend.currentBgmPlaylistName || "")
+        else
+            backend.viewAlbums()
+    }
+    function filterAlbums(albums) {
+        const query = appliedSearchQuery
+        if (!query)
+            return albums
+        return albums.filter(function(album) {
+            return ((album.title || "") + " " + (album.artist || "")).toLowerCase().includes(query)
+        })
+    }
     function refreshLanguageOptions() {
         const options = [{ name: "All languages", code: "" }]
-        if (backend.getSupportedLanguages) {
-            const languages = backend.getSupportedLanguages()
+        if (controller.getSupportedLanguages) {
+            const languages = controller.getSupportedLanguages()
             for (let i = 0; i < languages.length; ++i)
                 options.push(languages[i])
         }
@@ -66,12 +85,14 @@ Popup {
     padding: 0
     onActiveTabChanged: {
         if (visible) {
+            syncViewedTab()
             refreshTrackSnapshots()
             trackList.currentIndex = trackList.count > 0 ? 0 : -1
             trackList.positionViewAtBeginning()
         }
     }
     onOpened: {
+        syncViewedTab()
         searchField.text = ""
         searchDebounce.stop()
         appliedSearchQuery = ""
@@ -96,16 +117,25 @@ Popup {
     Connections {
         target: musicPopup.backend
         ignoreUnknownSignals: true
-        function onBgmLibraryChanged() {
+        function onLibraryChanged() {
             if (musicPopup.visible && musicPopup.activeTab === "library") {
                 musicPopup.librarySourceTracks = musicPopup.backend.bgmLibraryTracks || []
             }
         }
-        function onBgmPlaylistTracksChanged() {
+        function onPlaylistTracksChanged() {
             if (musicPopup.visible && musicPopup.activeTab === "playlist") {
                 musicPopup.playlistSourceTracks = musicPopup.backend.bgmPlaylistTracks || []
             }
         }
+        function onPlaylistsChanged() {
+            if (musicPopup.visible && musicPopup.activeTab === "playlist")
+                musicPopup.playlistSourceTracks = musicPopup.backend.bgmPlaylistTracks || []
+        }
+    }
+
+    Connections {
+        target: musicPopup.controller
+        ignoreUnknownSignals: true
         function onLanguagesChanged() {
             musicPopup.refreshLanguageOptions()
         }
@@ -376,11 +406,12 @@ Popup {
             Repeater {
                 model: [
                     { title: "LIBRARY", tab: "library" },
+                    { title: "ALBUMS", tab: "albums" },
                     { title: "PLAYLIST", tab: "playlist" }
                 ]
                 delegate: Button {
                     required property var modelData
-                    implicitWidth: modelData.tab === "playlist" ? 104 : 96
+                    implicitWidth: 96
                     implicitHeight: 34
                     onClicked: musicPopup.activeTab = modelData.tab
                     contentItem: Label {
@@ -482,7 +513,29 @@ Popup {
                 fontBold: false
                 model: backend.bgmPlaylistNames || []
                 currentIndex: Math.max(0, (backend.bgmPlaylistNames || []).indexOf(backend.currentBgmPlaylistName || ""))
-                onActivated: backend.selectBgmPlaylist(currentText)
+                onActivated: controller.selectBgmPlaylist(currentText)
+            }
+
+            Button {
+                visible: musicPopup.activeTab === "albums" && Boolean(backend.viewedAlbumId)
+                text: "← ALBUMS"
+                implicitWidth: 96
+                implicitHeight: 36
+                onClicked: backend.viewAlbums()
+                contentItem: Label {
+                    text: parent.text
+                    color: Theme.textPrimary
+                    font.family: "Inter"
+                    font.pixelSize: Theme.textXs
+                    font.bold: true
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                background: Rectangle {
+                    radius: 9
+                    color: parent.hovered ? "#25252d" : "#17171d"
+                    border.color: "#2D313E"
+                }
             }
 
             Button {
@@ -511,7 +564,7 @@ Popup {
                 text: "＋ ADD MUSIC"
                 implicitWidth: 116
                 implicitHeight: 36
-                onClicked: backend.browseAndAddBgmFiles()
+                onClicked: controller.browseAndAddBgmFiles()
                 contentItem: Label {
                     text: parent.text
                     color: Theme.textPrimary
@@ -534,7 +587,7 @@ Popup {
                 implicitWidth: 92
                 implicitHeight: 36
                 onClicked: {
-                    backend.addBgmTracksToPlaylist(musicPopup.selectedTrackPaths)
+                    controller.addBgmTracksToPlaylist(musicPopup.selectedTrackPaths)
                     musicPopup.selectedTrackPaths = []
                 }
                 contentItem: Label {
@@ -566,7 +619,9 @@ Popup {
                     ? (musicPopup.selectedTrackPaths.length > 0
                         ? musicPopup.selectedTrackPaths.length + " SELECTED"
                         : "SELECT MUSIC TO ADD")
-                    : "UP NEXT · " + (backend.currentBgmPlaylistName || "PLAYLIST")
+                    : musicPopup.activeTab === "playlist"
+                        ? "UP NEXT · " + (backend.currentBgmPlaylistName || "PLAYLIST")
+                        : backend.viewedAlbumId ? "ALBUM TRACKS" : "YOUR ALBUMS"
                 color: Theme.textFaint
                 font.family: "Inter"
                 font.pixelSize: Theme.textXs
@@ -656,7 +711,11 @@ Popup {
             Label {
                 text: musicPopup.activeTab === "library"
                     ? musicPopup.libraryTracks.length + " TRACKS"
-                    : musicPopup.playlistTracks.length + " TRACKS"
+                    : musicPopup.activeTab === "playlist"
+                        ? musicPopup.playlistTracks.length + " TRACKS"
+                        : backend.viewedAlbumId
+                            ? musicPopup.albumTracks.length + " TRACKS"
+                            : musicPopup.albumItems.length + " ALBUMS"
                 color: Theme.textDim
                 font.family: "Inter"
                 font.pixelSize: Theme.textXs
@@ -665,7 +724,110 @@ Popup {
         }
 
         ListView {
+            id: albumList
+            visible: musicPopup.activeTab === "albums" && !backend.viewedAlbumId
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.leftMargin: 16
+            Layout.rightMargin: 14
+            Layout.bottomMargin: 14
+            clip: true
+            spacing: 4
+            boundsBehavior: Flickable.StopAtBounds
+            model: musicPopup.albumItems
+            ScrollBar.vertical: SlimScrollBar {
+                policy: ScrollBar.AsNeeded
+            }
+
+            delegate: Rectangle {
+                required property var modelData
+                width: albumList.width - 14
+                height: 66
+                radius: 9
+                color: albumMouse.containsMouse ? "#191B23" : "transparent"
+                border.color: albumMouse.containsMouse ? "#252936" : "transparent"
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 10
+                    anchors.rightMargin: 12
+                    spacing: 12
+                    Rectangle {
+                        Layout.preferredWidth: 48
+                        Layout.preferredHeight: 48
+                        radius: 8
+                        color: "#20242D"
+                        clip: true
+                        Image {
+                            anchors.fill: parent
+                            source: modelData.coverUrl || ""
+                            fillMode: Image.PreserveAspectCrop
+                            asynchronous: true
+                            sourceSize.width: 96
+                            sourceSize.height: 96
+                        }
+                        Label {
+                            anchors.centerIn: parent
+                            visible: !modelData.coverUrl
+                            text: "♫"
+                            color: Theme.accentEmerald
+                            font.pixelSize: 18
+                        }
+                    }
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 3
+                        Label {
+                            Layout.fillWidth: true
+                            text: modelData.title || "Unknown album"
+                            color: Theme.textPrimary
+                            font.family: "Inter"
+                            font.pixelSize: Theme.textSm
+                            font.bold: true
+                            elide: Text.ElideRight
+                        }
+                        Label {
+                            Layout.fillWidth: true
+                            text: (modelData.artist || "Unknown Artist")
+                                + (modelData.year ? "  ·  " + modelData.year : "")
+                                + "  ·  " + modelData.trackIds.length + " tracks"
+                            color: Theme.textDim
+                            font.family: "Inter"
+                            font.pixelSize: Theme.textXs
+                            elide: Text.ElideRight
+                        }
+                    }
+                    Label {
+                        text: "›"
+                        color: Theme.textSecondary
+                        font.pixelSize: 24
+                    }
+                }
+
+                MouseArea {
+                    id: albumMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onClicked: backend.viewAlbum(modelData.id)
+                }
+            }
+
+            Label {
+                anchors.centerIn: parent
+                visible: albumList.count === 0
+                width: parent.width - 60
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                text: "No albums found. Add audio tracks with album metadata to browse albums."
+                color: Theme.textDim
+                font.family: "Inter"
+                font.pixelSize: Theme.textSm
+            }
+        }
+
+        ListView {
             id: trackList
+            visible: musicPopup.activeTab !== "albums" || Boolean(backend.viewedAlbumId)
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.leftMargin: 16
@@ -682,7 +844,9 @@ Popup {
             reuseItems: true
             model: musicPopup.activeTab === "library"
                 ? musicPopup.libraryTracks
-                : musicPopup.playlistTracks
+                : musicPopup.activeTab === "playlist"
+                    ? musicPopup.playlistTracks
+                    : musicPopup.albumTracks
             ScrollBar.vertical: SlimScrollBar {
                 policy: ScrollBar.AsNeeded
             }
@@ -706,12 +870,16 @@ Popup {
                 } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                     const track = musicPopup.activeTab === "library"
                         ? musicPopup.libraryTracks[trackList.currentIndex]
-                        : musicPopup.playlistTracks[trackList.currentIndex]
+                        : musicPopup.activeTab === "playlist"
+                            ? musicPopup.playlistTracks[trackList.currentIndex]
+                            : musicPopup.albumTracks[trackList.currentIndex]
                     if (track) {
                         if (musicPopup.activeTab === "library")
                             backend.playBgmFile(track.path)
-                        else
+                        else if (musicPopup.activeTab === "playlist")
                             backend.playBgmTrack(track.index)
+                        else
+                            backend.playBgmAlbumTrack(track.index)
                     }
                 } else if (event.key === Qt.Key_Space && musicPopup.activeTab === "library") {
                     const track = musicPopup.libraryTracks[trackList.currentIndex]
@@ -731,19 +899,18 @@ Popup {
                 property string displayName: modelData.name || "Unknown track"
                 property string displayThumbnailPath: modelData.thumbnailPath || ""
                 readonly property bool isPlaylist: musicPopup.activeTab === "playlist"
-                readonly property bool isCurrent: isPlaylist
-                    ? (modelData.index === (musicPopup.backend.bgmIndex ?? -1))
-                    : (Boolean(modelData.path) && modelData.path === (musicPopup.backend.bgmPath || ""))
+                readonly property bool isAlbum: musicPopup.activeTab === "albums"
+                readonly property bool isCurrent: modelData.trackId === musicPopup.backend.activeTrackId
                 readonly property bool isKeyboardCurrent: trackList.activeFocus && index === trackList.currentIndex
                 onModelDataChanged: {
                     displayName = modelData.name || "Unknown track"
                     displayThumbnailPath = modelData.thumbnailPath || ""
                     if (!displayThumbnailPath && modelData.path)
-                        backend.requestBgmThumbnail(modelData.path)
+                        controller.requestBgmThumbnail(modelData.path)
                 }
                 Component.onCompleted: {
                     if (!displayThumbnailPath && modelData.path)
-                        backend.requestBgmThumbnail(modelData.path)
+                        controller.requestBgmThumbnail(modelData.path)
                 }
                 width: trackList.width - 14
                 height: 58
@@ -755,7 +922,7 @@ Popup {
                 Connections {
                     target: musicPopup.backend
                     ignoreUnknownSignals: true
-                    function onBgmTrackMetadataUpdated(path, title, thumbnailUrl) {
+                    function onTrackMetadataUpdated(path, title, thumbnailUrl) {
                         if (path !== modelData.path)
                             return
                         if (title)
@@ -873,7 +1040,15 @@ Popup {
                         text: isCurrent && (backend.isPlayingBgm || false) ? "Ⅱ" : "▶"
                         implicitWidth: 30
                         implicitHeight: 30
-                        onClicked: isCurrent ? backend.toggleBgmPlayback() : backend.playBgmFile(modelData.path)
+                        onClicked: {
+                            if (isCurrent) {
+                                backend.toggleBgmPlayback()
+                            } else if (isAlbum) {
+                                backend.playBgmAlbumTrack(modelData.index)
+                            } else {
+                                backend.playBgmFile(modelData.path)
+                            }
+                        }
                         contentItem: Label {
                             text: parent.text
                             color: isCurrent ? Theme.accentEmerald : Theme.textSecondary
@@ -938,7 +1113,7 @@ Popup {
                         text: "×"
                         implicitWidth: 30
                         implicitHeight: 30
-                        onClicked: backend.removeBgmTrack(modelData.index)
+                        onClicked: controller.removeBgmTrack(modelData.index)
                         contentItem: Label {
                             text: parent.text
                             color: parent.parent.hovered ? Theme.accentRed : Theme.textFaint
@@ -962,12 +1137,16 @@ Popup {
                     onDoubleClicked: {
                         if (isPlaylist)
                             backend.playBgmTrack(modelData.index)
+                        else if (isAlbum)
+                            backend.playBgmAlbumTrack(modelData.index)
                         else
                             backend.playBgmFile(modelData.path)
                     }
                     onClicked: {
                         if (isPlaylist)
                             backend.playBgmTrack(modelData.index)
+                        else if (isAlbum)
+                            backend.playBgmAlbumTrack(modelData.index)
                         else
                             backend.playBgmFile(modelData.path)
                     }
@@ -982,7 +1161,9 @@ Popup {
                 wrapMode: Text.WordWrap
                 text: musicPopup.activeTab === "library"
                     ? "No audio tracks found in your media library yet. Add music files or folders to get started."
-                    : "Your playlist is empty. Add tracks from the library or choose audio files."
+                    : musicPopup.activeTab === "playlist"
+                        ? "Your playlist is empty. Add tracks from the library or choose audio files."
+                        : "This album has no available tracks."
                 color: Theme.textDim
                 font.family: "Inter"
                 font.pixelSize: Theme.textSm
@@ -1051,7 +1232,7 @@ Popup {
                     id: createPlaylistButton
                     text: "CREATE"
                     onClicked: {
-                        if (backend.createBgmPlaylist(playlistNameField.text)) {
+                        if (controller.createBgmPlaylist(playlistNameField.text)) {
                             playlistNameField.clear()
                             playlistNameError.text = ""
                             musicPopup.selectedTrackPaths = []
@@ -1110,7 +1291,7 @@ Popup {
                 Button {
                     text: "CLEAR"
                     onClicked: {
-                        backend.clearBgmPlaylist()
+                        controller.clearBgmPlaylist()
                         confirmClearDialog.close()
                     }
                     contentItem: Label {

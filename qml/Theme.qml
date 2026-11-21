@@ -1,6 +1,5 @@
-import QtQuick
-
 pragma Singleton
+import QtQuick
 
 QtObject {
     // ── Core Background ──

@@ -58,5 +58,13 @@ jobs:
           $version = $tag -replace '^v', ''
           $installer = "packaging/installer_output/MediaFlow-Setup-$version.exe"
           $sha256 = (Get-FileHash -Algorithm SHA256 $installer).Hash
-          $notes = "### Changes in $tag`n`n- Added MPEG video support for `.mpeg` and `.mpg` files.`n`nSHA-256: ``$sha256``"
+          $notes = @"
+          ### Changes in $tag
+
+          - Added a persistent, app-wide BGM player with separate library, album, playlist, and playback state.
+          - Added album browsing, queue controls, shuffle/repeat, and safer asynchronous loading and seeking.
+          - Improved audio-device selection, media transitions, fullscreen behavior, and application shutdown.
+
+          SHA-256: ``$sha256``
+          "@
           gh release create $tag $installer --title "MediaFlow $tag" --notes $notes --latest --verify-tag

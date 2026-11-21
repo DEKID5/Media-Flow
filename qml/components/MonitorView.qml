@@ -158,9 +158,9 @@ Rectangle {
         visible: monitor.isLive && opacity > 0
         opacity: 0
         z: 3
+        property int fadeDuration: 1000
         Behavior on opacity {
-            id: liveImageFade
-            NumberAnimation { duration: 1000; easing.type: Easing.InOutQuad }
+            NumberAnimation { duration: liveProgramImage.fadeDuration; easing.type: Easing.InOutQuad }
         }
     }
 
@@ -174,9 +174,20 @@ Rectangle {
         }
     }
 
+    Timer {
+        id: liveImageClearTimer
+        interval: 500
+        onTriggered: liveProgramImage.source = ""
+    }
+
     // Fades the current live image out, swaps to the new one, then fades
     // it in -- ~2s total, matching the video crossfade's duration.
     function takeImageLive(path) {
+        liveImageClearTimer.stop()
+        crossfadeAnim.stop()
+        fadeOutAnim.stop()
+        liveVideoToImageAnim.stop()
+        liveProgramImage.fadeDuration = 1000
         if (liveProgramImage.opacity > 0) {
             liveProgramImage.opacity = 0
             liveImageSwapTimer.pendingSource = path
@@ -184,15 +195,29 @@ Rectangle {
         } else {
             liveProgramImage.source = path
             liveProgramImage.opacity = 1
+            liveVideoToImageAnim.start()
         }
     }
 
-    // Cut is instant, unlike Take -- bypass the opacity Behavior entirely.
     function cutImageLive() {
-        liveImageFade.enabled = false
+        liveImageSwapTimer.stop()
+        liveProgramImage.fadeDuration = 500
         liveProgramImage.opacity = 0
-        liveProgramImage.source = ""
-        liveImageFade.enabled = true
+        liveImageClearTimer.interval = 500
+        liveImageClearTimer.restart()
+    }
+
+    function showAudioStandby() {
+        crossfadeAnim.stop()
+        liveVideoToImageAnim.stop()
+        fadeOutAnim.stop()
+        liveImageSwapTimer.stop()
+        liveProgramImage.fadeDuration = 500
+        liveProgramImage.opacity = 0
+        liveImageClearTimer.interval = 500
+        liveImageClearTimer.restart()
+        videoOutA.opacity = 0
+        videoOutB.opacity = 0
     }
 
     // ── Thumbnail overlay (preview, paused state) ──
@@ -277,7 +302,7 @@ Rectangle {
     // ── Standby ──
     Rectangle {
         anchors.fill: parent; z: 0
-        visible: (!asset || !asset.absolutePath) && mediaType !== "input" && !monitorCamera.active
+        visible: (!asset || !asset.absolutePath || mediaType === "audio") && mediaType !== "input" && !monitorCamera.active
         gradient: Gradient {
             GradientStop { position: 0.0; color: "#11141C" }
             GradientStop { position: 1.0; color: "#090B10" }
@@ -324,30 +349,41 @@ Rectangle {
     //  FADE OUT (for Cut Live / Clear)
     // =====================================================================
     function executeFadeOut() {
+        crossfadeAnim.stop()
+        liveVideoToImageAnim.stop()
+        fadeOutAnim.stop()
         fadeOutAnim.start()
     }
 
-    NumberAnimation {
+    ParallelAnimation {
         id: fadeOutAnim
-        target: activeIsA ? videoOutA : videoOutB
-        property: "opacity"; from: 1.0; to: 0.0
-        duration: 500; easing.type: Easing.InOutQuad
+        NumberAnimation {
+            target: videoOutA
+            property: "opacity"; from: target.opacity; to: 0.0
+            duration: 500; easing.type: Easing.InOutQuad
+        }
+        NumberAnimation {
+            target: videoOutB
+            property: "opacity"; from: target.opacity; to: 0.0
+            duration: 500; easing.type: Easing.InOutQuad
+        }
         // BroadcastEngine stops the real program players itself, on its own
         // matching 500ms timer -- this animation is purely visual now.
+        onFinished: {
+            videoOutA.opacity = 0
+            videoOutB.opacity = 0
+        }
     }
 
-    // =====================================================================
-    //  CUT TRANSITION (instant — 0ms)
-    //  Purely visual for the LIVE instance -- BroadcastEngine's cutLive()/
-    //  clearLive() already drove the real program players before this fired.
-    // =====================================================================
-    function executeCut(url, type) {
-        let nextOut = activeIsA ? videoOutB : videoOutA
-        let prevOut = activeIsA ? videoOutA : videoOutB
-
-        nextOut.opacity = 1.0
-        prevOut.opacity = 0.0
-        activeIsA = !activeIsA
+    NumberAnimation {
+        id: liveVideoToImageAnim
+        target: activeIsA ? videoOutA : videoOutB
+        property: "opacity"; from: target.opacity; to: 0.0
+        duration: 1000; easing.type: Easing.InOutQuad
+        onFinished: {
+            videoOutA.opacity = 0
+            videoOutB.opacity = 0
+        }
     }
 
     // =====================================================================
@@ -357,6 +393,15 @@ Rectangle {
     //  crossfades opacity between the two shared-sink VideoOutputs.
     // =====================================================================
     function executeTake(url, type) {
+        fadeOutAnim.stop()
+        liveVideoToImageAnim.stop()
+        liveImageSwapTimer.stop()
+        if (liveProgramImage.opacity > 0) {
+            liveProgramImage.fadeDuration = 1000
+            liveProgramImage.opacity = 0
+            liveImageClearTimer.interval = 1000
+            liveImageClearTimer.restart()
+        }
         crossfadeAnim.start()
     }
 
@@ -364,12 +409,12 @@ Rectangle {
         id: crossfadeAnim
         NumberAnimation {
             target: activeIsA ? videoOutB : videoOutA
-            property: "opacity"; from: 0.0; to: 1.0
+            property: "opacity"; from: target.opacity; to: 1.0
             duration: 2000; easing.type: Easing.InOutQuad
         }
         NumberAnimation {
             target: activeIsA ? videoOutA : videoOutB
-            property: "opacity"; from: 1.0; to: 0.0
+            property: "opacity"; from: target.opacity; to: 0.0
             duration: 2000; easing.type: Easing.InOutQuad
         }
         // The LIVE instance follows BroadcastEngine's own A/B flag (see
@@ -393,19 +438,16 @@ Rectangle {
         }
 
         function onCutExecuted() {
-            let a = MediaFlowBackend.broadcastEngine.programAsset
-            if (a && a.absolutePath && (a.type === "video" || a.type === "audio")) {
-                executeCut("file:///" + a.absolutePath, a.type)
-            } else {
-                executeFadeOut()
-            }
+            executeFadeOut()
             cutImageLive()
         }
 
         function onTakeExecuted() {
             let a = MediaFlowBackend.broadcastEngine.programAsset
-            if (a && a.absolutePath && (a.type === "video" || a.type === "audio")) {
+            if (a && a.absolutePath && a.type === "video") {
                 executeTake("file:///" + a.absolutePath, a.type)
+            } else if (a && a.absolutePath && a.type === "audio") {
+                showAudioStandby()
             } else if (a && a.absolutePath && a.type === "image") {
                 takeImageLive("file:///" + a.absolutePath)
             }

@@ -24,10 +24,12 @@
 #include "VirtualCameraManager.h"
 #include "PinnedFolderModel.h"
 #include "AppUpdater.h"
+#include "BgmStore.h"
 
 class MediaExtractor;
 class MediaThumbnailManager;
 enum class MediaType;
+class QMediaDevices;
 class QQuickWindow;
 class WorkbookManager;
 
@@ -45,8 +47,9 @@ class BroadcastController final : public QObject
     Q_PROPERTY(CameraDeviceModel *cameraDevices READ cameraDevices CONSTANT)
     Q_PROPERTY(BroadcastEngine *broadcastEngine READ broadcastEngine CONSTANT)
     Q_PROPERTY(QCameraDevice programCameraDevice READ programCameraDevice WRITE setProgramCameraDevice NOTIFY programCameraDeviceChanged)
-    // Capture the room device once at startup so it does not drift with Zoom’s default changes.
-    Q_PROPERTY(QAudioDevice roomAudioOutputDevice READ roomAudioOutputDevice CONSTANT)
+    Q_PROPERTY(QAudioDevice roomAudioOutputDevice READ roomAudioOutputDevice NOTIFY audioOutputDeviceChanged)
+    Q_PROPERTY(QVariantList audioOutputDevices READ audioOutputDevices NOTIFY audioOutputDevicesChanged)
+    Q_PROPERTY(QString audioOutputDeviceId READ audioOutputDeviceId NOTIFY audioOutputDeviceChanged)
 
     // --- State Properties ---
     Q_PROPERTY(QString selectedSegmentId READ selectedSegmentId WRITE selectSegment NOTIFY selectedSegmentIdChanged)
@@ -120,6 +123,8 @@ public:
     AppUpdater *updater() const { return m_updater; }
     QCameraDevice programCameraDevice() const { return m_programCameraDevice; }
     QAudioDevice roomAudioOutputDevice() const { return m_roomAudioOutputDevice; }
+    QVariantList audioOutputDevices() const;
+    QString audioOutputDeviceId() const { return m_audioOutputDeviceId; }
 
     QString selectedSegmentId() const { return m_selectedSegmentId; }
     QString meetingType() const { return m_meetingType; }
@@ -183,23 +188,24 @@ public:
     // --- Legacy Timer Getters Removed ---
 
     QString bgmPath() const;
-    QString bgmCoverArt() const { return m_bgmCoverArt; }
+    QString bgmCoverArt() const;
     bool isPlayingBgm() const;
     QString bgmTrackName() const;
-    int bgmCount() const { return m_bgmPlaylist.count(); }
-    bool bgmShuffle() const { return m_bgmShuffle; }
+    int bgmCount() const;
+    bool bgmShuffle() const;
     void setBgmShuffle(bool enabled);
     int bgmPositionMs() const;
     int bgmDurationMs() const;
-    int bgmIndex() const { return m_bgmIndex; }
+    int bgmIndex() const;
     qreal bgmVolume() const;
     void setBgmVolume(qreal volume);
-    int bgmRepeatMode() const { return m_bgmRepeatMode; }
+    int bgmRepeatMode() const;
     void setBgmRepeatMode(int mode);
     QVariantList bgmPlaylistTracks() const;
     QVariantList bgmLibraryTracks() const;
-    QStringList bgmPlaylistNames() const { return m_bgmPlaylists.keys(); }
-    QString currentBgmPlaylistName() const { return m_currentBgmPlaylistName; }
+    QStringList bgmPlaylistNames() const;
+    QString currentBgmPlaylistName() const;
+    BgmStore *bgmStore() const { return m_bgmStore; }
 
     // --- Sequence/Media API ---
     Q_INVOKABLE void selectSegment(const QString &id);
@@ -215,6 +221,7 @@ public:
     Q_INVOKABLE void setMeetingLive(bool live);
     Q_INVOKABLE void toggleMeetingLive() { setMeetingLive(!m_isMeetingLive); }
     Q_INVOKABLE void setProgramCameraDevice(const QCameraDevice &device);
+    Q_INVOKABLE void setAudioOutputDeviceId(const QString &deviceId);
 
     Q_INVOKABLE void requestScanJwMedia();
     Q_INVOKABLE void requestScanCustomFolder();
@@ -307,7 +314,7 @@ public:
     Q_INVOKABLE void removeBgmTrack(int index);
     Q_INVOKABLE void clearBgmPlaylist();
     Q_INVOKABLE void browseAndAddBgmFiles();
-    Q_INVOKABLE void toggleBgmShuffle() { setBgmShuffle(!m_bgmShuffle); }
+    Q_INVOKABLE void toggleBgmShuffle() { setBgmShuffle(!bgmShuffle()); }
     Q_INVOKABLE void cycleBgmRepeatMode();
     Q_INVOKABLE void seekBgm(int ms);
 
@@ -337,6 +344,8 @@ signals:
     void webcamFallbackEnabledChanged();
     void shortcutKeysChanged();
     void programCameraDeviceChanged();
+    void audioOutputDevicesChanged();
+    void audioOutputDeviceChanged();
     void scanStatusChanged();
     void initialScanCompleteChanged();
     void hasSecondaryScreenChanged();
@@ -368,13 +377,13 @@ private slots:
     void updateScreenCount();
     void onMediaFound(MediaType type, const QString &name, const QString &absolutePath, const QDateTime &creationDate);
     void onScanFinished();
-    void onBgmStatusChanged(QMediaPlayer::MediaStatus status);
 
 private:
     void ensureExtractor();
     void registerCameras();
-    void loadBgmTrack(int index);
-    void storeActiveBgmPlaylist();
+    void applyAudioOutputDevice();
+    void refreshAudioOutputDevices();
+    void syncImportedBgmTracks();
     void saveState();
     void loadState();
     bool openZoomWindow();
@@ -403,6 +412,7 @@ private:
     MeetingScheduleModel *m_meetingModel = nullptr;
     CameraDeviceModel *m_cameraModel;
     BroadcastEngine *m_broadcastEngine;
+    QMediaDevices *m_mediaDevices = nullptr;
     VirtualCameraManager *m_vcamManager;
     PinnedFolderModel *m_pinnedFolders = nullptr;
     AppUpdater *m_updater = nullptr;
@@ -440,29 +450,11 @@ private:
     QString m_cbsPublicationFolder;
     QVariantList m_customLanguages;
     QAudioDevice m_roomAudioOutputDevice;
+    QString m_audioOutputDeviceId;
 
-    // BGM
-    QMediaPlayer *m_bgmPlayer = nullptr;
-    QAudioOutput *m_bgmAudio = nullptr;
-    QStringList m_bgmPlaylist;
-    QMap<QString, QStringList> m_bgmPlaylists;
-    QString m_currentBgmPlaylistName = QStringLiteral("My Playlist");
-    QStringList m_bgmLibraryPaths;
-    QString m_bgmCoverArt;
-    QHash<QString, QString> m_bgmTrackTitles;
-    QHash<QString, QString> m_bgmThumbnailPaths;
+    // App-lifetime BGM service; independent of any BGM popup or view.
+    BgmStore *m_bgmStore = nullptr;
     QSet<QString> m_bgmThumbnailRequests;
-    int m_bgmIndex = 0;
-    bool m_bgmShuffle = false;
-    int m_bgmRepeatMode = 1; // 0 = off, 1 = repeat all, 2 = repeat one
-    qreal m_bgmVolume = 0.6;
-    QList<int> m_bgmShuffleHistory; // indices played this shuffle session, for "back"
-
-    mutable QVariantList m_cachedBgmLibraryTracks;
-    mutable bool m_bgmLibraryDirty = true;
-    mutable QVariantList m_cachedBgmPlaylistTracks;
-    mutable bool m_bgmPlaylistDirty = true;
-    void invalidateBgmCaches() { m_bgmLibraryDirty = true; m_bgmPlaylistDirty = true; }
 
     // Thumbnail extractor
     MediaThumbnailManager *m_thumbManager = nullptr;

@@ -50,7 +50,7 @@ Window {
             active: {
                 if (!(MediaFlowBackend || {}).webcamFallbackEnabled) return false
                 let a = (MediaFlowBackend || {}).broadcastEngine ? MediaFlowBackend.broadcastEngine.programAsset : null
-                return !a || !a.absolutePath || a.type === "input"
+                return !a || !a.absolutePath || a.type === "input" || a.type === "audio"
             }
         }
         videoOutput: cameraOut
@@ -122,9 +122,9 @@ Window {
         sourceSize.height: 1080
         visible: opacity > 0
         opacity: 0
+        property int fadeDuration: 1000
         Behavior on opacity {
-            id: imageFade
-            NumberAnimation { duration: 1000; easing.type: Easing.InOutQuad }
+            NumberAnimation { duration: programImage.fadeDuration; easing.type: Easing.InOutQuad }
         }
     }
 
@@ -138,9 +138,20 @@ Window {
         }
     }
 
+    Timer {
+        id: imageClearTimer
+        interval: 500
+        onTriggered: programImage.source = ""
+    }
+
     // Fades the current live image out, swaps to the new one, then fades it
     // in -- ~2s total, matching the video crossfade's duration.
     function takeImageLive(path) {
+        imageClearTimer.stop()
+        crossfadeAnim.stop()
+        fadeOutAnim.stop()
+        videoToImageAnim.stop()
+        programImage.fadeDuration = 1000
         if (programImage.opacity > 0) {
             programImage.opacity = 0
             imageSwapTimer.pendingSource = path
@@ -148,29 +159,32 @@ Window {
         } else {
             programImage.source = path
             programImage.opacity = 1
+            videoToImageAnim.start()
         }
     }
 
-    // Cut is instant, unlike Take -- bypass the opacity Behavior entirely.
-    function cutImageLive() {
-        imageFade.enabled = false
+    function showAudioFallback() {
+        crossfadeAnim.stop()
+        videoToImageAnim.stop()
+        fadeOutAnim.stop()
+        imageSwapTimer.stop()
+        programImage.fadeDuration = 500
         programImage.opacity = 0
-        programImage.source = ""
-        imageFade.enabled = true
+        imageClearTimer.interval = 500
+        imageClearTimer.restart()
+        fadeOutAnim.start()
     }
 
-    // seekMs: only used by syncToCurrentProgram() below, to pick up mid-
-    // playback instead of restarting at 0:00 -- a real operator Cut always
-    // starts fresh, so every other caller leaves this at its default.
-    // Purely visual -- BroadcastEngine's cutLive()/takeLive() already drove
-    // the real shared program players before this fired; this just flips
-    // which VideoOutput is visible.
-    function executeCut() {
-        let nextOut = activeIsA ? videoOutB : videoOutA
-        let prevOut = activeIsA ? videoOutA : videoOutB
-        nextOut.opacity = 1.0
-        prevOut.opacity = 0.0
-        activeIsA = !activeIsA
+    function cutImageLive() {
+        crossfadeAnim.stop()
+        videoToImageAnim.stop()
+        fadeOutAnim.stop()
+        imageSwapTimer.stop()
+        programImage.fadeDuration = 500
+        programImage.opacity = 0
+        imageClearTimer.interval = 500
+        imageClearTimer.restart()
+        fadeOutAnim.start()
     }
 
     // If Zoom broadcasting is turned on while something is already live,
@@ -180,17 +194,72 @@ Window {
     function syncToCurrentProgram() {
         let be = (MediaFlowBackend || {}).broadcastEngine
         let a = be ? be.programAsset : null
-        if (a && a.absolutePath && (a.type === "video" || a.type === "audio")) {
+        if (a && a.absolutePath && a.type === "video") {
             activeIsA = be.programActiveIsA
+            videoOutA.opacity = activeIsA ? 1 : 0
+            videoOutB.opacity = activeIsA ? 0 : 1
+            programImage.opacity = 0
         } else if (a && a.absolutePath && a.type === "image") {
+            videoOutA.opacity = 0
+            videoOutB.opacity = 0
             programImage.source = "file:///" + a.absolutePath
             programImage.opacity = 1
+        } else {
+            showAudioFallback()
         }
     }
     onVisibleChanged: if (visible) syncToCurrentProgram()
 
     function executeTake() {
+        crossfadeAnim.stop()
+        fadeOutAnim.stop()
+        videoToImageAnim.stop()
+        imageSwapTimer.stop()
+        if (programImage.opacity > 0) {
+            programImage.fadeDuration = 1000
+            programImage.opacity = 0
+            imageClearTimer.interval = 1000
+            imageClearTimer.restart()
+        }
         crossfadeAnim.start()
+    }
+
+    NumberAnimation {
+        id: videoToImageAnim
+        target: activeIsA ? videoOutA : videoOutB
+        property: "opacity"
+        from: target.opacity
+        to: 0
+        duration: 1000
+        easing.type: Easing.InOutQuad
+        onFinished: {
+            videoOutA.opacity = 0
+            videoOutB.opacity = 0
+        }
+    }
+
+    ParallelAnimation {
+        id: fadeOutAnim
+        NumberAnimation {
+            target: videoOutA
+            property: "opacity"
+            from: target.opacity
+            to: 0
+            duration: 500
+            easing.type: Easing.InOutQuad
+        }
+        NumberAnimation {
+            target: videoOutB
+            property: "opacity"
+            from: target.opacity
+            to: 0
+            duration: 500
+            easing.type: Easing.InOutQuad
+        }
+        onFinished: {
+            videoOutA.opacity = 0
+            videoOutB.opacity = 0
+        }
     }
 
     ParallelAnimation {
@@ -198,7 +267,7 @@ Window {
         NumberAnimation {
             target: activeIsA ? videoOutB : videoOutA
             property: "opacity"
-            from: 0.0
+            from: target.opacity
             to: 1.0
             duration: 2000
             easing.type: Easing.InOutQuad
@@ -206,7 +275,7 @@ Window {
         NumberAnimation {
             target: activeIsA ? videoOutA : videoOutB
             property: "opacity"
-            from: 1.0
+            from: target.opacity
             to: 0.0
             duration: 2000
             easing.type: Easing.InOutQuad
@@ -225,17 +294,15 @@ Window {
         }
 
         function onCutExecuted() {
-            let a = MediaFlowBackend.broadcastEngine.programAsset
-            if (a && a.absolutePath && (a.type === "video" || a.type === "audio")) {
-                executeCut()
-            }
             cutImageLive()
         }
 
         function onTakeExecuted() {
             let a = MediaFlowBackend.broadcastEngine.programAsset
-            if (a && a.absolutePath && (a.type === "video" || a.type === "audio")) {
+            if (a && a.absolutePath && a.type === "video") {
                 executeTake()
+            } else if (a && a.absolutePath && a.type === "audio") {
+                showAudioFallback()
             } else if (a && a.absolutePath && a.type === "image") {
                 takeImageLive("file:///" + a.absolutePath)
             }

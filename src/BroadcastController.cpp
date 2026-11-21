@@ -37,6 +37,7 @@
 #include <QSettings>
 #include <QMediaMetaData>
 #include <QVariantAnimation>
+#include <algorithm>
 
 #include <mmdeviceapi.h>
 #include <audiopolicy.h>
@@ -230,6 +231,10 @@ BroadcastController::BroadcastController(QQmlApplicationEngine *engine, QObject 
     m_updater = new AppUpdater(QStringLiteral(MEDIAFLOW_VERSION), this);
     m_programCameraDevice = QMediaDevices::defaultVideoInput();
     m_roomAudioOutputDevice = QMediaDevices::defaultAudioOutput();
+    m_bgmStore = new BgmStore(this);
+    m_bgmStore->setAudioDevice(m_roomAudioOutputDevice);
+    m_bgmStore->setPlaylistsFromPaths(
+        {{QStringLiteral("My Playlist"), {}}}, QStringLiteral("My Playlist"));
     m_filterProxy->setSourceModel(m_libraryModel);
 
     m_mediaBatchTimer = new QTimer(this);
@@ -238,11 +243,19 @@ BroadcastController::BroadcastController(QQmlApplicationEngine *engine, QObject 
     connect(m_mediaBatchTimer, &QTimer::timeout, this, &BroadcastController::flushPendingMediaBatch);
 
     connect(m_libraryModel, &QAbstractItemModel::rowsInserted, this, [this]() {
-        m_bgmLibraryDirty = true;
+        syncImportedBgmTracks();
         emit bgmLibraryChanged();
     });
     connect(m_libraryModel, &QAbstractItemModel::modelReset, this, [this]() {
-        m_bgmLibraryDirty = true;
+        syncImportedBgmTracks();
+        emit bgmLibraryChanged();
+    });
+    connect(m_libraryModel, &QAbstractItemModel::rowsRemoved, this, [this]() {
+        syncImportedBgmTracks();
+        emit bgmLibraryChanged();
+    });
+    connect(m_libraryModel, &QAbstractItemModel::dataChanged, this, [this]() {
+        syncImportedBgmTracks();
         emit bgmLibraryChanged();
     });
 
@@ -282,6 +295,16 @@ BroadcastController::BroadcastController(QQmlApplicationEngine *engine, QObject 
     // when no program video/audio is live, matching real meeting AV practice.
     connect(m_broadcastEngine, &BroadcastEngine::programAssetChanged, this, [this]() {
         const MediaAsset &a = m_broadcastEngine->programAsset();
+        if (a.type == QStringLiteral("image")) {
+            const QList<QMediaPlayer *> players = {
+                m_broadcastEngine->programPlayerA(),
+                m_broadcastEngine->programPlayerB()
+            };
+            for (QMediaPlayer *player : players) {
+                player->stop();
+                player->setSource(QUrl());
+            }
+        }
         if (!a.absolutePath.isEmpty() && (a.type == QStringLiteral("video") || a.type == QStringLiteral("audio"))) {
             if (isPlayingBgm())
                 toggleBgmPlayback();
@@ -290,30 +313,41 @@ BroadcastController::BroadcastController(QQmlApplicationEngine *engine, QObject 
 
     registerCameras();
 
-    // ── BGM Player ──
-    m_bgmAudio = new QAudioOutput(this);
-    // Same fixed device as room audio -- BGM shouldn't get dragged along by
-    // Zoom changing Windows' default device role either.
-    m_bgmAudio->setDevice(m_roomAudioOutputDevice);
-    m_bgmAudio->setVolume(m_bgmVolume);
-    m_bgmPlayer = new QMediaPlayer(this);
-    m_bgmPlayer->setAudioOutput(m_bgmAudio);
-    connect(m_bgmPlayer, &QMediaPlayer::mediaStatusChanged,
-            this, &BroadcastController::onBgmStatusChanged);
-    connect(m_bgmPlayer, &QMediaPlayer::positionChanged, this, &BroadcastController::bgmPositionChanged);
-    connect(m_bgmPlayer, &QMediaPlayer::durationChanged, this, &BroadcastController::bgmDurationChanged);
-    connect(m_bgmPlayer, &QMediaPlayer::metaDataChanged, this, [this]() {
-        if (m_bgmPlaylist.isEmpty() || m_bgmIndex >= m_bgmPlaylist.size())
-            return;
-        const QString title = m_bgmPlayer->metaData().value(QMediaMetaData::Title).toString().trimmed();
-        const QString path = m_bgmPlaylist.at(m_bgmIndex);
-        if (!title.isEmpty() && m_bgmTrackTitles.value(path) != title) {
-            m_bgmTrackTitles.insert(path, title);
-            invalidateBgmCaches();
-            emit bgmTrackMetadataUpdated(path, title, m_bgmThumbnailPaths.value(path));
-            emit bgmChanged();
-        }
+    connect(m_bgmStore, &BgmStore::playbackStateChanged, this, [this]() {
+        emit bgmChanged();
     });
+    connect(m_bgmStore, &BgmStore::viewStateChanged, this, [this]() {
+        emit bgmLibraryChanged();
+        emit bgmPlaylistTracksChanged();
+    });
+    connect(m_bgmStore, &BgmStore::libraryChanged, this, &BroadcastController::bgmLibraryChanged);
+    connect(m_bgmStore, &BgmStore::playlistsChanged, this, &BroadcastController::bgmLibraryChanged);
+    connect(m_bgmStore, &BgmStore::playlistTracksChanged, this, &BroadcastController::bgmPlaylistTracksChanged);
+    connect(m_bgmStore, &BgmStore::positionChanged, this, &BroadcastController::bgmPositionChanged);
+    connect(m_bgmStore, &BgmStore::durationChanged, this, &BroadcastController::bgmDurationChanged);
+    connect(m_bgmStore, &BgmStore::volumeChanged, this, &BroadcastController::bgmVolumeChanged);
+    connect(m_bgmStore, &BgmStore::shuffleChanged, this, &BroadcastController::bgmShuffleChanged);
+    connect(m_bgmStore, &BgmStore::repeatModeChanged, this, &BroadcastController::bgmRepeatModeChanged);
+    connect(m_bgmStore, &BgmStore::trackMetadataUpdated,
+            this, &BroadcastController::bgmTrackMetadataUpdated);
+    connect(m_bgmStore, &BgmStore::playbackError, this, [](const QString &message) {
+        qWarning() << "Background music playback error:" << message;
+    });
+
+    for (const auto &playerInfo : {
+             qMakePair(m_broadcastEngine->programPlayerA(), QStringLiteral("Program A")),
+             qMakePair(m_broadcastEngine->programPlayerB(), QStringLiteral("Program B"))
+         }) {
+        connect(playerInfo.first, &QMediaPlayer::errorOccurred, this,
+                [playerName = playerInfo.second](QMediaPlayer::Error error, const QString &message) {
+            qWarning() << playerName << "playback error" << error << message;
+        });
+    }
+
+    m_mediaDevices = new QMediaDevices(this);
+    connect(m_mediaDevices, &QMediaDevices::audioOutputsChanged,
+            this, &BroadcastController::refreshAudioOutputDevices);
+    applyAudioOutputDevice();
 
     exemptProcessAudioFromDucking();
     m_duckingExemptionTimer = new QTimer(this);
@@ -336,21 +370,13 @@ BroadcastController::BroadcastController(QQmlApplicationEngine *engine, QObject 
             QString thumbnailUrl;
             if (!cachePath.isEmpty()) {
                 thumbnailUrl = QUrl::fromLocalFile(cachePath).toString();
-                m_bgmThumbnailPaths.insert(path, thumbnailUrl);
-                if (bgmPath() == path)
-                    m_bgmCoverArt = thumbnailUrl;
             }
             const QString trackTitle = title.trimmed();
-            if (!trackTitle.isEmpty())
-                m_bgmTrackTitles.insert(path, trackTitle);
-            invalidateBgmCaches();
-            emit bgmTrackMetadataUpdated(path, trackTitle, thumbnailUrl);
-            if (bgmPath() == path || !trackTitle.isEmpty())
-                emit bgmChanged();
+            m_bgmStore->setTrackArtwork(path, thumbnailUrl, trackTitle);
             return;
         }
         if (id == QStringLiteral("bgm-cover")) {
-            m_bgmCoverArt = QUrl::fromLocalFile(cachePath).toString();
+            m_bgmStore->setTrackArtwork(bgmPath(), QUrl::fromLocalFile(cachePath).toString());
             emit bgmChanged();
             return;
         }
@@ -363,7 +389,6 @@ BroadcastController::BroadcastController(QQmlApplicationEngine *engine, QObject 
     });
 
     // ── Initial Load ──
-    m_bgmPlaylists.insert(m_currentBgmPlaylistName, {});
     loadState();
 
     // Startup prefetch: build the media/song indexes in the background without blocking launch.
@@ -385,6 +410,7 @@ BroadcastController::BroadcastController(QQmlApplicationEngine *engine, QObject 
 
 BroadcastController::~BroadcastController()
 {
+    shutdownAllOutputs();
     saveState();
 }
 
@@ -585,6 +611,99 @@ void BroadcastController::setProgramCameraDevice(const QCameraDevice &device) {
     emit programCameraDeviceChanged();
 }
 
+QVariantList BroadcastController::audioOutputDevices() const
+{
+    QVariantList devices;
+    const QAudioDevice defaultDevice = QMediaDevices::defaultAudioOutput();
+    const QString defaultName = defaultDevice.isNull()
+        ? tr("Unavailable")
+        : defaultDevice.description();
+    devices.append(QVariantMap{
+        {QStringLiteral("id"), QString()},
+        {QStringLiteral("label"), tr("System default — %1").arg(defaultName)}
+    });
+    for (const QAudioDevice &device : QMediaDevices::audioOutputs()) {
+        devices.append(QVariantMap{
+            {QStringLiteral("id"), QString::fromLatin1(device.id())},
+            {QStringLiteral("label"), device.description()}
+        });
+    }
+    return devices;
+}
+
+void BroadcastController::setAudioOutputDeviceId(const QString &deviceId)
+{
+    if (deviceId == m_audioOutputDeviceId)
+        return;
+    if (!deviceId.isEmpty()) {
+        const QList<QAudioDevice> devices = QMediaDevices::audioOutputs();
+        const auto it = std::find_if(devices.cbegin(), devices.cend(),
+                                     [&deviceId](const QAudioDevice &device) {
+            return QString::fromLatin1(device.id()) == deviceId;
+        });
+        if (it == devices.cend()) {
+            qWarning() << "Ignoring unavailable audio output device selection:" << deviceId;
+            return;
+        }
+    }
+
+    m_audioOutputDeviceId = deviceId;
+    applyAudioOutputDevice();
+    emit audioOutputDeviceChanged();
+    emit audioOutputDevicesChanged();
+    saveState();
+}
+
+void BroadcastController::applyAudioOutputDevice()
+{
+    QAudioDevice output = QMediaDevices::defaultAudioOutput();
+    if (!m_audioOutputDeviceId.isEmpty()) {
+        const QList<QAudioDevice> devices = QMediaDevices::audioOutputs();
+        const auto it = std::find_if(devices.cbegin(), devices.cend(),
+                                     [this](const QAudioDevice &device) {
+            return QString::fromLatin1(device.id()) == m_audioOutputDeviceId;
+        });
+        if (it == devices.cend()) {
+            qWarning() << "Selected audio output is unavailable; using the system default:"
+                       << m_audioOutputDeviceId;
+            m_audioOutputDeviceId.clear();
+        } else {
+            output = *it;
+        }
+    }
+
+    const QList<QMediaPlayer *> players = {
+        m_broadcastEngine->programPlayerA(),
+        m_broadcastEngine->programPlayerB()
+    };
+    for (QMediaPlayer *player : players) {
+        if (QAudioOutput *audio = player->audioOutput()) {
+            if (audio->device() != output)
+                audio->setDevice(output);
+        } else {
+            qWarning() << "Program player has no audio output; cannot route audio.";
+        }
+    }
+    if (m_bgmStore)
+        m_bgmStore->setAudioDevice(output);
+    m_roomAudioOutputDevice = output;
+
+    if (output.isNull())
+        qWarning() << "No audio output devices are currently available.";
+    else
+        qInfo() << "MediaFlow audio output:" << output.description();
+}
+
+void BroadcastController::refreshAudioOutputDevices()
+{
+    const QString previousDeviceId = m_audioOutputDeviceId;
+    applyAudioOutputDevice();
+    emit audioOutputDevicesChanged();
+    emit audioOutputDeviceChanged();
+    if (previousDeviceId != m_audioOutputDeviceId)
+        saveState();
+}
+
 void BroadcastController::setMeetingLive(bool live)
 {
     if (m_isMeetingLive != live) {
@@ -596,12 +715,8 @@ void BroadcastController::setMeetingLive(bool live)
 // BGM
 void BroadcastController::scanBgmFolder()
 {
-    m_bgmPlaylist.clear();
     QStringList bgmDirs;
     if (m_bgmUseCustomFolder && !m_bgmCustomFolder.isEmpty()) {
-        // Custom folder replaces the defaults entirely -- the setting is
-        // "use a separate folder", not "also include the defaults", so BGM
-        // stays scoped to exactly what the user pointed at.
         bgmDirs << m_bgmCustomFolder;
     } else {
         QString home = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
@@ -614,22 +729,14 @@ void BroadcastController::scanBgmFolder()
         "*.mp3", "*.m4a", "*.wav", "*.flac", "*.ogg", "*.aac", "*.wma"
     };
 
+    QStringList discovered;
     for (const QString &dir : bgmDirs) {
         if (!QDir(dir).exists()) continue;
         QDirIterator it(dir, audioFilters, QDir::Files, QDirIterator::Subdirectories);
-        while (it.hasNext()) {
-            const QString path = it.next();
-            if (!m_bgmLibraryPaths.contains(path))
-                m_bgmLibraryPaths.append(path);
-            if (!m_bgmPlaylist.contains(path))
-                m_bgmPlaylist.append(path);
-        }
+        while (it.hasNext())
+            discovered.append(it.next());
     }
-
-    storeActiveBgmPlaylist();
-    invalidateBgmCaches();
-    if (!m_bgmPlaylist.isEmpty()) loadBgmTrack(0);
-    emit bgmPlaylistTracksChanged();
+    m_bgmStore->addPathsToLibrary(discovered);
     emit bgmChanged();
     emit bgmLibraryChanged();
     saveState();
@@ -637,217 +744,57 @@ void BroadcastController::scanBgmFolder()
 
 void BroadcastController::refreshBgmLibrary()
 {
-    if (m_bgmLibraryPaths.isEmpty()) {
+    if (m_bgmStore->bgmLibraryTracks().isEmpty()) {
         scanBgmFolder();
     }
 }
 
 bool BroadcastController::createBgmPlaylist(const QString &name)
 {
-    const QString playlistName = name.trimmed();
-    if (playlistName.isEmpty()) {
-        qWarning() << "BroadcastController: refusing to create a BGM playlist with an empty name";
-        return false;
-    }
-
-    for (auto it = m_bgmPlaylists.cbegin(); it != m_bgmPlaylists.cend(); ++it) {
-        if (it.key().compare(playlistName, Qt::CaseInsensitive) == 0) {
-            qWarning() << "BroadcastController: a BGM playlist already exists with this name:" << playlistName;
-            return false;
-        }
-    }
-
-    storeActiveBgmPlaylist();
-    m_bgmPlaylists.insert(playlistName, {});
-    m_currentBgmPlaylistName = playlistName;
-    m_bgmPlaylist.clear();
-    m_bgmIndex = 0;
-    m_bgmCoverArt.clear();
-    m_bgmPlayer->stop();
-    m_bgmPlayer->setSource({});
-    invalidateBgmCaches();
-    emit bgmPlaylistTracksChanged();
-    emit bgmChanged();
-    emit bgmLibraryChanged();
-    saveState();
-    return true;
+    const bool created = m_bgmStore->createBgmPlaylist(name);
+    if (created)
+        saveState();
+    return created;
 }
 
 void BroadcastController::selectBgmPlaylist(const QString &name)
 {
-    const auto playlist = m_bgmPlaylists.constFind(name);
-    if (playlist == m_bgmPlaylists.cend()) {
-        qWarning() << "BroadcastController: cannot select unknown BGM playlist:" << name;
-        return;
-    }
-
-    if (m_currentBgmPlaylistName == name)
-        return;
-
-    m_bgmPlayer->stop();
-    m_currentBgmPlaylistName = name;
-    m_bgmPlaylist = playlist.value();
-    m_bgmIndex = 0;
-    m_bgmShuffleHistory.clear();
-    if (m_bgmPlaylist.isEmpty()) {
-        m_bgmCoverArt.clear();
-        m_bgmPlayer->setSource({});
-    } else {
-        loadBgmTrack(0);
-    }
-    invalidateBgmCaches();
-    emit bgmPlaylistTracksChanged();
-    emit bgmChanged();
-    emit bgmLibraryChanged();
+    m_bgmStore->selectBgmPlaylist(name);
     saveState();
 }
 
 void BroadcastController::addBgmTracksToPlaylist(const QStringList &paths)
 {
-    bool changed = false;
-    const bool wasEmpty = m_bgmPlaylist.isEmpty();
-    const QSet<QString> existing(m_bgmPlaylist.cbegin(), m_bgmPlaylist.cend());
-    const QSet<QString> existingLib(m_bgmLibraryPaths.cbegin(), m_bgmLibraryPaths.cend());
-
-    for (const QString &path : paths) {
-        if (existing.contains(path))
-            continue;
-        m_bgmPlaylist.append(path);
-        if (!existingLib.contains(path))
-            m_bgmLibraryPaths.append(path);
-        changed = true;
-    }
-
-    if (!changed)
-        return;
-
-    storeActiveBgmPlaylist();
-    invalidateBgmCaches();
-    if (wasEmpty)
-        loadBgmTrack(0);
-    emit bgmPlaylistTracksChanged();
-    emit bgmChanged();
-    emit bgmLibraryChanged();
+    m_bgmStore->addBgmTracksToPlaylist(paths);
     saveState();
 }
 
 void BroadcastController::addFilesToBgm(const QStringList &paths)
 {
-    static const QStringList audioExt = {"mp3", "m4a", "wav", "flac", "ogg", "aac", "wma"};
-    const bool wasEmpty = m_bgmPlaylist.isEmpty();
-
-    for (const QString &raw : paths) {
-        // QML drag-and-drop delivers file:// URLs (drop.urls[i].toString());
-        // OS files/folders dropped directly, plain local paths otherwise.
-        const QString localPath = raw.startsWith("file:") ? QUrl(raw).toLocalFile() : raw;
-        QFileInfo info(localPath);
-        if (!info.exists()) continue;
-
-        if (info.isDir()) {
-            QDirIterator it(localPath, {"*.mp3", "*.m4a", "*.wav", "*.flac", "*.ogg", "*.aac", "*.wma"}, QDir::Files, QDirIterator::Subdirectories);
-            while (it.hasNext()) {
-                const QString found = it.next();
-                if (!m_bgmLibraryPaths.contains(found))
-                    m_bgmLibraryPaths.append(found);
-                if (!m_bgmPlaylist.contains(found)) m_bgmPlaylist.append(found);
-            }
-        } else if (audioExt.contains(info.suffix().toLower())) {
-            const QString abs = info.absoluteFilePath();
-            if (!m_bgmLibraryPaths.contains(abs))
-                m_bgmLibraryPaths.append(abs);
-            if (!m_bgmPlaylist.contains(abs)) m_bgmPlaylist.append(abs);
-        }
-    }
-
-    storeActiveBgmPlaylist();
-    invalidateBgmCaches();
-    if (wasEmpty && !m_bgmPlaylist.isEmpty()) loadBgmTrack(0);
-    emit bgmPlaylistTracksChanged();
-    emit bgmChanged();
-    emit bgmLibraryChanged();
+    m_bgmStore->addPathsToLibrary(paths, true);
     saveState();
 }
 
 void BroadcastController::playBgmTrack(int index)
 {
-    if (index < 0 || index >= m_bgmPlaylist.count())
-        return;
-    loadBgmTrack(index);
-    m_bgmPlayer->play();
-    emit bgmChanged();
+    m_bgmStore->playBgmTrack(index);
 }
 
 void BroadcastController::playBgmFile(const QString &path)
 {
-    const int existing = m_bgmPlaylist.indexOf(path);
-    if (existing >= 0) {
-        playBgmTrack(existing);
-        return;
-    }
-    const QString absPath = QFileInfo(path).absoluteFilePath();
-    const int existingAbs = m_bgmPlaylist.indexOf(absPath);
-    if (existingAbs >= 0) {
-        playBgmTrack(existingAbs);
-        return;
-    }
-    addFilesToBgm({path});
-    const int index = m_bgmPlaylist.indexOf(absPath);
-    if (index >= 0)
-        playBgmTrack(index);
+    m_bgmStore->playBgmFile(path);
+    saveState();
 }
 
 void BroadcastController::removeBgmTrack(int index)
 {
-    if (index < 0 || index >= m_bgmPlaylist.count())
-        return;
-
-    const bool wasPlaying = isPlayingBgm();
-    const bool removingCurrent = index == m_bgmIndex;
-    if (removingCurrent)
-        m_bgmPlayer->stop();
-
-    m_bgmPlaylist.removeAt(index);
-    m_bgmShuffleHistory.clear();
-    if (m_bgmPlaylist.isEmpty()) {
-        m_bgmIndex = 0;
-        m_bgmCoverArt.clear();
-        m_bgmPlayer->setSource({});
-    } else if (removingCurrent) {
-        m_bgmIndex = qMin(index, m_bgmPlaylist.count() - 1);
-        loadBgmTrack(m_bgmIndex);
-        if (wasPlaying)
-            m_bgmPlayer->play();
-    } else {
-        if (index < m_bgmIndex)
-            --m_bgmIndex;
-    }
-
-    storeActiveBgmPlaylist();
-    invalidateBgmCaches();
-    emit bgmPlaylistTracksChanged();
-    emit bgmChanged();
-    emit bgmLibraryChanged();
+    m_bgmStore->removeBgmTrack(index);
     saveState();
 }
 
 void BroadcastController::clearBgmPlaylist()
 {
-    if (m_bgmPlaylist.isEmpty())
-        return;
-
-    stopBgm();
-    m_bgmPlaylist.clear();
-    m_bgmShuffleHistory.clear();
-    m_bgmIndex = 0;
-    m_bgmCoverArt.clear();
-    if (m_bgmPlayer)
-        m_bgmPlayer->setSource({});
-
-    storeActiveBgmPlaylist();
-    invalidateBgmCaches();
-    emit bgmPlaylistTracksChanged();
-    emit bgmChanged();
-    emit bgmLibraryChanged();
+    m_bgmStore->clearBgmPlaylist();
     saveState();
 }
 
@@ -938,244 +885,106 @@ void BroadcastController::clearExtendedFeedBackground()
     saveState();
 }
 
-void BroadcastController::loadBgmTrack(int index)
-{
-    if (index < 0 || index >= m_bgmPlaylist.count()) return;
-    if (m_bgmIndex == index && m_bgmPlayer->source() == QUrl::fromLocalFile(m_bgmPlaylist.at(index))) {
-        return;
-    }
-    m_bgmIndex = index;
-    const QString path = m_bgmPlaylist.at(index);
-    m_bgmCoverArt = m_bgmThumbnailPaths.value(path);
-    m_bgmPlayer->setSource(QUrl::fromLocalFile(path));
-    requestBgmThumbnail(path);
-    emit bgmChanged();
-}
-
 void BroadcastController::toggleBgmPlayback()
 {
-    if (m_bgmPlaylist.isEmpty()) { scanBgmFolder(); return; }
-    if (m_bgmPlayer->playbackState() == QMediaPlayer::PlayingState) m_bgmPlayer->pause();
-    else m_bgmPlayer->play();
-    emit bgmChanged();
+    if (m_bgmStore->bgmCount() == 0 && m_bgmStore->bgmLibraryTracks().isEmpty())
+        scanBgmFolder();
+    m_bgmStore->toggleBgmPlayback();
 }
 
 void BroadcastController::nextBgm()
 {
-    if (m_bgmPlaylist.isEmpty()) return;
-
-    if (m_bgmShuffle && m_bgmPlaylist.count() > 1) {
-        m_bgmShuffleHistory.append(m_bgmIndex);
-        int next = m_bgmIndex;
-        while (next == m_bgmIndex)
-            next = QRandomGenerator::global()->bounded(m_bgmPlaylist.count());
-        loadBgmTrack(next);
-    } else {
-        int next = (m_bgmIndex + 1) % m_bgmPlaylist.count();
-        loadBgmTrack(next);
-    }
-    m_bgmPlayer->play();
+    m_bgmStore->nextBgm();
 }
 
 void BroadcastController::backBgm()
 {
-    if (m_bgmPlaylist.isEmpty()) return;
-
-    if (m_bgmShuffle && !m_bgmShuffleHistory.isEmpty()) {
-        int prev = m_bgmShuffleHistory.takeLast();
-        loadBgmTrack(prev);
-    } else if (m_bgmShuffle && m_bgmPlaylist.count() > 1) {
-        int prev = m_bgmIndex;
-        while (prev == m_bgmIndex)
-            prev = QRandomGenerator::global()->bounded(m_bgmPlaylist.count());
-        loadBgmTrack(prev);
-    } else {
-        int prev = (m_bgmIndex - 1 + m_bgmPlaylist.count()) % m_bgmPlaylist.count();
-        loadBgmTrack(prev);
-    }
-    m_bgmPlayer->play();
+    m_bgmStore->backBgm();
 }
 
-void BroadcastController::stopBgm() { m_bgmPlayer->stop(); emit bgmChanged(); }
+void BroadcastController::stopBgm()
+{
+    m_bgmStore->stopBgm();
+}
 
 void BroadcastController::fadeOutBgm(int durationMs)
 {
-    if (!m_bgmPlayer || m_bgmPlayer->playbackState() != QMediaPlayer::PlayingState || !m_bgmAudio) {
-        stopBgm();
-        return;
-    }
-
-    const float startVolume = m_bgmAudio->volume();
-    if (startVolume <= 0.01f) {
-        stopBgm();
-        m_bgmAudio->setVolume(static_cast<float>(m_bgmVolume));
-        return;
-    }
-
-    auto *anim = new QVariantAnimation(this);
-    anim->setStartValue(startVolume);
-    anim->setEndValue(0.0f);
-    anim->setDuration(qMax(300, durationMs));
-    connect(anim, &QVariantAnimation::valueChanged, this, [this](const QVariant &value) {
-        if (m_bgmAudio) m_bgmAudio->setVolume(value.toFloat());
-    });
-    connect(anim, &QVariantAnimation::finished, this, [this, anim, startVolume]() {
-        stopBgm();
-        if (m_bgmAudio) m_bgmAudio->setVolume(startVolume > 0.01f ? startVolume : static_cast<float>(m_bgmVolume));
-        anim->deleteLater();
-    });
-    anim->start(QAbstractAnimation::DeleteWhenStopped);
+    m_bgmStore->fadeOutBgm(durationMs);
 }
 
 void BroadcastController::setBgmShuffle(bool enabled)
 {
-    if (m_bgmShuffle == enabled) return;
-    m_bgmShuffle = enabled;
-    m_bgmShuffleHistory.clear();
-    emit bgmShuffleChanged();
+    m_bgmStore->setShuffle(enabled);
+    saveState();
+}
+
+bool BroadcastController::bgmShuffle() const
+{
+    return m_bgmStore->shuffle();
 }
 
 qreal BroadcastController::bgmVolume() const
 {
-    return m_bgmAudio ? static_cast<qreal>(m_bgmAudio->volume()) : m_bgmVolume;
+    return m_bgmStore->volume();
 }
 
 void BroadcastController::setBgmVolume(qreal volume)
 {
-    volume = qBound(0.0, volume, 1.0);
-    if (qAbs(m_bgmVolume - volume) < 0.001) return;
-    m_bgmVolume = volume;
-    if (m_bgmAudio) m_bgmAudio->setVolume(static_cast<float>(m_bgmVolume));
-    emit bgmVolumeChanged();
+    m_bgmStore->setVolume(volume);
     saveState();
+}
+
+int BroadcastController::bgmRepeatMode() const
+{
+    return m_bgmStore->repeatMode();
 }
 
 void BroadcastController::setBgmRepeatMode(int mode)
 {
-    mode = qBound(0, mode, 2);
-    if (m_bgmRepeatMode == mode) return;
-    m_bgmRepeatMode = mode;
-    emit bgmRepeatModeChanged();
+    m_bgmStore->setRepeatMode(mode);
     saveState();
 }
 
 void BroadcastController::cycleBgmRepeatMode()
 {
-    setBgmRepeatMode((m_bgmRepeatMode + 1) % 3);
+    setBgmRepeatMode((bgmRepeatMode() + 1) % 3);
 }
 
 int BroadcastController::bgmPositionMs() const
 {
-    return m_bgmPlayer ? static_cast<int>(m_bgmPlayer->position()) : 0;
+    return m_bgmStore->bgmPositionMs();
 }
 
 int BroadcastController::bgmDurationMs() const
 {
-    return m_bgmPlayer ? static_cast<int>(m_bgmPlayer->duration()) : 0;
+    return m_bgmStore->bgmDurationMs();
 }
 
 QVariantList BroadcastController::bgmPlaylistTracks() const
 {
-    if (!m_bgmPlaylistDirty)
-        return m_cachedBgmPlaylistTracks;
-
-    m_cachedBgmPlaylistTracks.clear();
-    m_cachedBgmPlaylistTracks.reserve(m_bgmPlaylist.size());
-    for (int i = 0; i < m_bgmPlaylist.size(); ++i) {
-        const QString &path = m_bgmPlaylist.at(i);
-        const QString name = m_bgmTrackTitles.value(path, QFileInfo(path).completeBaseName());
-        m_cachedBgmPlaylistTracks.append(QVariantMap{
-            {QStringLiteral("index"), i},
-            {QStringLiteral("name"), name},
-            {QStringLiteral("path"), path},
-            {QStringLiteral("thumbnailPath"), m_bgmThumbnailPaths.value(path)},
-            {QStringLiteral("searchText"), (name + QStringLiteral(" ") + path).toLower()},
-            {QStringLiteral("normalizedPath"), path.toLower()}
-        });
-    }
-    m_bgmPlaylistDirty = false;
-    return m_cachedBgmPlaylistTracks;
+    return m_bgmStore->bgmPlaylistTracks();
 }
 
 QVariantList BroadcastController::bgmLibraryTracks() const
 {
-    if (!m_bgmLibraryDirty)
-        return m_cachedBgmLibraryTracks;
-
-    m_cachedBgmLibraryTracks.clear();
-    QSet<QString> seenPaths;
-    const QSet<QString> playlistSet(m_bgmPlaylist.cbegin(), m_bgmPlaylist.cend());
-    QHash<QString, QPair<QString, QString>> audioMetadataByPath;
-    QStringList audioPaths;
-
-    if (m_libraryModel) {
-        audioPaths.reserve(m_libraryModel->rowCount());
-        for (int i = 0; i < m_libraryModel->rowCount(); ++i) {
-            const QModelIndex index = m_libraryModel->index(i);
-            if (m_libraryModel->data(index, MediaLibraryModel::TypeRole).toString()
-                != QStringLiteral("audio")) {
-                continue;
-            }
-
-            const QString path = m_libraryModel->data(index, MediaLibraryModel::PathRole).toString();
-            if (path.isEmpty())
-                continue;
-            audioPaths.append(path);
-            audioMetadataByPath.insert(path, {
-                m_libraryModel->data(index, MediaLibraryModel::NameRole).toString(),
-                m_libraryModel->data(index, MediaLibraryModel::ThumbnailRole).toString()
-            });
-        }
-    }
-
-    const auto appendTrack = [this, &seenPaths, &audioMetadataByPath, &playlistSet](
-                                 const QString &path,
-                                 const QString &fallbackName,
-                                 const QString &fallbackThumbnail) {
-        if (path.isEmpty() || seenPaths.contains(path))
-            return;
-        seenPaths.insert(path);
-        QString name = fallbackName;
-        QString thumbnail = fallbackThumbnail;
-        const auto metadata = audioMetadataByPath.constFind(path);
-        if (metadata != audioMetadataByPath.cend()) {
-            if (!metadata->first.isEmpty())
-                name = metadata->first;
-            if (!metadata->second.isEmpty())
-                thumbnail = metadata->second;
-        }
-        name = m_bgmTrackTitles.value(path, name);
-        m_cachedBgmLibraryTracks.append(QVariantMap{
-            {QStringLiteral("id"), path},
-            {QStringLiteral("name"), name},
-            {QStringLiteral("path"), path},
-            {QStringLiteral("thumbnailPath"), m_bgmThumbnailPaths.value(path, thumbnail)},
-            {QStringLiteral("inPlaylist"), playlistSet.contains(path)},
-            {QStringLiteral("searchText"), (name + QStringLiteral(" ") + path).toLower()},
-            {QStringLiteral("normalizedPath"), path.toLower()}
-        });
-    };
-
-    for (const QString &path : m_bgmLibraryPaths) {
-        appendTrack(path, QFileInfo(path).completeBaseName(), {});
-    }
-
-    for (const QString &path : audioPaths) {
-        appendTrack(path, {}, {});
-    }
-    m_bgmLibraryDirty = false;
-    return m_cachedBgmLibraryTracks;
+    return m_bgmStore->bgmLibraryTracks();
 }
 
-void BroadcastController::storeActiveBgmPlaylist()
+QStringList BroadcastController::bgmPlaylistNames() const
 {
-    m_bgmPlaylists.insert(m_currentBgmPlaylistName, m_bgmPlaylist);
+    return m_bgmStore->bgmPlaylistNames();
+}
+
+QString BroadcastController::currentBgmPlaylistName() const
+{
+    return m_bgmStore->currentBgmPlaylistName();
 }
 
 void BroadcastController::requestBgmThumbnail(const QString &path)
 {
     if (!m_thumbManager || path.isEmpty()
-        || m_bgmThumbnailPaths.contains(path) || m_bgmThumbnailRequests.contains(path)) {
+        || !m_bgmStore->artworkForPath(path).isEmpty()
+        || m_bgmThumbnailRequests.contains(path)) {
         return;
     }
 
@@ -1186,45 +995,58 @@ void BroadcastController::requestBgmThumbnail(const QString &path)
 
 void BroadcastController::seekBgm(int ms)
 {
-    if (!m_bgmPlayer || m_bgmPlaylist.isEmpty()) return;
-    m_bgmPlayer->setPosition(qBound(0, ms, static_cast<int>(m_bgmPlayer->duration())));
+    m_bgmStore->seekBgm(ms);
 }
 
-QString BroadcastController::bgmPath() const {
-    if (m_bgmPlaylist.isEmpty() || m_bgmIndex >= m_bgmPlaylist.count()) return "";
-    return m_bgmPlaylist.at(m_bgmIndex);
+QString BroadcastController::bgmPath() const
+{
+    return m_bgmStore->bgmPath();
 }
 
-bool BroadcastController::isPlayingBgm() const {
-    return m_bgmPlayer && m_bgmPlayer->playbackState() == QMediaPlayer::PlayingState;
+QString BroadcastController::bgmCoverArt() const
+{
+    return m_bgmStore->bgmCoverArt();
 }
 
-QString BroadcastController::bgmTrackName() const {
-    if (m_bgmPlaylist.isEmpty() || m_bgmIndex >= m_bgmPlaylist.count()) return "NO TRACKS";
-    const QString path = m_bgmPlaylist.at(m_bgmIndex);
-    return m_bgmTrackTitles.value(path, QFileInfo(path).completeBaseName());
+bool BroadcastController::isPlayingBgm() const
+{
+    return m_bgmStore->isPlayingBgm();
 }
 
-void BroadcastController::onBgmStatusChanged(QMediaPlayer::MediaStatus status) {
-    if (status == QMediaPlayer::EndOfMedia) {
-        if (m_bgmRepeatMode == 2) {
-            // Repeat one: replay same track from beginning
-            if (m_bgmPlayer) {
-                m_bgmPlayer->setPosition(0);
-                m_bgmPlayer->play();
-            }
-        } else if (m_bgmRepeatMode == 0) {
-            // Repeat off: if sequential and at the end of playlist, stop
-            if (!m_bgmShuffle && m_bgmIndex >= m_bgmPlaylist.count() - 1) {
-                stopBgm();
-            } else {
-                nextBgm();
-            }
-        } else {
-            // Repeat all (default)
-            nextBgm();
+QString BroadcastController::bgmTrackName() const
+{
+    return m_bgmStore->bgmTrackName();
+}
+
+int BroadcastController::bgmCount() const
+{
+    return m_bgmStore->bgmCount();
+}
+
+int BroadcastController::bgmIndex() const
+{
+    return m_bgmStore->bgmIndex();
+}
+
+void BroadcastController::syncImportedBgmTracks()
+{
+    if (!m_bgmStore || !m_libraryModel)
+        return;
+    QVariantList tracks;
+    tracks.reserve(m_libraryModel->rowCount());
+    for (int i = 0; i < m_libraryModel->rowCount(); ++i) {
+        const QModelIndex index = m_libraryModel->index(i);
+        if (m_libraryModel->data(index, MediaLibraryModel::TypeRole).toString()
+            != QStringLiteral("audio")) {
+            continue;
         }
+        tracks.append(QVariantMap{
+            {QStringLiteral("path"), m_libraryModel->data(index, MediaLibraryModel::PathRole).toString()},
+            {QStringLiteral("name"), m_libraryModel->data(index, MediaLibraryModel::NameRole).toString()},
+            {QStringLiteral("thumbnailPath"), m_libraryModel->data(index, MediaLibraryModel::ThumbnailRole).toString()}
+        });
     }
+    m_bgmStore->setImportedLibraryTracks(tracks);
 }
 
 void BroadcastController::requestScanJwMedia()
@@ -1688,10 +1510,12 @@ void BroadcastController::toggleZoomBroadcast() {
 
 void BroadcastController::shutdownAllOutputs()
 {
-    if (m_vcamManager->isBroadcasting()) {
+    if (m_vcamManager)
         m_vcamManager->stop();
+    if (m_duckingExemptionTimer)
         m_duckingExemptionTimer->stop();
-    }
+    if (m_bgmStore)
+        m_bgmStore->shutdown();
     if (m_zoomWindow) m_zoomWindow->hide();
     if (m_audienceWindow) m_audienceWindow->hide();
     if (m_timerWindow) m_timerWindow->hide();
@@ -1857,18 +1681,24 @@ void BroadcastController::saveState()
     root["extendedFeedScreenIndex"] = m_extendedFeedScreenIndex;
     root["timerScreenIndex"] = m_timerScreenIndex;
     root["webcamFallbackEnabled"] = m_webcamFallbackEnabled;
+    root["audioOutputDeviceId"] = m_audioOutputDeviceId;
     root["shortcutKeys"] = QJsonObject::fromVariantMap(m_shortcutKeys);
     root["bgmUseCustomFolder"] = m_bgmUseCustomFolder;
     root["bgmCustomFolder"] = m_bgmCustomFolder;
-    root["bgmVolume"] = m_bgmVolume;
-    root["bgmRepeatMode"] = m_bgmRepeatMode;
-    root["bgmPlaylist"] = QJsonArray::fromStringList(m_bgmPlaylist);
+    root["bgmVolume"] = m_bgmStore->volume();
+    root["bgmMuted"] = m_bgmStore->muted();
+    root["bgmShuffle"] = m_bgmStore->shuffle();
+    root["bgmRepeatMode"] = m_bgmStore->repeatMode();
+    const QMap<QString, QStringList> bgmPlaylists = m_bgmStore->playlistsAsPaths();
+    root["bgmPlaylist"] = QJsonArray::fromStringList(
+        bgmPlaylists.value(m_bgmStore->currentBgmPlaylistName()));
     QJsonObject savedBgmPlaylists;
-    for (auto it = m_bgmPlaylists.cbegin(); it != m_bgmPlaylists.cend(); ++it)
+    for (auto it = bgmPlaylists.cbegin(); it != bgmPlaylists.cend(); ++it)
         savedBgmPlaylists.insert(it.key(), QJsonArray::fromStringList(it.value()));
     root["bgmPlaylists"] = savedBgmPlaylists;
-    root["currentBgmPlaylist"] = m_currentBgmPlaylistName;
-    root["bgmLibrary"] = QJsonArray::fromStringList(m_bgmLibraryPaths);
+    root["currentBgmPlaylist"] = m_bgmStore->currentBgmPlaylistName();
+    root["bgmLibrary"] = QJsonArray::fromStringList(m_bgmStore->localLibraryPaths());
+    root["bgmViewState"] = QJsonObject::fromVariantMap(m_bgmStore->viewState());
     root["extendedFeedBackgroundPath"] = m_extendedFeedBackgroundPath;
     root["extendedFeedBackgroundType"] = m_extendedFeedBackgroundType;
     root["customLanguages"] = QJsonArray::fromVariantList(m_customLanguages);
@@ -1925,6 +1755,8 @@ void BroadcastController::loadState()
     m_extendedFeedScreenIndex = root["extendedFeedScreenIndex"].toInt(-1);
     m_timerScreenIndex = root["timerScreenIndex"].toInt(-1);
     m_webcamFallbackEnabled = root["webcamFallbackEnabled"].toBool(true);
+    m_audioOutputDeviceId = root["audioOutputDeviceId"].toString();
+    applyAudioOutputDevice();
     // Merge over the defaults rather than replacing wholesale, so an action
     // added in a later version still gets a sensible default key even when
     // loading an older save file that predates it.
@@ -1938,15 +1770,15 @@ void BroadcastController::loadState()
     m_bgmUseCustomFolder = root["bgmUseCustomFolder"].toBool(false);
     m_bgmCustomFolder = root["bgmCustomFolder"].toString();
     if (root.contains("bgmVolume")) {
-        m_bgmVolume = qBound(0.0, root["bgmVolume"].toDouble(0.6), 1.0);
-        if (m_bgmAudio) m_bgmAudio->setVolume(static_cast<float>(m_bgmVolume));
-        emit bgmVolumeChanged();
+        m_bgmStore->setVolume(qBound(0.0, root["bgmVolume"].toDouble(0.6), 1.0));
     }
+    if (root.contains("bgmMuted"))
+        m_bgmStore->setMuted(root["bgmMuted"].toBool(false));
+    m_bgmStore->setShuffle(root["bgmShuffle"].toBool(false));
     if (root.contains("bgmRepeatMode")) {
-        m_bgmRepeatMode = qBound(0, root["bgmRepeatMode"].toInt(1), 2);
-        emit bgmRepeatModeChanged();
+        m_bgmStore->setRepeatMode(qBound(0, root["bgmRepeatMode"].toInt(0), 2));
     }
-    m_bgmPlaylists.clear();
+    QMap<QString, QStringList> savedPlaylists;
     const QJsonObject savedBgmPlaylists = root["bgmPlaylists"].toObject();
     for (auto playlistIt = savedBgmPlaylists.constBegin();
          playlistIt != savedBgmPlaylists.constEnd(); ++playlistIt) {
@@ -1956,12 +1788,11 @@ void BroadcastController::loadState()
             if (QFileInfo(trackPath).isFile() && !tracks.contains(trackPath))
                 tracks.append(trackPath);
         }
-        m_bgmPlaylists.insert(playlistIt.key(), tracks);
+        savedPlaylists.insert(playlistIt.key(), tracks);
     }
 
-    m_currentBgmPlaylistName = root["currentBgmPlaylist"].toString();
-    if (m_currentBgmPlaylistName.isEmpty()
-        || !m_bgmPlaylists.contains(m_currentBgmPlaylistName)) {
+    QString currentPlaylistName = root["currentBgmPlaylist"].toString();
+    if (currentPlaylistName.isEmpty() || !savedPlaylists.contains(currentPlaylistName)) {
         QStringList savedLegacyPlaylist;
         for (const QJsonValue &value : root["bgmPlaylist"].toArray())
             savedLegacyPlaylist.append(value.toString());
@@ -1970,32 +1801,43 @@ void BroadcastController::loadState()
             if (QFileInfo(trackPath).isFile() && !legacyTracks.contains(trackPath))
                 legacyTracks.append(trackPath);
         }
-        if (!m_bgmPlaylists.isEmpty()) {
-            m_currentBgmPlaylistName = m_bgmPlaylists.firstKey();
+        if (!savedPlaylists.isEmpty()) {
+            currentPlaylistName = savedPlaylists.firstKey();
         } else {
-            m_currentBgmPlaylistName = QStringLiteral("My Playlist");
-            m_bgmPlaylists.insert(m_currentBgmPlaylistName, legacyTracks);
+            currentPlaylistName = QStringLiteral("My Playlist");
+            savedPlaylists.insert(currentPlaylistName, legacyTracks);
         }
     }
 
-    m_bgmPlaylist.clear();
-    m_bgmPlaylist = m_bgmPlaylists.value(m_currentBgmPlaylistName);
-    m_bgmLibraryPaths.clear();
+    QStringList localLibraryPaths;
     const QJsonArray savedBgmLibrary = root["bgmLibrary"].toArray();
     for (const QJsonValue &value : savedBgmLibrary) {
         const QString trackPath = value.toString();
-        if (QFileInfo::exists(trackPath) && !m_bgmLibraryPaths.contains(trackPath))
-            m_bgmLibraryPaths.append(trackPath);
+        if (QFileInfo::exists(trackPath) && !localLibraryPaths.contains(trackPath))
+            localLibraryPaths.append(trackPath);
     }
-    for (auto playlistIt = m_bgmPlaylists.cbegin();
-         playlistIt != m_bgmPlaylists.cend(); ++playlistIt) {
+    for (auto playlistIt = savedPlaylists.cbegin();
+         playlistIt != savedPlaylists.cend(); ++playlistIt) {
         for (const QString &trackPath : playlistIt.value()) {
-            if (!m_bgmLibraryPaths.contains(trackPath))
-                m_bgmLibraryPaths.append(trackPath);
+            if (!localLibraryPaths.contains(trackPath))
+                localLibraryPaths.append(trackPath);
         }
     }
-    if (!m_bgmPlaylist.isEmpty())
-        loadBgmTrack(0);
+    m_bgmStore->setLocalLibraryPaths(localLibraryPaths);
+    m_bgmStore->setPlaylistsFromPaths(savedPlaylists, currentPlaylistName);
+    const QVariantMap savedBgmViewState = root["bgmViewState"].toObject().toVariantMap();
+    const QString savedActiveTab =
+        savedBgmViewState.value(QStringLiteral("activeTab")).toString();
+    if (savedActiveTab == QStringLiteral("ALBUMS")) {
+        m_bgmStore->viewAlbums();
+    } else {
+        const QString tab = savedBgmViewState.value(QStringLiteral("activeTab")).toString();
+        if (tab == QStringLiteral("LIBRARY"))
+            m_bgmStore->setActiveTab(tab);
+        else
+            m_bgmStore->viewPlaylist(currentPlaylistName);
+    }
+    syncImportedBgmTracks();
     emit bgmLibraryChanged();
     m_extendedFeedBackgroundPath = root["extendedFeedBackgroundPath"].toString();
     m_extendedFeedBackgroundType = root["extendedFeedBackgroundType"].toString();

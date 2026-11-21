@@ -11,6 +11,8 @@ See [BUILD.md](BUILD.md).
 - JW Library `userData.db` discovery under `%LOCALAPPDATA%`, inspection via **QSqlDatabase** on a worker thread (temp copy when the live DB is locked).
 - Recursive media scan of JW Library package paths and `Videos\JWLibrary`, with optional language suffix filter; import files and scan custom folders into the library.
 - **Broadcast state** on `MediaFlow`: program + **preview** buses, transport pause, **midweek/weekend meeting schedule**, **live** toggle, **vcam mode**, **countdown timer**, **room volume + mute**, **BGM** (C++ `QMediaPlayer`), **camera** list with program-to-camera.
+- Select the room audio output in **Settings → Audio**; the system default is followed unless a specific device is selected.
 - **ffmpeg UDP bridge** (optional `ffmpeg` on PATH or `MEDIAFLOW_FFMPEG`) to feed OBS or other receivers; see [DESIGN.md](DESIGN.md).
 - Operator + **audience** window (fullscreen on second screen when present); **Zoom** **Alt+S** on Windows.
+- The operator window toggles borderless fullscreen with **F11**; press **Esc** to restore its previous window mode.
 

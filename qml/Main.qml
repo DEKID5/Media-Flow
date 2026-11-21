@@ -22,17 +22,48 @@ ApplicationWindow {
     visible: true
     title: qsTr("MediaFlow — Broadcast Suite")
     color: "#050505"
+    property bool borderlessFullScreen: false
+    property rect windowedGeometry: Qt.rect(0, 0, 1400, 900)
+    property int windowedFlags: Qt.Window
+    property int windowedVisibility: Window.Windowed
 
-    // Without this, closing this window alone doesn't actually end the app
-    // if Extended Feed, the full-screen timer, or Zoom broadcasting left
-    // one of their own separate windows open -- Qt won't quit while any
-    // top-level window is still visible, so the process (still sending
-    // frames to Zoom, still showing content on the audience screen) kept
-    // running invisibly in the background. Stop/hide everything first,
-    // then quit unconditionally regardless of what else might be open.
-    onClosing: (close) => {
-        MediaFlowBackend.shutdownAllOutputs()
-        Qt.quit()
+    function toggleBorderlessFullScreen() {
+        visible = false
+        if (!borderlessFullScreen) {
+            windowedGeometry = Qt.rect(x, y, width, height)
+            windowedFlags = flags
+            windowedVisibility = visibility
+            visibility = Window.Windowed
+            flags = flags | Qt.FramelessWindowHint
+            x = Screen.virtualX
+            y = Screen.virtualY
+            width = Screen.width
+            height = Screen.height - 1
+            borderlessFullScreen = true
+        } else {
+            flags = windowedFlags
+            x = windowedGeometry.x
+            y = windowedGeometry.y
+            width = windowedGeometry.width
+            height = windowedGeometry.height
+            borderlessFullScreen = false
+        }
+        visible = true
+        if (!borderlessFullScreen)
+            visibility = windowedVisibility
+        raise()
+        requestActivate()
+    }
+
+    Shortcut {
+        sequence: "F11"
+        onActivated: operatorRoot.toggleBorderlessFullScreen()
+    }
+
+    Shortcut {
+        sequence: "Escape"
+        enabled: operatorRoot.borderlessFullScreen && !settingsWindow.visible
+        onActivated: operatorRoot.toggleBorderlessFullScreen()
     }
 
     Rectangle {
