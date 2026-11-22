@@ -73,7 +73,7 @@ Popup {
         { action: "pauseProgram", label: "Pause / Resume Program", description: "Pause or resume whatever's currently playing live." },
         { action: "goLive", label: "Go Live", description: "Marks the meeting itself as live (header status)." },
         { action: "broadcastZoom", label: "Broadcast to Zoom", description: "Starts/stops sending video to Zoom via the virtual camera." },
-        { action: "webcamToggle", label: "Webcam Force-Off", description: "Forces the Zoom feed to black instead of the webcam fallback." },
+        { action: "webcamToggle", label: "Webcam Force-Off", description: "Shows the Extended Feed background in Zoom instead of the webcam fallback." },
         { action: "extendFeed", label: "Extend Feed", description: "Opens/closes the audience-facing second-display window." }
     ]
 
@@ -366,7 +366,7 @@ Popup {
 
                         Label { text: "EXTENDED FEED BACKGROUND"; color: Theme.textSecondary; font.bold: true; font.pixelSize: Theme.textXs; font.letterSpacing: 1 }
                         Label {
-                            text: "Shown on the Extended Feed screen whenever nothing is live, instead of a plain black screen. Pick an image or a short looping video."
+                            text: "Shown on the Extended Feed when Program is idle; on Zoom, shown when WEBCAM FORCE-OFF is on or the selected webcam stops producing frames. Pick an image or a short looping video."
                             color: Theme.textDim; font.pixelSize: Theme.textSm; wrapMode: Text.WordWrap; Layout.fillWidth: true
                         }
 
@@ -682,7 +682,7 @@ Popup {
                         Label {
                             Layout.fillWidth: true; wrapMode: Text.WordWrap
                             color: Theme.textDim; font.pixelSize: Theme.textXs
-                            text: "Click BROADCAST TO ZOOM, then in Zoom's own camera picker choose \"OBS Virtual Camera.\" Whatever's on Program shows there; when idle, it falls back to the webcam unless WEBCAM FORCE-OFF is on."
+                            text: "Click BROADCAST TO ZOOM, then in Zoom's own camera picker choose \"OBS Virtual Camera.\" Whatever's on Program shows there; when idle, it uses the webcam unless WEBCAM FORCE-OFF is on, then it shows the Extended Feed background."
                         }
 
                         Label { text: "Folder slideshows"; color: Theme.textPrimary; font.bold: true; font.pixelSize: Theme.textSm; Layout.topMargin: 6 }

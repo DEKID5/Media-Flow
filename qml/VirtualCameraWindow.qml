@@ -19,6 +19,16 @@ Window {
     flags: Qt.FramelessWindowHint | Qt.Tool | Qt.WindowStaysOnBottomHint | Qt.WindowDoesNotAcceptFocus
 
     property bool activeIsA: true
+    readonly property bool programIsStandby: {
+        let a = (MediaFlowBackend || {}).broadcastEngine ? MediaFlowBackend.broadcastEngine.programAsset : null
+        return !a || !a.absolutePath || a.type === "input" || a.type === "audio"
+    }
+    property double lastWebcamFrameAt: 0
+    property bool webcamFrameFresh: false
+    readonly property bool webcamOutputActive: programCamera.active
+        && programCamera.error === Camera.NoError
+        && webcamFrameFresh
+    readonly property bool showStandbyBackground: programIsStandby && !webcamOutputActive
 
     // Qt Quick only repaints a window when something in it is actually
     // animating. The live camera feed keeps doing that on its own, but a
@@ -55,13 +65,67 @@ Window {
         }
         videoOutput: cameraOut
     }
+    Connections {
+        target: cameraOut.videoSink
+        function onVideoFrameChanged() {
+            zoomRoot.lastWebcamFrameAt = Date.now()
+        }
+    }
+    Connections {
+        target: programCamera
+        function onActiveChanged() {
+            zoomRoot.lastWebcamFrameAt = 0
+            zoomRoot.webcamFrameFresh = false
+        }
+    }
+    Timer {
+        interval: 250
+        running: zoomRoot.visible && programCamera.active
+        repeat: true
+        onTriggered: zoomRoot.webcamFrameFresh = zoomRoot.lastWebcamFrameAt > 0
+            && Date.now() - zoomRoot.lastWebcamFrameAt < 1500
+    }
 
     VideoOutput {
         id: cameraOut
         anchors.fill: parent
         fillMode: VideoOutput.PreserveAspectCrop
+        z: 1
+        visible: zoomRoot.webcamOutputActive
+    }
+
+    // Reuse the configured Extended Feed standby asset as Zoom's fallback
+    // whenever the webcam is disabled or stops producing frames. Program video
+    // and images stay above it, and an active webcam covers it normally.
+    Image {
+        anchors.fill: parent
         z: 0
-        visible: programCamera.active
+        fillMode: Image.PreserveAspectCrop
+        asynchronous: true
+        sourceSize.width: 1920
+        sourceSize.height: 1080
+        visible: zoomRoot.showStandbyBackground
+            && (MediaFlowBackend || {}).extendedFeedBackgroundType === "image"
+        source: visible ? "file:///" + (MediaFlowBackend || {}).extendedFeedBackgroundPath : ""
+    }
+    MediaPlayer {
+        id: backgroundVideoPlayer
+        loops: MediaPlayer.Infinite
+        videoOutput: backgroundVideoOut
+        audioOutput: AudioOutput { muted: true; volume: 0 }
+        source: zoomRoot.showStandbyBackground
+            && (MediaFlowBackend || {}).extendedFeedBackgroundType === "video"
+            && (MediaFlowBackend || {}).extendedFeedBackgroundPath
+                ? "file:///" + MediaFlowBackend.extendedFeedBackgroundPath : ""
+        onSourceChanged: if (source.toString() !== "") play()
+    }
+    VideoOutput {
+        id: backgroundVideoOut
+        anchors.fill: parent
+        z: 0
+        fillMode: VideoOutput.PreserveAspectCrop
+        visible: zoomRoot.showStandbyBackground
+            && (MediaFlowBackend || {}).extendedFeedBackgroundType === "video"
     }
 
     // ── Shared program sinks -- BroadcastEngine pushes every frame it
@@ -76,7 +140,7 @@ Window {
         fillMode: VideoOutput.PreserveAspectFit
         opacity: activeIsA ? 1.0 : 0.0
         visible: opacity > 0
-        z: activeIsA ? 2 : 1
+        z: activeIsA ? 3 : 2
     }
     VideoOutput {
         id: videoOutB
@@ -84,7 +148,7 @@ Window {
         fillMode: VideoOutput.PreserveAspectFit
         opacity: activeIsA ? 0.0 : 1.0
         visible: opacity > 0
-        z: activeIsA ? 1 : 2
+        z: activeIsA ? 2 : 3
     }
 
     // videoSink is read-only on VideoOutput in Qt6, so the shared decode is
@@ -108,7 +172,7 @@ Window {
     Image {
         id: programImage
         anchors.fill: parent
-        z: 3
+        z: 4
         fillMode: Image.PreserveAspectFit
         asynchronous: true
         // Prevents shimmer/aliasing on fine detail (text, thin lines) when a

@@ -60,7 +60,7 @@ class BroadcastController final : public QObject
     Q_PROPERTY(bool mixerMuted READ mixerMuted WRITE setMixerMuted NOTIFY mixerMutedChanged)
     Q_PROPERTY(bool isMeetingLive READ isMeetingLive WRITE setMeetingLive NOTIFY isMeetingLiveChanged)
     Q_PROPERTY(bool vcamEnabled READ vcamEnabled NOTIFY vcamEnabledChanged)
-    // Keep the webcam fallback off when the program is empty so the feed stays black instead of showing a camera.
+    // Webcam fallback is used by Zoom when no non-audio program asset is live.
     Q_PROPERTY(bool webcamFallbackEnabled READ webcamFallbackEnabled WRITE setWebcamFallbackEnabled NOTIFY webcamFallbackEnabledChanged)
     // Action-to-shortcut map for the operator’s custom key bindings.
     Q_PROPERTY(QVariantMap shortcutKeys READ shortcutKeys NOTIFY shortcutKeysChanged)
@@ -77,7 +77,7 @@ class BroadcastController final : public QObject
     Q_PROPERTY(int timerScreenIndex READ timerScreenIndex WRITE setTimerScreenIndex NOTIFY timerScreenIndexChanged)
     Q_PROPERTY(bool bgmUseCustomFolder READ bgmUseCustomFolder WRITE setBgmUseCustomFolder NOTIFY bgmSettingsChanged)
     Q_PROPERTY(QString bgmCustomFolder READ bgmCustomFolder NOTIFY bgmSettingsChanged)
-    // Standby background shown on the extended feed when nothing is live.
+    // Standby background shown on the extended feed and Zoom webcam output.
     Q_PROPERTY(QString extendedFeedBackgroundPath READ extendedFeedBackgroundPath NOTIFY extendedFeedBackgroundChanged)
     Q_PROPERTY(QString extendedFeedBackgroundType READ extendedFeedBackgroundType NOTIFY extendedFeedBackgroundChanged)
     Q_PROPERTY(QString workbookStatus READ workbookStatus NOTIFY workbookStatusChanged)

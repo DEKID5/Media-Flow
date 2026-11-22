@@ -536,8 +536,8 @@ Item {
                         ToolTip.visible: webcamMa.containsMouse
                         ToolTip.delay: 400
                         ToolTip.text: (camEnabled
-                            ? "Webcam shows on Zoom whenever Program is idle. Click to force off (black)."
-                            : "Webcam is forced OFF — Zoom shows black whenever Program is idle. Click to enable.") + root.keyHint("webcamToggle")
+                            ? "Webcam shows on Zoom whenever Program is idle. Click to use the Extended Feed background instead."
+                            : "Webcam is forced OFF — Zoom uses the Extended Feed background when Program is idle. Click to enable.") + root.keyHint("webcamToggle")
 
                         RowLayout {
                             anchors.centerIn: parent
