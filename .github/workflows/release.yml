@@ -61,6 +61,7 @@ jobs:
           $notes = @"
           ### Changes in $tag
 
+          - Shows the configured Extended Feed background on Zoom when webcam fallback is off or the camera stops producing frames.
           - Added a persistent, app-wide BGM player with separate library, album, playlist, and playback state.
           - Added album browsing, queue controls, shuffle/repeat, and safer asynchronous loading and seeking.
           - Improved audio-device selection, media transitions, fullscreen behavior, and application shutdown.
