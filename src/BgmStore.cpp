@@ -97,7 +97,7 @@ BgmAudioEngine::BgmAudioEngine(QObject *parent)
 
 void BgmAudioEngine::setAudioDevice(const QAudioDevice &device)
 {
-    if (m_audioOutput && m_audioOutput->device() != device)
+    if (m_audioOutput)
         m_audioOutput->setDevice(device);
 }
 

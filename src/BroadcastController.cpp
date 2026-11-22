@@ -633,8 +633,10 @@ QVariantList BroadcastController::audioOutputDevices() const
 
 void BroadcastController::setAudioOutputDeviceId(const QString &deviceId)
 {
-    if (deviceId == m_audioOutputDeviceId)
+    if (deviceId == m_audioOutputDeviceId) {
+        applyAudioOutputDevice();
         return;
+    }
     if (!deviceId.isEmpty()) {
         const QList<QAudioDevice> devices = QMediaDevices::audioOutputs();
         const auto it = std::find_if(devices.cbegin(), devices.cend(),
@@ -678,8 +680,7 @@ void BroadcastController::applyAudioOutputDevice()
     };
     for (QMediaPlayer *player : players) {
         if (QAudioOutput *audio = player->audioOutput()) {
-            if (audio->device() != output)
-                audio->setDevice(output);
+            audio->setDevice(output);
         } else {
             qWarning() << "Program player has no audio output; cannot route audio.";
         }
