@@ -172,6 +172,15 @@ public:
     QString workbookStatus() const;
     Q_INVOKABLE void refreshWorkbook();
 
+    // Returns a QVariantMap with keys:
+    //   "logTail"         – last N lines of app_log.txt as a single string
+    //   "logPath"         – absolute path to the log file
+    //   "audioOutputs"    – QVariantList of {id, label, isDefault, isCurrent}
+    //   "currentDeviceId" – the saved m_audioOutputDeviceId (empty = "System default")
+    //   "appVersion"      – MEDIAFLOW_VERSION string
+    //   "platform"        – OS description string
+    Q_INVOKABLE QVariantMap diagnostics(int logLines = 200) const;
+
     bool previewPlaylistActive() const { return !m_previewPlaylistIds.isEmpty(); }
     QString previewPlaylistFolderName() const { return m_previewPlaylistFolderName; }
     bool livePlaylistActive() const { return !m_livePlaylistIds.isEmpty(); }
@@ -465,6 +474,13 @@ private:
     bool m_zoomWindowHidden = false;
     QTimer *m_duckingExemptionTimer = nullptr;
     QTimer *m_workbookRefreshTimer = nullptr;
+    // Debounce timer for audio-output device list changes.  Windows fires
+    // audioOutputsChanged multiple times in quick succession whenever a driver
+    // is registered (e.g. OBS virtual-cam at install time) or Zoom joins/leaves
+    // a call and momentarily reshuffles the default device.  Coalescing those
+    // bursts with a short delay means we always read the settled default rather
+    // than whatever transient device happened to be default mid-churn.
+    QTimer *m_audioDeviceDebounceTimer = nullptr;
     QHash<QString, QVariantMap> m_mediaIndexByPath;
     QHash<QString, QVariantMap> m_songIndex;
 };

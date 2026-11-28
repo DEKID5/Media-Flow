@@ -54,7 +54,8 @@ Popup {
         { label: "Music & Feed", icon: "music" },
         { label: "App Updates", icon: "refresh" },
         { label: "Workbook & Langs", icon: "globe" },
-        { label: "User Guide", icon: "book" }
+        { label: "User Guide", icon: "book" },
+        { label: "Diagnostics", icon: "chart" }
     ]
 
     function formatDisplayName(rawName) {
@@ -690,6 +691,228 @@ Popup {
                             Layout.fillWidth: true; wrapMode: Text.WordWrap
                             color: Theme.textDim; font.pixelSize: Theme.textXs
                             text: "Add several videos and/or images to a pin folder, then drag that folder onto either monitor — it takes the first live immediately and auto-advances until you hit STOP."
+                        }
+                    }
+                }
+
+                // ── 8: Diagnostics ──
+                SettingsPage {
+                    id: diagnosticsPage
+
+                    // Reload diagnostics each time this page is shown.
+                    // StackLayout's currentIndex changes when the user picks this tab.
+                    property var diagData: ({})
+                    property bool loaded: false
+                    property bool copied: false
+
+                    Timer {
+                        id: copiedResetTimer
+                        interval: 1600
+                        onTriggered: diagnosticsPage.copied = false
+                    }
+
+                    function reload() {
+                        if (MediaFlowBackend && MediaFlowBackend.diagnostics)
+                            diagData = MediaFlowBackend.diagnostics(300)
+                        loaded = true
+                    }
+
+                    // Reload whenever this page becomes the active one.
+                    Connections {
+                        target: settingsRoot
+                        function onActiveSectionChanged() {
+                            // Index 8 = Diagnostics
+                            if (settingsRoot.activeSection === 8)
+                                diagnosticsPage.reload()
+                        }
+                    }
+
+                    SettingsCard {
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Label {
+                                text: "DIAGNOSTICS"
+                                color: Theme.textSecondary; font.bold: true
+                                font.pixelSize: Theme.textXs; font.letterSpacing: 1
+                            }
+                            Item { Layout.fillWidth: true }
+                            PillButton {
+                                text: "REFRESH"
+                                accentColor: Theme.accentBlue
+                                implicitHeight: 28; implicitWidth: 80
+                                onClicked: diagnosticsPage.reload()
+                            }
+                            PillButton {
+                                text: diagnosticsPage.copied ? "COPIED!" : "COPY REPORT"
+                                primary: true
+                                accentColor: diagnosticsPage.copied ? Theme.accentEmerald : Theme.accentBlue
+                                implicitHeight: 28; implicitWidth: 108
+                                onClicked: {
+                                    if (!diagnosticsPage.loaded) diagnosticsPage.reload()
+                                    const d = diagnosticsPage.diagData
+                                    let report = "=== MediaFlow Diagnostic Report ===\n"
+                                    report += "Version : " + (d.appVersion || "?") + "\n"
+                                    report += "Platform: " + (d.platform  || "?") + "\n"
+                                    report += "Log file: " + (d.logPath   || "?") + "\n\n"
+                                    report += "--- Audio Outputs ---\n"
+                                    const outputs = d.audioOutputs || []
+                                    for (let i = 0; i < outputs.length; i++) {
+                                        const o = outputs[i]
+                                        let flags = []
+                                        if (o.isDefault) flags.push("SYSTEM DEFAULT")
+                                        if (o.isCurrent) flags.push("IN USE")
+                                        report += (flags.length ? "[" + flags.join(", ") + "] " : "[ ] ") + o.label + "\n"
+                                    }
+                                    report += "\n--- Recent Log (" + (d.logPath || "") + ") ---\n"
+                                    report += (d.logTail || "(empty)") + "\n"
+                                    copyHelper.text = report
+                                    copyHelper.selectAll()
+                                    copyHelper.copy()
+                                    copyHelper.text = ""
+                                    diagnosticsPage.copied = true
+                                    copiedResetTimer.restart()
+                                }
+                            }
+                        }
+
+                        // Hidden TextEdit used only as a clipboard bridge.
+                        TextEdit {
+                            id: copyHelper
+                            visible: false
+                            width: 0; height: 0
+                        }
+
+                        // ── App info row ──
+                        RowLayout {
+                            Layout.fillWidth: true; spacing: 20
+                            Column {
+                                spacing: 3
+                                Label { text: "VERSION"; color: Theme.textSecondary; font.pixelSize: Theme.textXs; font.letterSpacing: 1; font.bold: true }
+                                Label {
+                                    text: diagnosticsPage.diagData.appVersion || "—"
+                                    color: Theme.textPrimary; font.family: Theme.monoFont; font.pixelSize: Theme.textSm
+                                }
+                            }
+                            Column {
+                                spacing: 3
+                                Label { text: "PLATFORM"; color: Theme.textSecondary; font.pixelSize: Theme.textXs; font.letterSpacing: 1; font.bold: true }
+                                Label {
+                                    text: diagnosticsPage.diagData.platform || "—"
+                                    color: Theme.textPrimary; font.family: Theme.monoFont; font.pixelSize: Theme.textSm; wrapMode: Text.WordWrap
+                                    Layout.fillWidth: true
+                                }
+                            }
+                        }
+                    }
+
+                    SettingsCard {
+                        Label { text: "AUDIO OUTPUTS"; color: Theme.textSecondary; font.bold: true; font.pixelSize: Theme.textXs; font.letterSpacing: 1 }
+                        Label {
+                            text: "Shows all audio output devices Windows currently reports, which is the system default, and which MediaFlow is actively routing to."
+                            color: Theme.textDim; font.pixelSize: Theme.textXs; wrapMode: Text.WordWrap; Layout.fillWidth: true
+                        }
+
+                        Repeater {
+                            model: diagnosticsPage.diagData.audioOutputs || []
+                            delegate: Rectangle {
+                                required property var modelData
+                                Layout.fillWidth: true
+                                implicitHeight: audioRow.implicitHeight + 14
+                                radius: Theme.radiusSm
+                                color: modelData.isCurrent ? "#0E1A2E" : "#0D1017"
+                                border.color: modelData.isCurrent ? "#2563EB" : "#1E2535"
+                                border.width: 1
+
+                                RowLayout {
+                                    id: audioRow
+                                    anchors.left: parent.left; anchors.right: parent.right
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    anchors.leftMargin: 12; anchors.rightMargin: 10
+                                    spacing: 8
+
+                                    // Green dot = in use, grey = not in use
+                                    Rectangle {
+                                        width: 7; height: 7; radius: 4
+                                        color: modelData.isCurrent ? Theme.accentEmerald : "#2A2F3C"
+                                    }
+
+                                    Label {
+                                        Layout.fillWidth: true
+                                        text: modelData.label
+                                        color: modelData.isCurrent ? Theme.textPrimary : Theme.textSecondary
+                                        font.pixelSize: Theme.textSm
+                                        elide: Text.ElideRight
+                                    }
+
+                                    // Badges
+                                    Rectangle {
+                                        visible: modelData.isDefault
+                                        implicitWidth: defaultBadge.implicitWidth + 10; implicitHeight: 18
+                                        radius: 4; color: "#16213A"
+                                        border.color: "#1D4ED8"; border.width: 1
+                                        Label {
+                                            id: defaultBadge
+                                            anchors.centerIn: parent
+                                            text: "SYS DEFAULT"
+                                            color: "#60A5FA"; font.pixelSize: 9; font.bold: true; font.letterSpacing: 0.5
+                                        }
+                                    }
+                                    Rectangle {
+                                        visible: modelData.isCurrent
+                                        implicitWidth: inUseBadge.implicitWidth + 10; implicitHeight: 18
+                                        radius: 4; color: "#0C2318"
+                                        border.color: "#059669"; border.width: 1
+                                        Label {
+                                            id: inUseBadge
+                                            anchors.centerIn: parent
+                                            text: "IN USE"
+                                            color: "#34D399"; font.pixelSize: 9; font.bold: true; font.letterSpacing: 0.5
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Label {
+                            visible: (diagnosticsPage.diagData.audioOutputs || []).length === 0
+                            text: "No audio outputs found — click Refresh to scan."
+                            color: Theme.textDim; font.pixelSize: Theme.textXs
+                        }
+                    }
+
+                    SettingsCard {
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Label { text: "APP LOG"; color: Theme.textSecondary; font.bold: true; font.pixelSize: Theme.textXs; font.letterSpacing: 1 }
+                            Item { Layout.fillWidth: true }
+                            Label {
+                                text: diagnosticsPage.diagData.logPath || ""
+                                color: Theme.textDim; font.family: Theme.monoFont; font.pixelSize: 9
+                                elide: Text.ElideLeft; Layout.maximumWidth: 280
+                            }
+                        }
+                        ScrollView {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 260
+                            clip: true
+                            ScrollBar.vertical: SlimScrollBar { }
+                            TextArea {
+                                id: logArea
+                                readOnly: true
+                                wrapMode: TextEdit.NoWrap
+                                text: diagnosticsPage.diagData.logTail || "(No log loaded — click Refresh)"
+                                color: "#8BA3C4"
+                                font.family: Theme.monoFont
+                                font.pixelSize: 10
+                                background: Rectangle {
+                                    color: "#07090E"
+                                    radius: Theme.radiusSm
+                                    border.color: "#1A1F2C"
+                                    border.width: 1
+                                }
+                                // Auto-scroll to the bottom whenever log text is updated.
+                                onTextChanged: Qt.callLater(() => { logArea.cursorPosition = logArea.length })
+                            }
                         }
                     }
                 }

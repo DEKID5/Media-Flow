@@ -9,7 +9,7 @@
 ; drivers\obs-virtualcam\THIRD_PARTY_NOTICES.txt for licensing.
 
 #define MyAppName "MediaFlow"
-#define MyAppVersion "1.0.65"
+#define MyAppVersion "1.0.66"
 #define MyAppPublisher "DEKID5"
 #define MyAppExeName "MediaFlow.exe"
 

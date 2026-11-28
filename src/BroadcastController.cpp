@@ -37,6 +37,7 @@
 #include <QSettings>
 #include <QMediaMetaData>
 #include <QVariantAnimation>
+#include <QSysInfo>
 #include <algorithm>
 
 #include <mmdeviceapi.h>
@@ -345,8 +346,19 @@ BroadcastController::BroadcastController(QQmlApplicationEngine *engine, QObject 
     }
 
     m_mediaDevices = new QMediaDevices(this);
-    connect(m_mediaDevices, &QMediaDevices::audioOutputsChanged,
+    // Debounce audio-device list changes.  On a fresh install the OBS virtual-
+    // cam regsvr32 registrations fire audioOutputsChanged several times in rapid
+    // succession, and Windows may briefly promote HDMI (or another device) to
+    // the system default mid-churn before settling back to the actual default.
+    // Waiting 500 ms after the last change means applyAudioOutputDevice() always
+    // sees the final, stable device list rather than a transient mid-install state.
+    m_audioDeviceDebounceTimer = new QTimer(this);
+    m_audioDeviceDebounceTimer->setSingleShot(true);
+    m_audioDeviceDebounceTimer->setInterval(500);
+    connect(m_audioDeviceDebounceTimer, &QTimer::timeout,
             this, &BroadcastController::refreshAudioOutputDevices);
+    connect(m_mediaDevices, &QMediaDevices::audioOutputsChanged,
+            this, [this]() { m_audioDeviceDebounceTimer->start(); });
     applyAudioOutputDevice();
 
     exemptProcessAudioFromDucking();
@@ -692,7 +704,9 @@ void BroadcastController::applyAudioOutputDevice()
     if (output.isNull())
         qWarning() << "No audio output devices are currently available.";
     else
-        qInfo() << "MediaFlow audio output:" << output.description();
+        qInfo() << "MediaFlow audio output:" << output.description()
+                << "(mode:" << (m_audioOutputDeviceId.isEmpty() ? QStringLiteral("system-default") : QStringLiteral("manual"))
+                << "| sysDefault:" << QMediaDevices::defaultAudioOutput().description() << ")";
 }
 
 void BroadcastController::refreshAudioOutputDevices()
@@ -703,6 +717,54 @@ void BroadcastController::refreshAudioOutputDevices()
     emit audioOutputDeviceChanged();
     if (previousDeviceId != m_audioOutputDeviceId)
         saveState();
+}
+
+QVariantMap BroadcastController::diagnostics(int logLines) const
+{
+    // ── 1. Log tail ──────────────────────────────────────────────────────────
+    const QString logPath =
+        QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+        + QStringLiteral("/app_log.txt");
+    QString logTail;
+    QFile logFile(logPath);
+    if (logFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        // Read the whole file and keep only the last logLines lines so the
+        // UI does not get overwhelmed by a very long log.
+        const QStringList all = QString::fromUtf8(logFile.readAll()).split(QLatin1Char('\n'));
+        const int start = qMax(0, all.size() - logLines);
+        logTail = QStringList(all.mid(start)).join(QLatin1Char('\n'));
+    } else {
+        logTail = QStringLiteral("(Log file not found: %1)").arg(logPath);
+    }
+
+    // ── 2. Audio device enumeration ──────────────────────────────────────────
+    const QAudioDevice defaultDevice = QMediaDevices::defaultAudioOutput();
+    const QString defaultId = QString::fromLatin1(defaultDevice.id());
+    QVariantList outputList;
+    for (const QAudioDevice &dev : QMediaDevices::audioOutputs()) {
+        const QString devId = QString::fromLatin1(dev.id());
+        outputList.append(QVariantMap{
+            { QStringLiteral("id"),        devId },
+            { QStringLiteral("label"),     dev.description() },
+            { QStringLiteral("isDefault"), devId == defaultId },
+            { QStringLiteral("isCurrent"), devId == m_audioOutputDeviceId
+                                           || (m_audioOutputDeviceId.isEmpty() && devId == defaultId) }
+        });
+    }
+
+    // ── 3. Platform description ───────────────────────────────────────────────
+    const QString platform =
+        QSysInfo::prettyProductName()
+        + QStringLiteral(" (") + QSysInfo::currentCpuArchitecture() + QStringLiteral(")");
+
+    return QVariantMap{
+        { QStringLiteral("logTail"),         logTail },
+        { QStringLiteral("logPath"),         logPath },
+        { QStringLiteral("audioOutputs"),    outputList },
+        { QStringLiteral("currentDeviceId"), m_audioOutputDeviceId },
+        { QStringLiteral("appVersion"),      QStringLiteral(MEDIAFLOW_VERSION) },
+        { QStringLiteral("platform"),        platform }
+    };
 }
 
 void BroadcastController::setMeetingLive(bool live)

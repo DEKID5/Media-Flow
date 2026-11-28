@@ -15,6 +15,11 @@
 #include <QTimer>
 #include <QVersionNumber>
 
+#ifdef Q_OS_WIN
+#include <windows.h>
+#include <shellapi.h>
+#endif
+
 namespace {
 
 const QUrl kLatestReleaseUrl(
@@ -478,10 +483,31 @@ void AppUpdater::installAndRestart()
     if (!m_downloadReady || !QFileInfo::exists(m_installerPath))
         return;
 
-    const bool started = QProcess::startDetached(m_installerPath, {QStringLiteral("/CLOSEAPPLICATIONS")});
+    const QString nativePath = QDir::toNativeSeparators(m_installerPath);
+    bool started = false;
+#ifdef Q_OS_WIN
+    // The installer requires admin privileges (to register the virtual camera
+    // driver). QProcess::startDetached calls CreateProcess, which fails with
+    // Windows error 740 (ERROR_ELEVATION_REQUIRED) when MediaFlow is running
+    // unelevated. ShellExecuteExW with "runas" triggers the UAC prompt cleanly.
+    const std::wstring fileW = nativePath.toStdWString();
+    const std::wstring paramsW = L"/CLOSEAPPLICATIONS";
+    SHELLEXECUTEINFOW sei{};
+    sei.cbSize = sizeof(sei);
+    sei.fMask = SEE_MASK_NOASYNC;
+    sei.lpVerb = L"runas";
+    sei.lpFile = fileW.c_str();
+    sei.lpParameters = paramsW.c_str();
+    sei.nShow = SW_SHOWNORMAL;
+    started = ShellExecuteExW(&sei) != FALSE;
+    if (!started)
+        qWarning() << "AppUpdater: ShellExecuteExW failed with error" << GetLastError();
+#else
+    started = QProcess::startDetached(m_installerPath, {QStringLiteral("/CLOSEAPPLICATIONS")});
+#endif
     if (!started) {
         fail(tr("Could not start the installer. You can run it manually from %1.")
-                 .arg(QDir::toNativeSeparators(m_installerPath)));
+                 .arg(nativePath));
         return;
     }
 
